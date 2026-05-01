@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "@nestjs/typeorm": "^11.0.1",
+    "pg": "^8.20.0",
+    "postgis": "^1.2.0",
+    "typeorm": "^0.3.28"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.1.19"
+  }
+}
