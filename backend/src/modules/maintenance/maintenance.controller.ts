@@ -1,0 +1,108 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Patch,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+} from '@nestjs/swagger';
+import { MaintenanceService } from './maintenance.service';
+import { CreateMaintenanceTaskDto } from './dto/create-maintenance-task.dto';
+import { CompleteTaskDto } from './dto/complete-task.dto';
+import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+
+@ApiTags('maintenance')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Controller('maintenance')
+export class MaintenanceController {
+  constructor(private readonly maintenanceService: MaintenanceService) {}
+
+  @Post('tasks')
+  @ApiOperation({ summary: 'Create a new maintenance task' })
+  @ApiResponse({ status: 201, description: 'Task successfully created.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 404, description: 'Tree or User not found.' })
+  async create(@Body() createTaskDto: CreateMaintenanceTaskDto) {
+    return await this.maintenanceService.create(createTaskDto);
+  }
+
+  @Get('tasks')
+  @ApiOperation({ summary: 'Get all maintenance tasks' })
+  @ApiResponse({ status: 200, description: 'List of all tasks.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async findAll() {
+    return await this.maintenanceService.findAll();
+  }
+
+  @Get('tasks/my-tasks')
+  @ApiOperation({ summary: 'Get tasks assigned to the current user' })
+  @ApiResponse({ status: 200, description: 'List of tasks assigned to the user.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async getMyTasks(@Request() req) {
+    const userId = req.user.userId || req.user.id;
+    return await this.maintenanceService.findByUserId(userId);
+  }
+
+  @Get('tasks/:id')
+  @ApiOperation({ summary: 'Get a maintenance task by ID' })
+  @ApiParam({ name: 'id', description: 'Task ID' })
+  @ApiResponse({ status: 200, description: 'Task found.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 404, description: 'Task not found.' })
+  async findOne(@Param('id') id: string) {
+    return await this.maintenanceService.findById(+id);
+  }
+
+  @Patch('tasks/:id/status')
+  @ApiOperation({ summary: 'Update task status (e.g., start task)' })
+  @ApiParam({ name: 'id', description: 'Task ID' })
+  @ApiResponse({ status: 200, description: 'Task status updated.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Not assigned to this task.' })
+  @ApiResponse({ status: 404, description: 'Task not found.' })
+  async updateStatus(
+    @Param('id') id: string,
+    @Body() updateStatusDto: UpdateTaskStatusDto,
+    @Request() req,
+  ) {
+    const userId = req.user.userId || req.user.id;
+    return await this.maintenanceService.updateStatus(+id, userId, updateStatusDto);
+  }
+
+  @Post('tasks/:id/complete')
+  @ApiOperation({
+    summary: 'Complete a maintenance task (with geofencing)',
+    description:
+      'Staff must be within 10 meters of the tree location to complete the task. GPS coordinates are verified against the tree location in the database.',
+  })
+  @ApiParam({ name: 'id', description: 'Task ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Task completed successfully.',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({
+    status: 403,
+    description: 'Not assigned to this task, already completed, or outside geofence radius.',
+  })
+  @ApiResponse({ status: 404, description: 'Task not found.' })
+  async completeTask(
+    @Param('id') id: string,
+    @Body() completeDto: CompleteTaskDto,
+    @Request() req,
+  ) {
+    const userId = req.user.userId || req.user.id;
+    return await this.maintenanceService.completeTask(+id, userId, completeDto);
+  }
+}

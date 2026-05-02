@@ -4,11 +4,13 @@ import { SeederService } from './seeder.service';
 import { SeederController } from './seeder.controller';
 import { TreeSpecies } from '../../entities/tree-species.entity';
 import { AdministrativeArea } from '../../entities/administrative-area.entity';
+import { Role } from '../../entities/role.entity';
+import { User } from '../../modules/auth/user.entity';
 import { AuthModule } from '../../modules/auth/auth.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([TreeSpecies, AdministrativeArea]),
+    TypeOrmModule.forFeature([TreeSpecies, AdministrativeArea, Role, User]),
     AuthModule,
   ],
   controllers: [SeederController],

@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { AuthModule } from './modules/auth/auth.module';
 import { TreesModule } from './modules/trees/trees.module';
 import { SeederModule } from './database/seeder/seeder.module';
+import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { SeederModule } from './database/seeder/seeder.module';
     AuthModule,
     TreesModule,
     SeederModule,
+    MaintenanceModule,
   ],
   controllers: [AppController],
 })

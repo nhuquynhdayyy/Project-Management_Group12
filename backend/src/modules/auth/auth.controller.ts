@@ -15,13 +15,15 @@ export class AuthController {
   @Post('register')
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({ status: 201, description: 'User successfully registered. Password is excluded from response.' })
-  @ApiResponse({ status: 400, description: 'Bad request.' })
+  @ApiResponse({ status: 400, description: 'Bad request or role not found.' })
   async register(@Body() registerDto: RegisterDto): Promise<Omit<User, 'password'>> {
     const user = new User();
     user.username = registerDto.username;
+    user.email = registerDto.email || null;
     user.password = registerDto.password;
-    user.role = registerDto.role;
-    return this.authService.register(user);
+    user.full_name = registerDto.full_name || null;
+    
+    return this.authService.register(user, registerDto.roles);
   }
 
   @Post('login')

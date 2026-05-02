@@ -1,19 +1,48 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsString, IsNotEmpty, IsArray, IsOptional, IsEmail } from 'class-validator';
 
 export class RegisterDto {
-  @ApiProperty({ example: 'john_doe', description: 'The username of the new user' })
+  @ApiProperty({
+    example: 'john_doe',
+    description: 'The username of the new user',
+  })
   @IsString()
   @IsNotEmpty()
   username: string;
 
-  @ApiProperty({ example: 'P@ssw0rd!', description: 'The password of the new user' })
+  @ApiProperty({
+    example: 'john.doe@example.com',
+    description: 'Email address',
+    required: false,
+  })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiProperty({
+    example: 'P@ssw0rd!',
+    description: 'The password of the new user',
+  })
   @IsString()
   @IsNotEmpty()
   password: string;
 
-  @ApiProperty({ example: 'admin', description: 'The role assigned to the user', enum: ['admin', 'user', 'manager'] })
+  @ApiProperty({
+    example: 'John Doe',
+    description: 'Full name of the user',
+    required: false,
+  })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  role: string;
+  full_name?: string;
+
+  @ApiProperty({
+    example: ['Admin'],
+    description: 'Array of role names to assign to the user',
+    type: [String],
+    enum: ['Admin', 'Manager', 'Staff'],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  roles: string[];
 }
