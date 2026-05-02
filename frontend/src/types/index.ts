@@ -38,3 +38,20 @@ export interface Tree {
   created_at: string;
   updated_at: string;
 }
+
+export type TaskStatus = 'Pending' | 'In_Progress' | 'Completed';
+export type TaskType = 'Cắt tỉa' | 'Bón phân' | 'Tưới nước' | 'Kiểm tra';
+
+export interface MaintenanceTask {
+  id: number;
+  tree_id: number;
+  assigned_to: number;
+  task_type: TaskType;
+  status: TaskStatus;
+  scheduled_date: string;
+  completed_at: string | null;
+  evidence_image_url: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
