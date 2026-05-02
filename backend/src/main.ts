@@ -2,12 +2,19 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { ClassSerializerInterceptor } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SeederService } from './database/seeder/seeder.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Automatically exclude @Exclude() fields (e.g. password) from all responses
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
+
+  // Auto-seed reference tables in non-production environments
+  if (process.env.NODE_ENV !== 'production') {
+    const seeder = app.get(SeederService);
+    await seeder.seed();
+  }
 
   const config = new DocumentBuilder()
     .setTitle('Urban Green Infrastructure API')

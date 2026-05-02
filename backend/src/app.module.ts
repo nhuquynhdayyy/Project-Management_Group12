@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AuthModule } from './modules/auth/auth.module';
+import { TreesModule } from './modules/trees/trees.module';
+import { SeederModule } from './database/seeder/seeder.module';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { AuthModule } from './modules/auth/auth.module';
     }),
 
     AuthModule,
+    TreesModule,
+    SeederModule,
   ],
   controllers: [AppController],
 })
