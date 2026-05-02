@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { TreesService } from './trees.service';
 import { CreateTreeDto } from './dto/create-tree.dto';
 import { FindTreesNearbyDto } from './dto/find-trees-nearby.dto';
@@ -30,6 +30,9 @@ export class TreesController {
 
   @Get('nearby')
   @ApiOperation({ summary: 'Find trees within a radius (PostGIS)' })
+  @ApiQuery({ name: 'latitude', required: true, type: Number, example: 16.0544 })
+  @ApiQuery({ name: 'longitude', required: true, type: Number, example: 108.2022 })
+  @ApiQuery({ name: 'radius_meters', required: false, type: Number, example: 1000, description: 'Search radius in metres (default: 1000)' })
   @ApiResponse({ status: 200, description: 'Trees within the given radius, ordered by distance.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async findNearby(@Query() findNearbyDto: FindTreesNearbyDto) {
