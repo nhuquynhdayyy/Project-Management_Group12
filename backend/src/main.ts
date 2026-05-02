@@ -7,6 +7,14 @@ import { SeederService } from './database/seeder/seeder.service';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Allow requests from web frontend, mobile app, and local dev tools
+  app.enableCors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: false,
+  });
+
   // Automatically exclude @Exclude() fields (e.g. password) from all responses
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
 

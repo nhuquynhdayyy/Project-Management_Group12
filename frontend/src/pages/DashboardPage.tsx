@@ -230,8 +230,8 @@ export default function DashboardPage() {
                 outerRadius={95}
                 paddingAngle={3}
                 dataKey="value"
-                label={({ name, percent }) =>
-                  percent > 0.04 ? `${(percent * 100).toFixed(0)}%` : ''
+                label={({ percent }) =>
+                  percent && percent > 0.04 ? `${(percent * 100).toFixed(0)}%` : ''
                 }
                 labelLine={false}
               >
