@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { MaintenanceTask, TaskStatus } from '../../entities/maintenance-task.entity';
 import { Tree } from '../../entities/tree.entity';
 import { User } from '../auth/user.entity';
@@ -144,6 +144,28 @@ export class MaintenanceService {
 
   async findAll(): Promise<MaintenanceTask[]> {
     return await this.taskRepository.find({
+      order: { scheduled_date: 'ASC' },
+    });
+  }
+
+  /**
+   * Lấy danh sách tasks để export, có thể lọc theo khoảng ngày.
+   * Trả về đầy đủ thông tin task kèm tên cây và tên nhân viên.
+   */
+  async getTasksForExport(from?: string, to?: string): Promise<MaintenanceTask[]> {
+    const where: Record<string, any> = {};
+
+    if (from && to) {
+      where.scheduled_date = Between(new Date(from), new Date(to));
+    } else if (from) {
+      where.scheduled_date = MoreThanOrEqual(new Date(from));
+    } else if (to) {
+      where.scheduled_date = LessThanOrEqual(new Date(to));
+    }
+
+    return this.taskRepository.find({
+      where,
+      relations: ['tree', 'tree.species', 'assignedUser'],
       order: { scheduled_date: 'ASC' },
     });
   }

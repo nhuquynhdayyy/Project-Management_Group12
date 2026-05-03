@@ -367,4 +367,104 @@ describe('MaintenanceService', () => {
       expect(result).toBeNull();
     });
   });
+
+  describe('getTasksForExport', () => {
+    it('should return all tasks with tree and user relations when no filter provided', async () => {
+      // Arrange
+      const mockTasks = [
+        {
+          id: 1,
+          task_type: TaskType.PRUNING,
+          status: TaskStatus.PENDING,
+          tree: { id: 1, tree_code: 'TREE001', species: { species_name: 'Bàng' } },
+          assignedUser: { id: 2, full_name: 'Nguyễn Văn A', username: 'nguyenvana' },
+        },
+        {
+          id: 2,
+          task_type: TaskType.WATERING,
+          status: TaskStatus.COMPLETED,
+          tree: { id: 2, tree_code: 'TREE002', species: { species_name: 'Phượng' } },
+          assignedUser: { id: 3, full_name: 'Trần Thị B', username: 'tranthib' },
+        },
+      ];
+
+      mockTaskRepository.find.mockResolvedValue(mockTasks);
+
+      // Act
+      const result = await service.getTasksForExport();
+
+      // Assert
+      expect(result).toBeDefined();
+      expect(result.length).toBe(2);
+      expect(mockTaskRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          relations: ['tree', 'tree.species', 'assignedUser'],
+          order: { scheduled_date: 'ASC' },
+        }),
+      );
+    });
+
+    it('should filter tasks by date range when both from and to are provided', async () => {
+      // Arrange
+      const from = '2026-01-01';
+      const to = '2026-05-01';
+      const mockTasks = [
+        { id: 1, task_type: TaskType.PRUNING, scheduled_date: new Date('2026-03-15') },
+      ];
+
+      mockTaskRepository.find.mockResolvedValue(mockTasks);
+
+      // Act
+      const result = await service.getTasksForExport(from, to);
+
+      // Assert
+      expect(result).toBeDefined();
+      expect(result.length).toBe(1);
+      const callArg = mockTaskRepository.find.mock.calls[0][0];
+      expect(callArg.where.scheduled_date).toBeDefined();
+      // Between operator được dùng khi có cả from và to
+      expect(callArg.where.scheduled_date.type).toBe('between');
+    });
+
+    it('should filter tasks from a start date when only from is provided', async () => {
+      // Arrange
+      const from = '2026-03-01';
+      mockTaskRepository.find.mockResolvedValue([]);
+
+      // Act
+      await service.getTasksForExport(from, undefined);
+
+      // Assert
+      const callArg = mockTaskRepository.find.mock.calls[0][0];
+      expect(callArg.where.scheduled_date).toBeDefined();
+      // MoreThanOrEqual operator
+      expect(callArg.where.scheduled_date.type).toBe('moreThanOrEqual');
+    });
+
+    it('should filter tasks up to an end date when only to is provided', async () => {
+      // Arrange
+      const to = '2026-06-30';
+      mockTaskRepository.find.mockResolvedValue([]);
+
+      // Act
+      await service.getTasksForExport(undefined, to);
+
+      // Assert
+      const callArg = mockTaskRepository.find.mock.calls[0][0];
+      expect(callArg.where.scheduled_date).toBeDefined();
+      // LessThanOrEqual operator
+      expect(callArg.where.scheduled_date.type).toBe('lessThanOrEqual');
+    });
+
+    it('should return empty array when no tasks match the filter', async () => {
+      // Arrange
+      mockTaskRepository.find.mockResolvedValue([]);
+
+      // Act
+      const result = await service.getTasksForExport('2099-01-01', '2099-12-31');
+
+      // Assert
+      expect(result).toEqual([]);
+    });
+  });
 });

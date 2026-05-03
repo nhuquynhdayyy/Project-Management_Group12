@@ -5,7 +5,8 @@ import {
   LineChart, Line,
 } from 'recharts';
 import { fetchTrees } from '../api/trees';
-import { fetchAllTasks } from '../api/maintenance';
+import { fetchAllTasks, exportTasks } from '../api/maintenance';
+import { useAuth } from '../context/AuthContext';
 import type { Tree, MaintenanceTask, HealthStatus } from '../types';
 
 // ── Colour palette ────────────────────────────────────────────────────────
@@ -91,10 +92,21 @@ function ChartTooltip({ active, payload, label }: {
 
 // ── Main component ────────────────────────────────────────────────────────
 export default function DashboardPage() {
+  const { user } = useAuth();
   const [trees, setTrees] = useState<Tree[]>([]);
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Export state
+  const [exportFrom, setExportFrom] = useState('');
+  const [exportTo, setExportTo] = useState('');
+  const [exportingXlsx, setExportingXlsx] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportError, setExportError] = useState('');
+
+  // Chỉ Admin và Manager mới thấy nút export
+  const canExport = user?.roles.some((r) => r === 'Admin' || r === 'Manager') ?? false;
 
   useEffect(() => {
     Promise.all([fetchTrees(), fetchAllTasks()])
@@ -105,6 +117,36 @@ export default function DashboardPage() {
       .catch(() => setError('Không thể tải dữ liệu. Vui lòng thử lại.'))
       .finally(() => setLoading(false));
   }, []);
+
+  // ── Export handler ────────────────────────────────────────────────────────
+  async function handleExport(format: 'xlsx' | 'pdf') {
+    setExportError('');
+    const setExporting = format === 'xlsx' ? setExportingXlsx : setExportingPdf;
+    setExporting(true);
+
+    try {
+      const blob = await exportTasks({
+        format,
+        from: exportFrom || undefined,
+        to: exportTo || undefined,
+      });
+
+      // Tạo URL tạm và trigger download
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `maintenance-report-${Date.now()}.${format}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Xuất file thất bại. Vui lòng thử lại.';
+      setExportError(message);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   // ── Derived data ─────────────────────────────────────────────────────────
   const totalTrees = trees.length;
@@ -175,6 +217,110 @@ export default function DashboardPage() {
           Tổng quan hệ thống quản lý cây xanh đô thị — Đà Nẵng
         </p>
       </div>
+
+      {/* Export section — chỉ hiển thị cho Admin và Manager */}
+      {canExport && (
+        <div className="bg-gray-800 rounded-xl border border-gray-700 p-5 mb-6">
+          <h3 className="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">
+            Xuất báo cáo bảo trì
+          </h3>
+
+          <div className="flex flex-wrap items-end gap-3">
+            {/* Từ ngày */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-400">Từ ngày</label>
+              <input
+                type="date"
+                value={exportFrom}
+                onChange={(e) => setExportFrom(e.target.value)}
+                className="bg-gray-900 border border-gray-600 text-gray-200 text-sm rounded-lg px-3 py-2
+                           focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent
+                           [color-scheme:dark]"
+              />
+            </div>
+
+            {/* Đến ngày */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-400">Đến ngày</label>
+              <input
+                type="date"
+                value={exportTo}
+                onChange={(e) => setExportTo(e.target.value)}
+                className="bg-gray-900 border border-gray-600 text-gray-200 text-sm rounded-lg px-3 py-2
+                           focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent
+                           [color-scheme:dark]"
+              />
+            </div>
+
+            {/* Nút Xuất Excel */}
+            <button
+              onClick={() => handleExport('xlsx')}
+              disabled={exportingXlsx || exportingPdf}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+                         bg-green-600 hover:bg-green-500 text-white
+                         disabled:opacity-50 disabled:cursor-not-allowed
+                         transition-colors duration-150"
+            >
+              {exportingXlsx ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                  Đang xuất...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round"
+                      d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                  </svg>
+                  Xuất Excel
+                </>
+              )}
+            </button>
+
+            {/* Nút Xuất PDF */}
+            <button
+              onClick={() => handleExport('pdf')}
+              disabled={exportingXlsx || exportingPdf}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+                         bg-red-600 hover:bg-red-500 text-white
+                         disabled:opacity-50 disabled:cursor-not-allowed
+                         transition-colors duration-150"
+            >
+              {exportingPdf ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                  Đang xuất...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round"
+                      d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  Xuất PDF
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Thông báo lỗi export */}
+          {exportError && (
+            <div className="mt-3 flex items-center gap-2 text-sm text-red-400 bg-red-900/20 border border-red-800/40 rounded-lg px-3 py-2">
+              <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {exportError}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* KPI row */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
