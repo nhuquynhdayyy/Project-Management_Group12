@@ -12,6 +12,7 @@ export const BAR_COLOR = '#34d399';
 export const PAGE_SIZE = 5;
 
 export type TimeFilter = '7d' | '30d' | 'custom';
+export type TrendDirection = 'up' | 'down' | 'flat';
 
 export function toDateInputValue(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -102,8 +103,8 @@ export function normalizeOverdueTask(task: OverdueTask) {
   );
 
   return {
-    ...task,
-tree_name: task.tree_name ?? task.tree?.tree_code ?? `Cay #${task.tree_id}`,
+...task,
+    tree_name: task.tree_name ?? task.tree?.tree_code ?? `Cay #${task.tree_id}`,
     staff_name:
       task.staff_name ??
       task.assignedUser?.full_name ??
@@ -123,19 +124,35 @@ export function KpiCard({
   sub,
   accent,
   icon,
+  trend,
 }: {
   label: string;
   value: number | string;
   sub?: string;
   accent: string;
   icon: ReactNode;
+  trend?: {
+    direction: TrendDirection;
+    value: number;
+  };
 }) {
+  const trendColor =
+    trend?.direction === 'up' ? 'text-green-400' : trend?.direction === 'down' ? 'text-red-400' : 'text-gray-500';
+  const trendIcon = trend?.direction === 'up' ? '↑' : trend?.direction === 'down' ? '↓' : '→';
+
   return (
     <div className="bg-gray-800 rounded-xl p-5 flex items-start gap-4 border border-gray-700">
       <div className={`p-2.5 rounded-lg ${accent} shrink-0`}>{icon}</div>
-      <div>
+      <div className="min-w-0">
         <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">{label}</p>
-        <p className="text-3xl font-bold text-white">{value}</p>
+        <div className="flex items-baseline gap-2">
+          <p className="text-3xl font-bold text-white">{value}</p>
+          {trend && (
+            <span className={`text-xs font-semibold ${trendColor}`}>
+              {trendIcon} {Math.abs(trend.value)}
+            </span>
+          )}
+        </div>
         {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
       </div>
     </div>
@@ -188,7 +205,7 @@ export function DashboardPageFrame({
 
   return (
     <div className="h-full overflow-y-auto bg-gray-950 px-6 py-6">
-      <div className="mb-6">
+<div className="mb-6">
         <h1 className="text-xl font-bold text-white">{title}</h1>
         <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>
       </div>
@@ -208,7 +225,7 @@ export function TimeFilterControls({
   return (
     <div className="bg-gray-800 rounded-xl border border-gray-700 p-5 mb-6">
       <h3 className="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Bo loc thoi gian</h3>
-<div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-end gap-3">
         <button
           onClick={() => setTimeFilter('7d')}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 ${
@@ -274,7 +291,7 @@ export function ChartTooltip({
   return (
     <div className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs shadow-xl">
       {label && <p className="text-gray-400 mb-1">{label}</p>}
-      {payload.map((p) => (
+{payload.map((p) => (
         <p key={p.name} style={{ color: p.color }}>
           {p.name}: <span className="font-bold text-white">{p.value}</span>
         </p>
@@ -298,7 +315,7 @@ export function PaginationControls({
     <div className="mt-4 flex items-center justify-end gap-2 text-sm text-gray-400">
       <button
         onClick={() => onPageChange(Math.max(1, page - 1))}
-disabled={page === 1}
+        disabled={page === 1}
         className="px-3 py-1.5 rounded-md bg-gray-900 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
       >
         Truoc
