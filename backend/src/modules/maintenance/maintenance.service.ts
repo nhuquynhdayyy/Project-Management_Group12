@@ -145,6 +145,7 @@ export class MaintenanceService {
 
   async findAll(): Promise<MaintenanceTask[]> {
     return await this.taskRepository.find({
+      relations: ['assignedUser'],
       order: { scheduled_date: 'ASC' },
     });
   }

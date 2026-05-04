@@ -59,10 +59,23 @@ const NAV_ITEMS = [
     ),
     roles: ['Admin', 'Manager'],
   },
+  {
+    to: '/dashboard/users',
+    label: '👥 Quản lý Users',
+icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M12 14c-3.314 0-6 1.567-6 3.5V20h12v-2.5c0-1.933-2.686-3.5-6-3.5z" />
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M12 11a4 4 0 100-8 4 4 0 000 8zm6.5 1.5a3 3 0 100-6 3 3 0 000 6z" />
+      </svg>
+    ),
+    roles: ['Admin'],
+  },
 ];
 
 export default function AppShell() {
-const { user, signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const navigate = useNavigate();
 
   function handleLogout() {
@@ -121,7 +134,7 @@ const { user, signOut } = useAuth();
               <p className="text-xs font-medium text-white truncate">{user?.username}</p>
               <p className="text-[10px] text-gray-500 truncate">
                 {user?.roles.join(', ')}
-              </p>
+</p>
             </div>
           </div>
           <button
@@ -131,7 +144,7 @@ const { user, signOut } = useAuth();
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round"
-d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
             Đăng xuất
           </button>

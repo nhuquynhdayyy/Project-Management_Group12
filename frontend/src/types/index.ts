@@ -3,6 +3,31 @@ export interface LoginResponse {
   id: number;
   username: string;
   roles: string[];
+  assigned_area_id?: number | null;
+}
+
+export type UserRole = 'Admin' | 'Manager' | 'Staff';
+
+export interface DashboardUser {
+  id: number;
+  username: string;
+  email: string | null;
+  full_name: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  roles: {
+    id: number;
+    role_name: UserRole;
+    description: string | null;
+  }[];
+}
+
+export interface RegisterUserPayload {
+  username: string;
+  password: string;
+  full_name: string;
+  roles: UserRole[];
 }
 
 export interface TreeSpecies {
@@ -71,7 +96,9 @@ export interface OverdueTask extends MaintenanceTask {
     tree_code?: string;
   };
   assignedUser?: {
+    id?: number;
     full_name?: string | null;
     username?: string;
+    assigned_area_id?: number | null;
   };
 }
