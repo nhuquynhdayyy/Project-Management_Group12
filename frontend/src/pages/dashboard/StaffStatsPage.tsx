@@ -61,6 +61,42 @@ function clampScore(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+function isCompletedOnTime(task: MaintenanceTask): boolean {
+  return (
+    task.status === 'Completed' &&
+    !!task.completed_at &&
+    task.completed_at.slice(0, 10) <= task.scheduled_date.slice(0, 10)
+  );
+}
+
+function isTaskOverdue(task: MaintenanceTask): boolean {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  if (task.status === 'Completed') {
+    if (!task.completed_at) return false;
+    return task.completed_at.slice(0, 10) > task.scheduled_date.slice(0, 10);
+  }
+
+  return new Date(task.scheduled_date) < today;
+}
+
+function countWorkingDays(days: string[]): number {
+  return Math.max(
+    1,
+    days.filter((day) => {
+      const dayOfWeek = new Date(`${day}T00:00:00`).getDay();
+      return dayOfWeek !== 0 && dayOfWeek !== 6;
+    }).length,
+  );
+}
+
+function getOnTimeRateClass(rate: number): string {
+  if (rate > 80) return 'text-green-400';
+  if (rate >= 50) return 'text-amber-300';
+  return 'text-red-400';
+}
+
 export default function StaffStatsPage() {
   const { user } = useAuth();
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
@@ -73,7 +109,7 @@ export default function StaffStatsPage() {
   useEffect(() => {
     Promise.all([fetchAllTasks(), fetchStaffPerformance()])
       .then(([taskData, staffData]) => {
-        setTasks(taskData);
+setTasks(taskData);
         setStaffPerformance(staffData);
       })
       .catch(() => setError('Khong the tai du lieu nhan vien. Vui long thu lai.'))
@@ -98,7 +134,8 @@ export default function StaffStatsPage() {
       .sort((a, b) => b.completed - a.completed);
 
     if (localData.length > 0) return localData;
-return staffPerformance
+
+    return staffPerformance
       .map((item) => ({ username: item.username, completed: item.completed }))
       .sort((a, b) => b.completed - a.completed);
   }, [filteredTasks, staffPerformance]);
@@ -118,6 +155,16 @@ return staffPerformance
     return staffChartData.filter((staff) => staffInManagerArea.has(staff.username));
   }, [staffChartData, tasks, user?.assigned_area_id, user?.roles]);
 
+  const visibleStaffNames = useMemo(
+    () => new Set(visibleStaffChartData.map((staff) => staff.username)),
+    [visibleStaffChartData],
+  );
+
+  const visibleStaffPerformance = useMemo(() => {
+    const visibleRows = staffPerformance.filter((staff) => visibleStaffNames.has(staff.username));
+    return visibleRows.length > 0 ? visibleRows : staffPerformance;
+  }, [staffPerformance, visibleStaffNames]);
+
   useEffect(() => {
     if (!selectedStaff && visibleStaffChartData.length > 0) {
       setSelectedStaff(visibleStaffChartData[0].username);
@@ -135,31 +182,32 @@ return staffPerformance
   );
 
   const radarData = useMemo<RadarMetric[]>(() => {
-    const maxCompleted = Math.max(1, ...staffPerformance.map((staff) => staff.completed));
     const completed = selectedPerformance?.completed ?? selectedStaffTasks.filter((task) => task.status === 'Completed').length;
     const pending = selectedPerformance?.pending ?? selectedStaffTasks.filter((task) => task.status !== 'Completed').length;
-    const total = Math.max(1, completed + pending);
-    const avgHours = selectedPerformance?.avg_completion_hours ?? null;
-    const onTimeCompleted = selectedStaffTasks.filter((task) => {
-      if (task.status !== 'Completed' || !task.completed_at) return false;
-      return new Date(task.completed_at) <= new Date(task.scheduled_date);
-    }).length;
-    const completedTasks = Math.max(1, selectedStaffTasks.filter((task) => task.status === 'Completed').length);
-    const activeRecentTasks = selectedStaffTasks.filter((task) => new Date(task.scheduled_date) >= getRangeStart(7)).length;
+const totalAssigned = Math.max(1, completed + pending);
+    const activeDays = selectedPerformance?.activeDays ?? new Set(
+      selectedStaffTasks
+        .filter((task) => task.status === 'Completed' && task.completed_at)
+        .map((task) => task.completed_at?.slice(0, 10) ?? ''),
+    ).size;
+    const workingDays = countWorkingDays(timeRange.days);
+    const diversityScore = selectedPerformance?.diversityScore ?? new Set(
+      selectedStaffTasks.filter((task) => task.status === 'Completed').map((task) => task.task_type),
+    ).size;
 
     return [
-      { metric: 'Toc do', value: clampScore(avgHours === null ? 60 : 100 - avgHours * 4) },
-      { metric: 'So luong', value: clampScore((completed / maxCompleted) * 100) },
-      { metric: 'Dung han', value: clampScore((onTimeCompleted / completedTasks) * 100) },
-      { metric: 'Chat luong', value: clampScore((completed / total) * 100) },
-      { metric: 'Chuyen can', value: clampScore((activeRecentTasks / 5) * 100) },
+      { metric: 'Toc do', value: clampScore(100 - (selectedPerformance?.avgDaysLate ?? 0) * 10) },
+      { metric: 'So luong', value: clampScore((completed / totalAssigned) * 100) },
+      { metric: 'Dung han', value: clampScore(selectedPerformance?.onTimeRate ?? 0) },
+      { metric: 'Chuyen can', value: clampScore((activeDays / workingDays) * 100) },
+      { metric: 'Da dang', value: clampScore(diversityScore * 20) },
     ];
-  }, [selectedPerformance, selectedStaffTasks, staffPerformance]);
+  }, [selectedPerformance, selectedStaffTasks, timeRange.days]);
 
   const lastFourWeeks = useMemo(() => {
     const result: { label: string; start: Date; end: Date }[] = [];
     const currentStart = getRangeStart(7);
-for (let index = 3; index >= 0; index -= 1) {
+    for (let index = 3; index >= 0; index -= 1) {
       const start = new Date(currentStart);
       start.setDate(start.getDate() - index * 7);
       const end = new Date(start);
@@ -184,15 +232,54 @@ for (let index = 3; index >= 0; index -= 1) {
     });
   }, [lastFourWeeks, tasks, visibleStaffChartData]);
 
+  const overdueByStaffToday = useMemo(() => {
+    const result = new Map<string, number>();
+    for (const task of tasks) {
+      const staffName = getTaskStaffName(task);
+      if (!visibleStaffNames.has(staffName) || !isTaskOverdue(task)) continue;
+      result.set(staffName, (result.get(staffName) ?? 0) + 1);
+    }
+    return result;
+  }, [tasks, visibleStaffNames]);
+
+  const totalTeamOverdue = useMemo(
+    () => [...overdueByStaffToday.values()].reduce((sum, count) => sum + count, 0),
+    [overdueByStaffToday],
+  );
+
+  const topOverdueStaff = useMemo(() => {
+    const rows = [...overdueByStaffToday.entries()].sort((a, b) => b[1] - a[1]);
+    return rows[0] ?? null;
+  }, [overdueByStaffToday]);
+
+  const averageOnTimeRate = useMemo(() => {
+    if (visibleStaffPerformance.length === 0) return 0;
+const total = visibleStaffPerformance.reduce((sum, staff) => sum + (staff.onTimeRate ?? 0), 0);
+    return Math.round(total / visibleStaffPerformance.length);
+  }, [visibleStaffPerformance]);
+
+  const groupedBarData = useMemo(
+    () =>
+      visibleStaffChartData.map((staff) => {
+        const staffTasks = tasks.filter((task) => getTaskStaffName(task) === staff.username);
+        return {
+          username: staff.username,
+          onTime: staffTasks.filter(isCompletedOnTime).length,
+          overdue: staffTasks.filter(isTaskOverdue).length,
+        };
+      }),
+    [tasks, visibleStaffChartData],
+  );
+
   const rankingRows = useMemo(
     () =>
-      staffPerformance
+      visibleStaffPerformance
         .map((staff) => ({
           ...staff,
           total: staff.completed + staff.pending,
         }))
         .sort((a, b) => b.completed - a.completed),
-    [staffPerformance],
+    [visibleStaffPerformance],
   );
 
   const inactiveRows = useMemo(() => {
@@ -218,9 +305,25 @@ for (let index = 3; index >= 0; index -= 1) {
     >
       <TimeFilterControls {...timeRange} />
 
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div className={`rounded-xl border p-5 ${totalTeamOverdue > 0 ? 'border-red-700 bg-red-950/30' : 'border-gray-700 bg-gray-800'}`}>
+          <p className="text-xs uppercase tracking-wider text-gray-400">Tong task tre hom nay</p>
+          <p className={`mt-2 text-3xl font-bold ${totalTeamOverdue > 0 ? 'text-red-400' : 'text-white'}`}>{totalTeamOverdue}</p>
+        </div>
+        <div className="rounded-xl border border-gray-700 bg-gray-800 p-5">
+          <p className="text-xs uppercase tracking-wider text-gray-400">Nhan vien tre nhieu nhat</p>
+          <p className="mt-2 text-xl font-bold text-white">{topOverdueStaff ? topOverdueStaff[0] : '-'}</p>
+          <p className="mt-1 text-sm text-red-400">{topOverdueStaff ? `${topOverdueStaff[1]} task tre` : 'Khong co task tre'}</p>
+        </div>
+        <div className="rounded-xl border border-gray-700 bg-gray-800 p-5">
+          <p className="text-xs uppercase tracking-wider text-gray-400">Ti le dung han TB</p>
+          <p className={`mt-2 text-3xl font-bold ${getOnTimeRateClass(averageOnTimeRate)}`}>{averageOnTimeRate}%</p>
+        </div>
+      </div>
+
       <Section title="Hieu suat tung nhan vien">
         <ResponsiveContainer width="100%" height={Math.max(260, visibleStaffChartData.length * 42)}>
-          <BarChart data={visibleStaffChartData} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+<BarChart data={visibleStaffChartData} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
             <XAxis type="number" tick={{ fill: '#9ca3af', fontSize: 11 }} allowDecimals={false} />
             <YAxis type="category" dataKey="username" tick={{ fill: '#9ca3af', fontSize: 11 }} width={110} />
@@ -233,7 +336,24 @@ for (let index = 3; index >= 0; index -= 1) {
           </BarChart>
         </ResponsiveContainer>
       </Section>
-<div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-4">
+
+      <div className="mt-4">
+        <Section title="Dung han va tre han theo nhan vien">
+          <ResponsiveContainer width="100%" height={Math.max(280, groupedBarData.length * 44)}>
+            <BarChart data={groupedBarData} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis type="number" tick={{ fill: '#9ca3af', fontSize: 11 }} allowDecimals={false} />
+              <YAxis type="category" dataKey="username" tick={{ fill: '#9ca3af', fontSize: 11 }} width={110} />
+              <Tooltip content={<ChartTooltip />} />
+              <Legend formatter={(value) => <span className="text-xs text-gray-300">{value}</span>} />
+              <Bar dataKey="onTime" name="Dung han" fill="#22c55e" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="overdue" name="Tre han" fill="#ef4444" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </Section>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-4">
         <Section title="Danh gia da chieu">
           <div className="mb-3 flex justify-end">
             <select
@@ -254,7 +374,7 @@ for (let index = 3; index >= 0; index -= 1) {
               <PolarAngleAxis dataKey="metric" tick={{ fill: '#d1d5db', fontSize: 11 }} />
               <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: '#9ca3af', fontSize: 10 }} />
               <Radar dataKey="value" name={selectedStaff} stroke="#34d399" fill="#34d399" fillOpacity={0.35} />
-              <Tooltip content={<ChartTooltip />} />
+<Tooltip content={<ChartTooltip />} />
             </RadarChart>
           </ResponsiveContainer>
         </Section>
@@ -293,8 +413,11 @@ for (let index = 3; index >= 0; index -= 1) {
                   <th className="py-2 pr-3">Nhan vien</th>
                   <th className="py-2 pr-3">Hoan thanh</th>
                   <th className="py-2 pr-3">Dang cho</th>
+                  <th className="py-2 pr-3">Task tre</th>
+                  <th className="py-2 pr-3">Dung han %</th>
+                  <th className="py-2 pr-3">Tre TB</th>
                   <th className="py-2">TB gio</th>
-</tr>
+                </tr>
               </thead>
               <tbody>
                 {rankingRows.map((staff, index) => (
@@ -303,12 +426,19 @@ for (let index = 3; index >= 0; index -= 1) {
                     <td className="py-2 pr-3 font-medium text-white">{staff.username}</td>
                     <td className="py-2 pr-3 text-green-400">{staff.completed}</td>
                     <td className="py-2 pr-3 text-amber-300">{staff.pending}</td>
+                    <td className={`py-2 pr-3 font-semibold ${(staff.overdueCount ?? 0) > 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                      {staff.overdueCount ?? 0}
+                    </td>
+                    <td className={`py-2 pr-3 font-semibold ${getOnTimeRateClass(staff.onTimeRate ?? 0)}`}>
+                      {(staff.onTimeRate ?? 0).toFixed(0)}%
+                    </td>
+<td className="py-2 pr-3 text-gray-300">{(staff.avgDaysLate ?? 0).toFixed(1)}</td>
                     <td className="py-2">{staff.avg_completion_hours?.toFixed(1) ?? '-'}</td>
                   </tr>
                 ))}
                 {rankingRows.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-4 text-center text-gray-500">
+                    <td colSpan={8} className="py-4 text-center text-gray-500">
                       Chua co du lieu nhan vien.
                     </td>
                   </tr>

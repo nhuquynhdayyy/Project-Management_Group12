@@ -86,6 +86,11 @@ export interface StaffPerformance {
   completed: number;
   pending: number;
   avg_completion_hours: number | null;
+  overdueCount: number;
+  onTimeRate: number;
+  avgDaysLate: number;
+  diversityScore: number;
+  activeDays: number;
 }
 
 export interface OverdueTask extends MaintenanceTask {

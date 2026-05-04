@@ -173,10 +173,24 @@ export class MaintenanceService {
   }
 
   async getStaffPerformance(): Promise<StaffPerformanceDto[]> {
+    interface StaffPerformanceRawRow {
+      username: string | null;
+      completed: string | number | null;
+      pending: string | number | null;
+      total_assigned: string | number | null;
+      on_time_completed: string | number | null;
+      overdue_count: string | number | null;
+      avg_days_late: string | number | null;
+      diversity_score: string | number | null;
+      active_days: string | number | null;
+      avg_completion_hours: string | number | null;
+    }
+
     const rows = await this.taskRepository
-      .createQueryBuilder('task')
+.createQueryBuilder('task')
       .leftJoin('task.assignedUser', 'user')
       .select('user.username', 'username')
+      .addSelect('COUNT(task.id)', 'total_assigned')
       .addSelect(
         `SUM(CASE WHEN task.status = :completedStatus THEN 1 ELSE 0 END)`,
         'completed',
@@ -186,26 +200,56 @@ export class MaintenanceService {
         'pending',
       )
       .addSelect(
-`AVG(CASE WHEN task.status = :completedStatus AND task.completed_at IS NOT NULL THEN EXTRACT(EPOCH FROM (task.completed_at - task.created_at)) / 3600 ELSE NULL END)`,
+        `AVG(CASE WHEN task.status = :completedStatus AND task.completed_at IS NOT NULL THEN EXTRACT(EPOCH FROM (task.completed_at - task.created_at)) / 3600 ELSE NULL END)`,
         'avg_completion_hours',
+      )
+      .addSelect(
+        `SUM(CASE WHEN task.status = :completedStatus AND DATE(task.completed_at) <= task.scheduled_date THEN 1 ELSE 0 END)`,
+        'on_time_completed',
+      )
+      .addSelect(
+        `SUM(CASE WHEN (task.status = :completedStatus AND DATE(task.completed_at) > task.scheduled_date) OR (task.status <> :completedStatus AND task.scheduled_date < CURRENT_DATE) THEN 1 ELSE 0 END)`,
+        'overdue_count',
+      )
+      .addSelect(
+        `AVG(CASE WHEN task.status = :completedStatus AND DATE(task.completed_at) > task.scheduled_date THEN DATE_PART('day', DATE(task.completed_at)::timestamp - task.scheduled_date::timestamp) WHEN task.status <> :completedStatus AND task.scheduled_date < CURRENT_DATE THEN DATE_PART('day', CURRENT_DATE::timestamp - task.scheduled_date::timestamp) ELSE NULL END)`,
+        'avg_days_late',
+      )
+      .addSelect(
+        `COUNT(DISTINCT CASE WHEN task.status = :completedStatus THEN task.task_type ELSE NULL END)`,
+        'diversity_score',
+      )
+      .addSelect(
+        `COUNT(DISTINCT CASE WHEN task.status = :completedStatus AND task.completed_at IS NOT NULL THEN DATE(task.completed_at) ELSE NULL END)`,
+        'active_days',
       )
       .setParameter('completedStatus', TaskStatus.COMPLETED)
       .setParameter('pendingStatuses', [TaskStatus.PENDING, TaskStatus.IN_PROGRESS])
       .groupBy('user.username')
       .orderBy('user.username', 'ASC')
-      .getRawMany();
+      .getRawMany<StaffPerformanceRawRow>();
 
-    return rows.map((row) => ({
-      username: row.username,
-      completed: Number(row.completed) || 0,
-      pending: Number(row.pending) || 0,
-      avg_completion_hours:
-        row.avg_completion_hours !== null ? Number(parseFloat(row.avg_completion_hours).toFixed(2)) : null,
-    }));
+    return rows.map((row) => {
+      const completed = Number(row.completed) || 0;
+      const onTimeCompleted = Number(row.on_time_completed) || 0;
+
+      return {
+        username: row.username ?? 'Unknown',
+        completed,
+        pending: Number(row.pending) || 0,
+        avg_completion_hours:
+          row.avg_completion_hours !== null ? Number(parseFloat(String(row.avg_completion_hours)).toFixed(2)) : null,
+        overdueCount: Number(row.overdue_count) || 0,
+        onTimeRate: completed > 0 ? Number(((onTimeCompleted / completed) * 100).toFixed(2)) : 0,
+        avgDaysLate: row.avg_days_late !== null ? Number(parseFloat(String(row.avg_days_late)).toFixed(2)) : 0,
+        diversityScore: Number(row.diversity_score) || 0,
+        activeDays: Number(row.active_days) || 0,
+      };
+    });
   }
 
   async getOverdueTasks(): Promise<MaintenanceTask[]> {
-    const today = new Date();
+const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const tasks = await this.taskRepository.find({
