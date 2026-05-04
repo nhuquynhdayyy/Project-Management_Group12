@@ -1,8 +1,18 @@
 import apiClient from './client';
-import type { MaintenanceTask } from '../types';
+import type { MaintenanceTask, OverdueTask, StaffPerformance } from '../types';
 
 export async function fetchAllTasks(): Promise<MaintenanceTask[]> {
   const { data } = await apiClient.get<MaintenanceTask[]>('/maintenance/tasks');
+  return data;
+}
+
+export async function fetchStaffPerformance(): Promise<StaffPerformance[]> {
+  const { data } = await apiClient.get<StaffPerformance[]>('/maintenance/stats/by-staff');
+  return data;
+}
+
+export async function fetchOverdueTasks(): Promise<OverdueTask[]> {
+  const { data } = await apiClient.get<OverdueTask[]>('/maintenance/stats/overdue');
   return data;
 }
 

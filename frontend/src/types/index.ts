@@ -55,3 +55,23 @@ export interface MaintenanceTask {
   created_at: string;
   updated_at: string;
 }
+
+export interface StaffPerformance {
+  username: string;
+  completed: number;
+  pending: number;
+  avg_completion_hours: number | null;
+}
+
+export interface OverdueTask extends MaintenanceTask {
+  tree_name?: string | null;
+  staff_name?: string | null;
+  overdue_days?: number;
+  tree?: {
+    tree_code?: string;
+  };
+  assignedUser?: {
+    full_name?: string | null;
+    username?: string;
+  };
+}

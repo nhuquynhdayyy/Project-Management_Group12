@@ -25,6 +25,7 @@ import { ExportService } from './export.service';
 import { CreateMaintenanceTaskDto } from './dto/create-maintenance-task.dto';
 import { CompleteTaskDto } from './dto/complete-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
+import { StaffPerformanceDto } from './dto/staff-performance.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 
@@ -62,6 +63,43 @@ export class MaintenanceController {
   async getMyTasks(@Request() req) {
     const userId = req.user.userId || req.user.id;
     return await this.maintenanceService.findByUserId(userId);
+  }
+
+  @Get('stats/by-staff')
+  @UseGuards(RolesGuard)
+  @ApiOperation({
+    summary: 'Get staff performance statistics',
+    description:
+      'Thống kê hiệu suất nhân viên bảo trì gồm số task hoàn thành, đang chờ/xử lý và thời gian hoàn thành trung bình.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách thống kê hiệu suất theo nhân viên.',
+    type: StaffPerformanceDto,
+    isArray: true,
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Chỉ Admin/Manager được truy cập.' })
+  async getStaffPerformance() {
+    return await this.maintenanceService.getStaffPerformance();
+  }
+
+  @Get('stats/overdue')
+  @UseGuards(RolesGuard)
+  @ApiOperation({
+summary: 'Get overdue maintenance tasks',
+    description:
+      'Danh sách công việc quá hạn: scheduled_date nhỏ hơn ngày hiện tại và trạng thái khác Completed.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Danh sách task quá hạn kèm thông tin cây, nhân viên phụ trách và số ngày trễ.',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Chỉ Admin/Manager được truy cập.' })
+  async getOverdueTasks() {
+    return await this.maintenanceService.getOverdueTasks();
   }
 
   @Get('tasks/export')
@@ -129,7 +167,7 @@ export class MaintenanceController {
     const filename = `maintenance-report-${Date.now()}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.end(buffer);
+res.end(buffer);
   }
 
   @Get('tasks/:id')
