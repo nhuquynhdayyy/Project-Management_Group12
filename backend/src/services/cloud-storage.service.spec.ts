@@ -1,16 +1,55 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CloudStorageService } from './cloud-storage.service';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
+// Mock Supabase client
+const mockSupabaseStorage = {
+  from: jest.fn().mockReturnThis(),
+  upload: jest.fn(),
+  getPublicUrl: jest.fn(),
+  remove: jest.fn(),
+};
+
+jest.mock('@supabase/supabase-js', () => ({
+  createClient: jest.fn(() => ({
+    storage: mockSupabaseStorage,
+  })),
+}));
 
 describe('CloudStorageService', () => {
   let service: CloudStorageService;
+  let configService: ConfigService;
+
+  const mockConfigService = {
+    get: jest.fn((key: string) => {
+      const config: Record<string, string> = {
+        SUPABASE_URL: 'https://test.supabase.co',
+        SUPABASE_SERVICE_KEY: 'test-service-key',
+        SUPABASE_BUCKET: 'test-bucket',
+      };
+      return config[key];
+    }),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [CloudStorageService],
+      providers: [
+        CloudStorageService,
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
+        },
+      ],
     }).compile();
 
     service = module.get<CloudStorageService>(CloudStorageService);
+    configService = module.get<ConfigService>(ConfigService);
+
+    // Reset mocks
+    mockSupabaseStorage.upload.mockReset();
+    mockSupabaseStorage.getPublicUrl.mockReset();
+    mockSupabaseStorage.remove.mockReset();
   });
 
   afterEach(() => {
@@ -25,6 +64,15 @@ describe('CloudStorageService', () => {
       // Arrange
       const imageBuffer = Buffer.from('fake-image-data');
       const filename = 'evidence-task-123.jpg';
+      const mockPublicUrl = 'https://test.supabase.co/storage/v1/object/public/test-bucket/1234567890_evidence-task-123.jpg';
+
+      mockSupabaseStorage.upload.mockResolvedValue({
+        data: { path: `1234567890_${filename}` },
+        error: null,
+      });
+      mockSupabaseStorage.getPublicUrl.mockReturnValue({
+        data: { publicUrl: mockPublicUrl },
+      });
 
       // Act
       const result = await service.uploadImage(imageBuffer, filename);
@@ -34,6 +82,8 @@ describe('CloudStorageService', () => {
       expect(typeof result).toBe('string');
       expect(result).toMatch(/^https?:\/\//); // URL should start with http:// or https://
       expect(result.length).toBeGreaterThan(0);
+      expect(mockSupabaseStorage.upload).toHaveBeenCalled();
+      expect(mockSupabaseStorage.getPublicUrl).toHaveBeenCalled();
     });
 
     it('should generate unique URLs for different uploads', async () => {
@@ -42,6 +92,18 @@ describe('CloudStorageService', () => {
       const imageBuffer2 = Buffer.from('fake-image-data-2');
       const filename1 = 'evidence-1.jpg';
       const filename2 = 'evidence-2.jpg';
+
+      let callCount = 0;
+      mockSupabaseStorage.upload.mockImplementation(() => {
+        callCount++;
+        return Promise.resolve({
+          data: { path: `${Date.now() + callCount}_file.jpg` },
+          error: null,
+        });
+      });
+      mockSupabaseStorage.getPublicUrl.mockImplementation((filename) => ({
+        data: { publicUrl: `https://test.supabase.co/storage/v1/object/public/test-bucket/${filename}` },
+      }));
 
       // Act
       const url1 = await service.uploadImage(imageBuffer1, filename1);
@@ -96,6 +158,15 @@ describe('CloudStorageService', () => {
       // Arrange
       const largeBuffer = Buffer.alloc(5 * 1024 * 1024); // 5MB
       const filename = 'large-image.jpg';
+      const mockPublicUrl = 'https://test.supabase.co/storage/v1/object/public/test-bucket/1234567890_large-image.jpg';
+
+      mockSupabaseStorage.upload.mockResolvedValue({
+        data: { path: `1234567890_${filename}` },
+        error: null,
+      });
+      mockSupabaseStorage.getPublicUrl.mockReturnValue({
+        data: { publicUrl: mockPublicUrl },
+      });
 
       // Act
       const result = await service.uploadImage(largeBuffer, filename);
@@ -110,6 +181,14 @@ describe('CloudStorageService', () => {
       // Arrange
       const imageBuffer = Buffer.from('fake-image-data');
       const extensions = ['image.jpg', 'photo.jpeg', 'picture.png', 'graphic.webp'];
+
+      mockSupabaseStorage.upload.mockResolvedValue({
+        data: { path: 'test-path' },
+        error: null,
+      });
+      mockSupabaseStorage.getPublicUrl.mockReturnValue({
+        data: { publicUrl: 'https://test.supabase.co/storage/v1/object/public/test-bucket/test-path' },
+      });
 
       // Act & Assert
       for (const filename of extensions) {
@@ -126,13 +205,19 @@ describe('CloudStorageService', () => {
   describe('deleteImage', () => {
     it('should delete image successfully and return void', async () => {
       // Arrange
-      const imageUrl = 'https://storage.example.com/evidence/task-123.jpg';
+      const imageUrl = 'https://test.supabase.co/storage/v1/object/public/test-bucket/1234567890_task-123.jpg';
+
+      mockSupabaseStorage.remove.mockResolvedValue({
+        data: null,
+        error: null,
+      });
 
       // Act
       const result = await service.deleteImage(imageUrl);
 
       // Assert
       expect(result).toBeUndefined();
+      expect(mockSupabaseStorage.remove).toHaveBeenCalledWith(['1234567890_task-123.jpg']);
     });
 
     it('should throw BadRequestException when URL is empty', async () => {
@@ -152,7 +237,12 @@ describe('CloudStorageService', () => {
 
     it('should throw InternalServerErrorException when URL does not exist in storage', async () => {
       // Arrange
-      const nonExistentUrl = 'https://storage.example.com/evidence/non-existent-file.jpg';
+      const nonExistentUrl = 'https://test.supabase.co/storage/v1/object/public/test-bucket/non-existent-file.jpg';
+
+      mockSupabaseStorage.remove.mockResolvedValue({
+        data: null,
+        error: { message: 'file not found' },
+      });
 
       // Act & Assert
       await expect(service.deleteImage(nonExistentUrl)).rejects.toThrow(
@@ -174,8 +264,13 @@ describe('CloudStorageService', () => {
 
     it('should handle deletion of multiple different URLs', async () => {
       // Arrange
-      const url1 = 'https://storage.example.com/evidence/task-1.jpg';
-      const url2 = 'https://storage.example.com/evidence/task-2.jpg';
+      const url1 = 'https://test.supabase.co/storage/v1/object/public/test-bucket/task-1.jpg';
+      const url2 = 'https://test.supabase.co/storage/v1/object/public/test-bucket/task-2.jpg';
+
+      mockSupabaseStorage.remove.mockResolvedValue({
+        data: null,
+        error: null,
+      });
 
       // Act & Assert
       await expect(service.deleteImage(url1)).resolves.toBeUndefined();
@@ -191,6 +286,19 @@ describe('CloudStorageService', () => {
       // Arrange
       const imageBuffer = Buffer.from('fake-image-data');
       const filename = 'temp-evidence.jpg';
+      const mockPublicUrl = 'https://test.supabase.co/storage/v1/object/public/test-bucket/1234567890_temp-evidence.jpg';
+
+      mockSupabaseStorage.upload.mockResolvedValue({
+        data: { path: `1234567890_${filename}` },
+        error: null,
+      });
+      mockSupabaseStorage.getPublicUrl.mockReturnValue({
+        data: { publicUrl: mockPublicUrl },
+      });
+      mockSupabaseStorage.remove.mockResolvedValue({
+        data: null,
+        error: null,
+      });
 
       // Act
       const uploadedUrl = await service.uploadImage(imageBuffer, filename);
@@ -206,6 +314,18 @@ describe('CloudStorageService', () => {
       const buffer1 = Buffer.from('image-1');
       const buffer2 = Buffer.from('image-2');
       const buffer3 = Buffer.from('image-3');
+
+      let callCount = 0;
+      mockSupabaseStorage.upload.mockImplementation(() => {
+        callCount++;
+        return Promise.resolve({
+          data: { path: `${Date.now() + callCount}_concurrent.jpg` },
+          error: null,
+        });
+      });
+      mockSupabaseStorage.getPublicUrl.mockImplementation((filename) => ({
+        data: { publicUrl: `https://test.supabase.co/storage/v1/object/public/test-bucket/${filename}` },
+      }));
 
       // Act
       const [url1, url2, url3] = await Promise.all([
@@ -230,6 +350,15 @@ describe('CloudStorageService', () => {
       // Arrange
       const imageBuffer = Buffer.from('fake-image-data');
       const specialFilename = 'evidence-task_123-photo (1).jpg';
+      const mockPublicUrl = 'https://test.supabase.co/storage/v1/object/public/test-bucket/1234567890_evidence-task_123-photo (1).jpg';
+
+      mockSupabaseStorage.upload.mockResolvedValue({
+        data: { path: `1234567890_${specialFilename}` },
+        error: null,
+      });
+      mockSupabaseStorage.getPublicUrl.mockReturnValue({
+        data: { publicUrl: mockPublicUrl },
+      });
 
       // Act
       const result = await service.uploadImage(imageBuffer, specialFilename);
@@ -243,6 +372,15 @@ describe('CloudStorageService', () => {
       // Arrange
       const imageBuffer = Buffer.from('fake-image-data');
       const longFilename = 'a'.repeat(200) + '.jpg';
+      const mockPublicUrl = 'https://test.supabase.co/storage/v1/object/public/test-bucket/1234567890_' + longFilename;
+
+      mockSupabaseStorage.upload.mockResolvedValue({
+        data: { path: `1234567890_${longFilename}` },
+        error: null,
+      });
+      mockSupabaseStorage.getPublicUrl.mockReturnValue({
+        data: { publicUrl: mockPublicUrl },
+      });
 
       // Act
       const result = await service.uploadImage(imageBuffer, longFilename);
@@ -256,6 +394,15 @@ describe('CloudStorageService', () => {
       // Arrange
       const imageBuffer = Buffer.from('fake-image-data');
       const unicodeFilename = 'bằng-chứng-công-việc-123.jpg';
+      const mockPublicUrl = 'https://test.supabase.co/storage/v1/object/public/test-bucket/1234567890_bằng-chứng-công-việc-123.jpg';
+
+      mockSupabaseStorage.upload.mockResolvedValue({
+        data: { path: `1234567890_${unicodeFilename}` },
+        error: null,
+      });
+      mockSupabaseStorage.getPublicUrl.mockReturnValue({
+        data: { publicUrl: mockPublicUrl },
+      });
 
       // Act
       const result = await service.uploadImage(imageBuffer, unicodeFilename);
