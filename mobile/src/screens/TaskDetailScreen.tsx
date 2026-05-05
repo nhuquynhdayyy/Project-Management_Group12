@@ -8,11 +8,12 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Location from 'expo-location';
-import { Camera } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 import { completeTask } from '../api/maintenance';
 import { RootStackParamList } from '../types/navigation';
 
@@ -26,6 +27,73 @@ export default function TaskDetailScreen() {
 
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
+  const [imageUri, setImageUri] = useState<string | null>(null);
+
+  async function handleTakePhoto() {
+    try {
+      // Request camera permission
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Lỗi', 'Cần cấp quyền truy cập camera để chụp ảnh');
+        return;
+      }
+
+      // Show options: Camera or Gallery
+      Alert.alert(
+        'Chọn ảnh bằng chứng',
+        'Bạn muốn chụp ảnh mới hay chọn từ thư viện?',
+        [
+          {
+            text: 'Chụp ảnh',
+            onPress: async () => {
+              const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [4, 3],
+                quality: 0.8,
+              });
+
+              if (!result.canceled) {
+                setImageUri(result.assets[0].uri);
+              }
+            },
+          },
+          {
+            text: 'Chọn từ thư viện',
+            onPress: async () => {
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [4, 3],
+                quality: 0.8,
+              });
+
+              if (!result.canceled) {
+                setImageUri(result.assets[0].uri);
+              }
+            },
+          },
+          {
+            text: 'Hủy',
+            style: 'cancel',
+          },
+        ]
+      );
+    } catch (error) {
+      Alert.alert('Lỗi', 'Không thể mở camera');
+    }
+  }
+
+  function handleRemoveImage() {
+    Alert.alert(
+      'Xác nhận',
+      'Bạn có muốn xóa ảnh này?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        { text: 'Xóa', style: 'destructive', onPress: () => setImageUri(null) },
+      ]
+    );
+  }
 
   async function handleComplete() {
     if (task.status === 'Completed') {
@@ -48,11 +116,12 @@ export default function TaskDetailScreen() {
         accuracy: Location.Accuracy.High,
       });
 
-      // Complete task
+      // Complete task with optional image
       await completeTask(task.id, {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
         notes: notes || undefined,
+        imageUri: imageUri || undefined,
       });
 
       Alert.alert('Thành công', 'Đã hoàn thành công việc', [
@@ -170,6 +239,27 @@ export default function TaskDetailScreen() {
               numberOfLines={4}
             />
 
+            {/* Camera Button */}
+            <TouchableOpacity
+              style={styles.cameraButton}
+              onPress={handleTakePhoto}
+            >
+              <Text style={styles.cameraButtonText}>📷 Chụp ảnh bằng chứng (tùy chọn)</Text>
+            </TouchableOpacity>
+
+            {/* Image Preview */}
+            {imageUri && (
+              <View style={styles.imagePreviewContainer}>
+                <Image source={{ uri: imageUri }} style={styles.imagePreview} />
+                <TouchableOpacity
+                  style={styles.removeImageButton}
+                  onPress={handleRemoveImage}
+                >
+                  <Text style={styles.removeImageText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             <TouchableOpacity
               style={[styles.completeButton, loading && styles.buttonDisabled]}
               onPress={handleComplete}
@@ -272,6 +362,48 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
     marginBottom: 16,
+  },
+  cameraButton: {
+    backgroundColor: '#3b82f6',
+    borderRadius: 8,
+    padding: 14,
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#60a5fa',
+  },
+  cameraButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    marginBottom: 16,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    backgroundColor: '#0f172a',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeImageText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   completeButton: {
     backgroundColor: '#16a34a',
