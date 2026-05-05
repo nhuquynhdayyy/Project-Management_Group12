@@ -1,6 +1,7 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { createTree, fetchTreeSpecies, fetchAdministrativeAreas } from '../api/trees';
 import type { CreateTreePayload, TreeSpecies, AdministrativeArea, Tree, HealthStatus } from '../types';
+import MapPicker from './MapPicker';
 
 interface CreateTreeFormProps {
   onSuccess: (tree: Tree) => void;
@@ -78,6 +79,14 @@ export default function CreateTreeForm({ onSuccess, onCancel }: CreateTreeFormPr
 
   const handleInputChange = (field: keyof CreateTreePayload, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleLocationPick = (lat: number, lng: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      latitude: parseFloat(lat.toFixed(6)),
+      longitude: parseFloat(lng.toFixed(6)),
+    }));
   };
 
   return (
@@ -305,6 +314,18 @@ export default function CreateTreeForm({ onSuccess, onCancel }: CreateTreeFormPr
             <option value="Chết">Chết</option>
           </select>
         </div>
+      </div>
+
+      {/* Interactive Map Picker */}
+      <div className="mt-4">
+        <label className="block text-sm font-medium text-gray-300 mb-2">
+          Chọn vị trí trên bản đồ <span className="text-red-500">*</span>
+        </label>
+        <MapPicker
+          latitude={formData.latitude}
+          longitude={formData.longitude}
+          onLocationPick={handleLocationPick}
+        />
       </div>
 
       {/* Action Buttons */}
