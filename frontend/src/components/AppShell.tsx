@@ -35,6 +35,19 @@ const NAV_ITEMS = [
       </svg>
     ),
     roles: ['Admin', 'Manager'],
+    end: true,
+  },
+  {
+    to: '/dashboard/trees/manage',
+    label: '🌿 Quản lý Cây',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M12 3C8 3 5 6.5 5 10c0 2.5 1.3 4.7 3.3 6L8 20h8l-.3-4C17.7 14.7 19 12.5 19 10c0-3.5-3-7-7-7z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 20v-4" />
+      </svg>
+    ),
+    roles: ['Admin', 'Manager'],
   },
   {
     to: '/dashboard/tasks',

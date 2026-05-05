@@ -9,6 +9,7 @@ import DashboardPage from './pages/DashboardPage';
 import TreeStatsPage from './pages/dashboard/TreeStatsPage';
 import TaskStatsPage from './pages/dashboard/TaskStatsPage';
 import TaskManagementPage from './pages/dashboard/TaskManagementPage';
+import TreeManagementPage from './pages/dashboard/TreeManagementPage';
 import StaffStatsPage from './pages/dashboard/StaffStatsPage';
 import UsersPage from './pages/dashboard/UsersPage';
 
@@ -40,6 +41,7 @@ export default function App() {
               <Route element={<RoleGuard allowedRoles={['Admin', 'Manager']} />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/dashboard/trees" element={<TreeStatsPage />} />
+                <Route path="/dashboard/trees/manage" element={<TreeManagementPage />} />
                 <Route path="/dashboard/tasks" element={<TaskStatsPage />} />
                 <Route path="/dashboard/tasks/manage" element={<TaskManagementPage />} />
                 <Route path="/dashboard/staff" element={<StaffStatsPage />} />
