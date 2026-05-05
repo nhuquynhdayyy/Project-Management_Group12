@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsOptional, IsString, IsUrl } from 'class-validator';
+import { IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CompleteTaskDto {
   @ApiProperty({
@@ -15,15 +15,6 @@ export class CompleteTaskDto {
   })
   @IsNumber()
   longitude: number;
-
-  @ApiProperty({
-    description: 'URL of the evidence image (uploaded to cloud storage)',
-    example: 'https://storage.example.com/evidence/task-123.jpg',
-    required: false,
-  })
-  @IsOptional()
-  @IsUrl()
-  evidence_image_url?: string;
 
   @ApiProperty({
     description: 'Completion notes',

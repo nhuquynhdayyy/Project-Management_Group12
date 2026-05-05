@@ -10,7 +10,10 @@ import {
   Res,
   UseGuards,
   Request,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiTags,
@@ -18,6 +21,8 @@ import {
   ApiQuery,
   ApiResponse,
   ApiParam,
+  ApiConsumes,
+  ApiBody,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { MaintenanceService } from './maintenance.service';
@@ -197,12 +202,42 @@ res.end(buffer);
   }
 
   @Post('tasks/:id/complete')
+  @UseInterceptors(FileInterceptor('image'))
+  @ApiConsumes('multipart/form-data')
   @ApiOperation({
-    summary: 'Complete a maintenance task (with geofencing)',
+    summary: 'Complete a maintenance task (with geofencing and optional image upload)',
     description:
-      'Staff must be within 10 meters of the tree location to complete the task. GPS coordinates are verified against the tree location in the database.',
+      'Staff must be within 10 meters of the tree location to complete the task. GPS coordinates are verified against the tree location in the database. Optionally upload an evidence image.',
   })
   @ApiParam({ name: 'id', description: 'Task ID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['latitude', 'longitude'],
+      properties: {
+        latitude: {
+          type: 'number',
+          description: 'Current latitude of the staff member (WGS84)',
+          example: 16.0544,
+        },
+        longitude: {
+          type: 'number',
+          description: 'Current longitude of the staff member (WGS84)',
+          example: 108.2022,
+        },
+        notes: {
+          type: 'string',
+          description: 'Completion notes (optional)',
+          example: 'Task completed successfully. Tree is healthy.',
+        },
+        image: {
+          type: 'string',
+          format: 'binary',
+          description: 'Evidence image file (optional)',
+        },
+      },
+    },
+  })
   @ApiResponse({
     status: 200,
     description: 'Task completed successfully.',
@@ -216,9 +251,10 @@ res.end(buffer);
   async completeTask(
     @Param('id') id: string,
     @Body() completeDto: CompleteTaskDto,
+    @UploadedFile() file: Express.Multer.File,
     @Request() req,
   ) {
     const userId = req.user.userId || req.user.id;
-    return await this.maintenanceService.completeTask(+id, userId, completeDto);
+    return await this.maintenanceService.completeTask(+id, userId, completeDto, file);
   }
 }
