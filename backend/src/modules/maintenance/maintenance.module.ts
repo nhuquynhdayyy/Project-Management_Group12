@@ -11,6 +11,7 @@ import { MaintenanceTask } from '../../entities/maintenance-task.entity';
 import { Tree } from '../../entities/tree.entity';
 import { User } from '../auth/user.entity';
 import { AuthModule } from '../auth/auth.module';
+import { CloudStorageService } from '../../services/cloud-storage.service';
 
 @Module({
   imports: [
@@ -18,7 +19,7 @@ import { AuthModule } from '../auth/auth.module';
     AuthModule,
   ],
   controllers: [MaintenanceController, MaintenanceExportController, TestExportController],
-  providers: [MaintenanceService, MaintenanceExportService, ExportService, RolesGuard],
+  providers: [MaintenanceService, MaintenanceExportService, ExportService, RolesGuard, CloudStorageService],
   exports: [MaintenanceService],
 })
 export class MaintenanceModule {}

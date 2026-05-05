@@ -6,6 +6,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { TreesModule } from './modules/trees/trees.module';
 import { SeederModule } from './database/seeder/seeder.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
+import { CloudStorageService } from './services/cloud-storage.service';
 
 @Module({
   imports: [
@@ -30,5 +31,7 @@ import { MaintenanceModule } from './modules/maintenance/maintenance.module';
     MaintenanceModule,
   ],
   controllers: [AppController],
+  providers: [CloudStorageService],
+  exports: [CloudStorageService],
 })
 export class AppModule {}

@@ -6,6 +6,24 @@ export async function fetchAllTasks(): Promise<MaintenanceTask[]> {
   return data;
 }
 
+export async function fetchTaskById(id: number): Promise<MaintenanceTask> {
+  const { data } = await apiClient.get<MaintenanceTask>(`/maintenance/tasks/${id}`);
+  return data;
+}
+
+export interface CreateTaskPayload {
+  tree_id: number;
+  assigned_to: number;
+  task_type: string;
+  scheduled_date: string;
+  notes?: string;
+}
+
+export async function createTask(payload: CreateTaskPayload): Promise<MaintenanceTask> {
+  const { data } = await apiClient.post<MaintenanceTask>('/maintenance/tasks', payload);
+  return data;
+}
+
 export async function fetchStaffPerformance(): Promise<StaffPerformance[]> {
   const { data } = await apiClient.get<StaffPerformance[]>('/maintenance/stats/by-staff');
   return data;
@@ -22,10 +40,6 @@ export interface ExportTasksParams {
   to?: string;
 }
 
-/**
- * Gọi export endpoint và trả về Blob để download.
- * Dùng fetch thay vì axios để xử lý binary response dễ hơn.
- */
 export async function exportTasks(params: ExportTasksParams): Promise<Blob> {
   const token = localStorage.getItem('access_token');
 

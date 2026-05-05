@@ -8,12 +8,14 @@ import { User } from '../auth/user.entity';
 import { CreateMaintenanceTaskDto } from './dto/create-maintenance-task.dto';
 import { CompleteTaskDto } from './dto/complete-task.dto';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { CloudStorageService } from '../../services/cloud-storage.service';
 
 describe('MaintenanceService', () => {
   let service: MaintenanceService;
   let taskRepository: Repository<MaintenanceTask>;
   let treeRepository: Repository<Tree>;
   let userRepository: Repository<User>;
+  let cloudStorageService: CloudStorageService;
 
   const mockTaskRepository = {
     create: jest.fn(),
@@ -29,6 +31,11 @@ describe('MaintenanceService', () => {
 
   const mockUserRepository = {
     findOne: jest.fn(),
+  };
+
+  const mockCloudStorageService = {
+    uploadImage: jest.fn(),
+    deleteImage: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -47,6 +54,10 @@ describe('MaintenanceService', () => {
           provide: getRepositoryToken(User),
           useValue: mockUserRepository,
         },
+        {
+          provide: CloudStorageService,
+          useValue: mockCloudStorageService,
+        },
       ],
     }).compile();
 
@@ -54,6 +65,7 @@ describe('MaintenanceService', () => {
     taskRepository = module.get<Repository<MaintenanceTask>>(getRepositoryToken(MaintenanceTask));
     treeRepository = module.get<Repository<Tree>>(getRepositoryToken(Tree));
     userRepository = module.get<Repository<User>>(getRepositoryToken(User));
+    cloudStorageService = module.get<CloudStorageService>(CloudStorageService);
   });
 
   afterEach(() => {
@@ -219,7 +231,6 @@ describe('MaintenanceService', () => {
       const completeDto: CompleteTaskDto = {
         latitude: 16.05444, // ~4.4 meters north
         longitude: 108.2022,
-        evidence_image_url: 'https://storage.example.com/evidence.jpg',
         notes: 'Task completed successfully',
       };
 
@@ -227,7 +238,7 @@ describe('MaintenanceService', () => {
         ...mockTask,
         status: TaskStatus.COMPLETED,
         completed_at: new Date(),
-        evidence_image_url: completeDto.evidence_image_url,
+        evidence_image_url: null,
         notes: completeDto.notes,
       };
 
@@ -241,7 +252,7 @@ describe('MaintenanceService', () => {
       expect(result).toBeDefined();
       expect(result.status).toBe(TaskStatus.COMPLETED);
       expect(result.completed_at).toBeDefined();
-      expect(result.evidence_image_url).toBe(completeDto.evidence_image_url);
+      expect(result.evidence_image_url).toBeNull();
       expect(mockTaskRepository.save).toHaveBeenCalled();
     });
 
@@ -298,6 +309,112 @@ describe('MaintenanceService', () => {
       await expect(service.completeTask(taskId, userId, completeDto)).rejects.toThrow(
         'Task is already completed',
       );
+    });
+
+    it('should upload image and save URL when image file is provided', async () => {
+      // Arrange
+      const taskId = 1;
+      const userId = 2;
+
+      const mockTree = {
+        id: 1,
+        tree_code: 'TREE001',
+        location: {
+          type: 'Point',
+          coordinates: [108.2022, 16.0544],
+        },
+      };
+
+      const mockTask = {
+        id: taskId,
+        tree_id: 1,
+        assigned_to: userId,
+        status: TaskStatus.IN_PROGRESS,
+        tree: mockTree,
+      };
+
+      const completeDto: CompleteTaskDto = {
+        latitude: 16.05444,
+        longitude: 108.2022,
+        notes: 'Task completed with image',
+      };
+
+      const mockImageFile = {
+        buffer: Buffer.from('fake-image-data'),
+        originalname: 'evidence.jpg',
+        mimetype: 'image/jpeg',
+      } as Express.Multer.File;
+
+      const mockImageUrl = 'https://test.supabase.co/storage/v1/object/public/test-bucket/1234567890_evidence.jpg';
+
+      mockTaskRepository.findOne.mockResolvedValue(mockTask);
+      mockCloudStorageService.uploadImage.mockResolvedValue(mockImageUrl);
+      mockTaskRepository.save.mockResolvedValue({
+        ...mockTask,
+        status: TaskStatus.COMPLETED,
+        completed_at: new Date(),
+        evidence_image_url: mockImageUrl,
+      });
+
+      // Act
+      const result = await service.completeTask(taskId, userId, completeDto, mockImageFile);
+
+      // Assert
+      expect(result).toBeDefined();
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      expect(result.evidence_image_url).toBe(mockImageUrl);
+      expect(mockCloudStorageService.uploadImage).toHaveBeenCalledWith(
+        mockImageFile.buffer,
+        mockImageFile.originalname,
+      );
+      expect(mockTaskRepository.save).toHaveBeenCalled();
+    });
+
+    it('should complete task without image when no file is provided', async () => {
+      // Arrange
+      const taskId = 1;
+      const userId = 2;
+
+      const mockTree = {
+        id: 1,
+        tree_code: 'TREE001',
+        location: {
+          type: 'Point',
+          coordinates: [108.2022, 16.0544],
+        },
+      };
+
+      const mockTask = {
+        id: taskId,
+        tree_id: 1,
+        assigned_to: userId,
+        status: TaskStatus.IN_PROGRESS,
+        tree: mockTree,
+      };
+
+      const completeDto: CompleteTaskDto = {
+        latitude: 16.05444,
+        longitude: 108.2022,
+        notes: 'Task completed without image',
+      };
+
+      mockTaskRepository.findOne.mockResolvedValue(mockTask);
+      mockTaskRepository.save.mockResolvedValue({
+        ...mockTask,
+        status: TaskStatus.COMPLETED,
+        completed_at: new Date(),
+        evidence_image_url: null,
+      });
+
+      // Act
+      const result = await service.completeTask(taskId, userId, completeDto, undefined);
+
+      // Assert
+      expect(result).toBeDefined();
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      expect(result.evidence_image_url).toBeNull();
+      expect(mockCloudStorageService.uploadImage).not.toHaveBeenCalled();
+      expect(mockTaskRepository.save).toHaveBeenCalled();
     });
   });
 
