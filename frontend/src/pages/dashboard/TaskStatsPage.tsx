@@ -42,6 +42,7 @@ export default function TaskStatsPage() {
   const [exportingXlsx, setExportingXlsx] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportError, setExportError] = useState('');
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const timeRange = useTimeRange();
 
   const canExport = user?.roles.some((role) => role === 'Admin' || role === 'Manager') ?? false;
@@ -121,6 +122,14 @@ export default function TaskStatsPage() {
   );
   const totalPages = Math.max(1, Math.ceil(overdueRows.length / PAGE_SIZE));
   const visibleTasks = overdueRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  function handleImageClick(imageUrl: string) {
+    setSelectedImage(imageUrl);
+  }
+
+  function closeImageModal() {
+    setSelectedImage(null);
+  }
 
   return (
     <DashboardPageFrame
@@ -220,26 +229,40 @@ export default function TaskStatsPage() {
                 <th className="py-2 pr-3">Ten cay</th>
                 <th className="py-2 pr-3">Nhan vien phu trach</th>
                 <th className="py-2 pr-3">Ngay hen</th>
-                <th className="py-2">So ngay tre</th>
+                <th className="py-2 pr-3">So ngay tre</th>
+                <th className="py-2">Anh</th>
               </tr>
             </thead>
             <tbody>
               {visibleTasks.map((task) => (
                 <tr
-key={task.id}
+                  key={task.id}
                   className={`border-b border-gray-800 ${(task.overdue_days ?? 0) > 7 ? 'bg-red-950/30' : ''}`}
                 >
                   <td className="py-2 pr-3">{task.tree_name}</td>
                   <td className="py-2 pr-3">{task.staff_name}</td>
                   <td className="py-2 pr-3">{new Date(task.scheduled_date).toLocaleDateString('vi-VN')}</td>
-                  <td className={`py-2 font-semibold ${(task.overdue_days ?? 0) > 7 ? 'text-red-400' : 'text-amber-300'}`}>
+                  <td className={`py-2 pr-3 font-semibold ${(task.overdue_days ?? 0) > 7 ? 'text-red-400' : 'text-amber-300'}`}>
                     {task.overdue_days ?? 0}
+                  </td>
+                  <td className="py-2">
+                    {task.evidence_image_url ? (
+                      <button
+                        onClick={() => handleImageClick(task.evidence_image_url!)}
+                        className="text-blue-400 hover:text-blue-300 transition-colors"
+                        title="Xem anh bang chung"
+                      >
+                        📷
+                      </button>
+                    ) : (
+                      <span className="text-gray-600">—</span>
+                    )}
                   </td>
                 </tr>
               ))}
               {visibleTasks.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center text-gray-500">
+                  <td colSpan={5} className="py-4 text-center text-gray-500">
                     Khong co task qua han trong khoang thoi gian da chon.
                   </td>
                 </tr>
@@ -249,6 +272,30 @@ key={task.id}
         </div>
         <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />
       </Section>
+
+      {/* Image Modal */}
+      {selectedImage && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
+          onClick={closeImageModal}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] w-full">
+            <button
+              onClick={closeImageModal}
+              className="absolute -top-10 right-0 text-white text-2xl font-bold hover:text-gray-300 transition-colors"
+              title="Dong"
+            >
+              ✕
+            </button>
+            <img
+              src={selectedImage}
+              alt="Anh bang chung"
+              className="w-full h-full object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </DashboardPageFrame>
   );
 }
