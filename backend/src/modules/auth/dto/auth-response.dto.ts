@@ -25,4 +25,12 @@ export class AuthResponseDto {
     type: [String],
   })
   roles: string[];
+
+  @ApiProperty({
+    example: 1,
+    description: 'Assigned administrative area ID',
+    required: false,
+    nullable: true,
+  })
+  assigned_area_id?: number | null;
 }

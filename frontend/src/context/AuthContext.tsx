@@ -5,6 +5,7 @@ interface AuthUser {
   id: number;
   username: string;
   roles: string[];
+  assigned_area_id?: number | null;
 }
 
 interface AuthContextValue {
@@ -33,7 +34,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signIn = useCallback((data: LoginResponse) => {
-    const u: AuthUser = { id: data.id, username: data.username, roles: data.roles };
+    const u: AuthUser = {
+      id: data.id,
+      username: data.username,
+      roles: data.roles,
+      assigned_area_id: data.assigned_area_id ?? null,
+    };
     localStorage.setItem('access_token', data.access_token);
     localStorage.setItem('user', JSON.stringify(u));
     setToken(data.access_token);

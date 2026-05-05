@@ -1,11 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
 import { MaintenanceController } from './maintenance.controller';
 import { MaintenanceService } from './maintenance.service';
+import { ExportService } from './export.service';
 import { CreateMaintenanceTaskDto } from './dto/create-maintenance-task.dto';
 import { CompleteTaskDto } from './dto/complete-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { TaskType, TaskStatus } from '../../entities/maintenance-task.entity';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 describe('MaintenanceController', () => {
   let controller: MaintenanceController;
@@ -18,11 +21,29 @@ describe('MaintenanceController', () => {
     findById: jest.fn(),
     updateStatus: jest.fn(),
     completeTask: jest.fn(),
+    getTasksForExport: jest.fn(),
+  };
+
+  const mockExportService = {
+    exportToExcel: jest.fn(),
+    exportToPdf: jest.fn(),
   };
 
   const mockJwtAuthGuard = {
     canActivate: jest.fn(() => true),
   };
+
+  const mockRolesGuard = {
+    canActivate: jest.fn(() => true),
+  };
+
+  // Helper tạo mock Response object
+  const createMockResponse = () => ({
+    setHeader: jest.fn(),
+    end: jest.fn(),
+    send: jest.fn(),
+    status: jest.fn().mockReturnThis(),
+  });
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -32,10 +53,16 @@ describe('MaintenanceController', () => {
           provide: MaintenanceService,
           useValue: mockMaintenanceService,
         },
+        {
+          provide: ExportService,
+          useValue: mockExportService,
+        },
       ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue(mockJwtAuthGuard)
+      .overrideGuard(RolesGuard)
+      .useValue(mockRolesGuard)
       .compile();
 
     controller = module.get<MaintenanceController>(MaintenanceController);
@@ -198,6 +225,96 @@ describe('MaintenanceController', () => {
       expect(result).toBeDefined();
       expect(result.status).toBe(TaskStatus.COMPLETED);
       expect(mockMaintenanceService.completeTask).toHaveBeenCalledWith(1, 2, completeDto);
+    });
+  });
+
+  describe('exportTasks', () => {
+    it('should export xlsx with correct Content-Type and Content-Disposition headers', async () => {
+      // Arrange
+      const mockTasks = [{ id: 1, task_type: TaskType.PRUNING }];
+      const mockBuffer = Buffer.from('fake-xlsx');
+      mockMaintenanceService.getTasksForExport.mockResolvedValue(mockTasks);
+      mockExportService.exportToExcel.mockResolvedValue(mockBuffer);
+
+      const mockRes = createMockResponse();
+
+      // Act
+      await controller.exportTasks('xlsx', undefined, undefined, mockRes as any);
+
+      // Assert
+      expect(mockMaintenanceService.getTasksForExport).toHaveBeenCalledWith(undefined, undefined);
+      expect(mockExportService.exportToExcel).toHaveBeenCalledWith(mockTasks);
+      expect(mockRes.setHeader).toHaveBeenCalledWith(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      expect(mockRes.setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        expect.stringMatching(/attachment; filename=".*\.xlsx"/),
+      );
+      expect(mockRes.end).toHaveBeenCalledWith(mockBuffer);
+    });
+
+    it('should export pdf with correct Content-Type and Content-Disposition headers', async () => {
+      // Arrange
+      const mockTasks = [{ id: 1, task_type: TaskType.WATERING }];
+      const mockBuffer = Buffer.from('fake-pdf');
+      mockMaintenanceService.getTasksForExport.mockResolvedValue(mockTasks);
+      mockExportService.exportToPdf.mockResolvedValue(mockBuffer);
+
+      const mockRes = createMockResponse();
+
+      // Act
+      await controller.exportTasks('pdf', undefined, undefined, mockRes as any);
+
+      // Assert
+      expect(mockMaintenanceService.getTasksForExport).toHaveBeenCalledWith(undefined, undefined);
+      expect(mockExportService.exportToPdf).toHaveBeenCalledWith(mockTasks);
+      expect(mockRes.setHeader).toHaveBeenCalledWith('Content-Type', 'application/pdf');
+      expect(mockRes.setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        expect.stringMatching(/attachment; filename=".*\.pdf"/),
+      );
+      expect(mockRes.end).toHaveBeenCalledWith(mockBuffer);
+    });
+
+    it('should pass from/to date params to getTasksForExport', async () => {
+      // Arrange
+      mockMaintenanceService.getTasksForExport.mockResolvedValue([]);
+      mockExportService.exportToExcel.mockResolvedValue(Buffer.from('data'));
+
+      const mockRes = createMockResponse();
+
+      // Act
+      await controller.exportTasks('xlsx', '2026-01-01', '2026-05-01', mockRes as any);
+
+      // Assert
+      expect(mockMaintenanceService.getTasksForExport).toHaveBeenCalledWith(
+        '2026-01-01',
+        '2026-05-01',
+      );
+    });
+
+    it('should throw 400 BadRequestException when format param is missing', async () => {
+      // Arrange
+      const mockRes = createMockResponse();
+
+      // Act & Assert
+      await expect(
+        controller.exportTasks(undefined as any, undefined, undefined, mockRes as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockMaintenanceService.getTasksForExport).not.toHaveBeenCalled();
+    });
+
+    it('should throw 400 BadRequestException when format is unsupported (e.g. csv)', async () => {
+      // Arrange
+      const mockRes = createMockResponse();
+
+      // Act & Assert
+      await expect(
+        controller.exportTasks('csv', undefined, undefined, mockRes as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockMaintenanceService.getTasksForExport).not.toHaveBeenCalled();
     });
   });
 });

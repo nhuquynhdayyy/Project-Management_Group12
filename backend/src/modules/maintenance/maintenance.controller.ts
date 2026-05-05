@@ -1,10 +1,13 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
   Body,
   Param,
   Patch,
+  Query,
+  Res,
   UseGuards,
   Request,
 } from '@nestjs/common';
@@ -12,21 +15,29 @@ import {
   ApiBearerAuth,
   ApiTags,
   ApiOperation,
+  ApiQuery,
   ApiResponse,
   ApiParam,
 } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { MaintenanceService } from './maintenance.service';
+import { ExportService } from './export.service';
 import { CreateMaintenanceTaskDto } from './dto/create-maintenance-task.dto';
 import { CompleteTaskDto } from './dto/complete-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
+import { StaffPerformanceDto } from './dto/staff-performance.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 @ApiTags('maintenance')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('maintenance')
 export class MaintenanceController {
-  constructor(private readonly maintenanceService: MaintenanceService) {}
+  constructor(
+    private readonly maintenanceService: MaintenanceService,
+    private readonly exportService: ExportService,
+  ) {}
 
   @Post('tasks')
   @ApiOperation({ summary: 'Create a new maintenance task' })
@@ -52,6 +63,111 @@ export class MaintenanceController {
   async getMyTasks(@Request() req) {
     const userId = req.user.userId || req.user.id;
     return await this.maintenanceService.findByUserId(userId);
+  }
+
+  @Get('stats/by-staff')
+  @UseGuards(RolesGuard)
+  @ApiOperation({
+    summary: 'Get staff performance statistics',
+    description:
+      'Thống kê hiệu suất nhân viên bảo trì gồm số task hoàn thành, đang chờ/xử lý và thời gian hoàn thành trung bình.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách thống kê hiệu suất theo nhân viên.',
+    type: StaffPerformanceDto,
+    isArray: true,
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Chỉ Admin/Manager được truy cập.' })
+  async getStaffPerformance() {
+    return await this.maintenanceService.getStaffPerformance();
+  }
+
+  @Get('stats/overdue')
+  @UseGuards(RolesGuard)
+  @ApiOperation({
+summary: 'Get overdue maintenance tasks',
+    description:
+      'Danh sách công việc quá hạn: scheduled_date nhỏ hơn ngày hiện tại và trạng thái khác Completed.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Danh sách task quá hạn kèm thông tin cây, nhân viên phụ trách và số ngày trễ.',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Chỉ Admin/Manager được truy cập.' })
+  async getOverdueTasks() {
+    return await this.maintenanceService.getOverdueTasks();
+  }
+
+  @Get('tasks/export')
+  @UseGuards(RolesGuard)
+  @ApiOperation({
+    summary: 'Export maintenance tasks to Excel or PDF',
+    description:
+      'Xuất danh sách công việc bảo trì ra file Excel (.xlsx) hoặc PDF. Chỉ Admin và Manager mới có quyền truy cập.',
+  })
+  @ApiQuery({
+    name: 'format',
+    required: true,
+    enum: ['xlsx', 'pdf'],
+    description: 'Định dạng file xuất: xlsx hoặc pdf',
+  })
+  @ApiQuery({
+    name: 'from',
+    required: false,
+    type: String,
+    description: 'Ngày bắt đầu lọc (YYYY-MM-DD)',
+    example: '2026-01-01',
+  })
+  @ApiQuery({
+    name: 'to',
+    required: false,
+    type: String,
+    description: 'Ngày kết thúc lọc (YYYY-MM-DD)',
+    example: '2026-12-31',
+  })
+  @ApiResponse({ status: 200, description: 'File xuất thành công.' })
+  @ApiResponse({ status: 400, description: 'Tham số format không hợp lệ hoặc thiếu.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Chỉ Admin/Manager mới được xuất báo cáo.' })
+  async exportTasks(
+    @Query('format') format: string,
+    @Query('from') from: string | undefined,
+    @Query('to') to: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    const SUPPORTED_FORMATS = ['xlsx', 'pdf'] as const;
+    type SupportedFormat = (typeof SUPPORTED_FORMATS)[number];
+
+    if (!format || !(SUPPORTED_FORMATS as readonly string[]).includes(format)) {
+      throw new BadRequestException(
+        `Tham số "format" bắt buộc và phải là một trong: ${SUPPORTED_FORMATS.join(', ')}`,
+      );
+    }
+
+    const tasks = await this.maintenanceService.getTasksForExport(from, to);
+
+    if ((format as SupportedFormat) === 'xlsx') {
+      const buffer = await this.exportService.exportToExcel(tasks);
+      const filename = `maintenance-report-${Date.now()}.xlsx`;
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.end(buffer);
+      return;
+    }
+
+    // format === 'pdf'
+    const buffer = await this.exportService.exportToPdf(tasks);
+    const filename = `maintenance-report-${Date.now()}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+res.end(buffer);
   }
 
   @Get('tasks/:id')
