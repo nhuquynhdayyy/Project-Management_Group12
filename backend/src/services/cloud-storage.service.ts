@@ -14,14 +14,15 @@ export class CloudStorageService {
   constructor(private configService: ConfigService) {
     const supabaseUrl = this.configService.get<string>('SUPABASE_URL');
     const supabaseKey = this.configService.get<string>('SUPABASE_SERVICE_KEY');
-    this.bucketName = this.configService.get<string>('SUPABASE_BUCKET');
+    const bucketName = this.configService.get<string>('SUPABASE_BUCKET');
 
-    if (!supabaseUrl || !supabaseKey || !this.bucketName) {
+    if (!supabaseUrl || !supabaseKey || !bucketName) {
       throw new Error(
         'Missing Supabase configuration. Please set SUPABASE_URL, SUPABASE_SERVICE_KEY, and SUPABASE_BUCKET in .env',
       );
     }
 
+    this.bucketName = bucketName;
     this.supabase = createClient(supabaseUrl, supabaseKey);
   }
 
