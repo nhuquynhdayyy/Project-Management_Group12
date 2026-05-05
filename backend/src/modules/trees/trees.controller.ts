@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { TreesService } from './trees.service';
 import { CreateTreeDto } from './dto/create-tree.dto';
@@ -28,6 +28,20 @@ export class TreesController {
     return await this.treesService.findAll();
   }
 
+  @Get('species')
+  @ApiOperation({ summary: 'Get all tree species' })
+  @ApiResponse({ status: 200, description: 'List of all tree species.' })
+  async findAllSpecies() {
+    return await this.treesService.findAllSpecies();
+  }
+
+  @Get('areas')
+  @ApiOperation({ summary: 'Get all administrative areas' })
+  @ApiResponse({ status: 200, description: 'List of all administrative areas.' })
+  async findAllAreas() {
+    return await this.treesService.findAllAreas();
+  }
+
   @Get('nearby')
   @ApiOperation({ summary: 'Find trees within a radius (PostGIS)' })
   @ApiQuery({ name: 'latitude', required: true, type: Number, example: 16.0544 })
@@ -45,5 +59,16 @@ export class TreesController {
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async findOne(@Param('id') id: string) {
     return await this.treesService.findById(+id);
+  }
+
+  @Patch(':id/health')
+  @ApiOperation({ summary: 'Update tree health status' })
+  @ApiResponse({ status: 200, description: 'Health status updated.' })
+  @ApiResponse({ status: 404, description: 'Tree not found.' })
+  async updateHealth(
+    @Param('id') id: string,
+    @Body('health_status') healthStatus: string,
+  ) {
+    return await this.treesService.updateHealthStatus(+id, healthStatus);
   }
 }

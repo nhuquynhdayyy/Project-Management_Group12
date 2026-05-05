@@ -162,6 +162,14 @@ export class MaintenanceService {
     });
   }
 
+  async findByTreeId(treeId: number): Promise<MaintenanceTask[]> {
+    return await this.taskRepository.find({
+      where: { tree_id: treeId },
+      relations: ['assignedUser'],
+      order: { scheduled_date: 'DESC' },
+    });
+  }
+
   /**
    * Lấy danh sách tasks để export, có thể lọc theo khoảng ngày.
    * Trả về đầy đủ thông tin task kèm tên cây và tên nhân viên.

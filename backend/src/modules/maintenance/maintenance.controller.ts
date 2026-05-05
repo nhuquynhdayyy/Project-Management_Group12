@@ -57,7 +57,10 @@ export class MaintenanceController {
   @ApiOperation({ summary: 'Get all maintenance tasks' })
   @ApiResponse({ status: 200, description: 'List of all tasks.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  async findAll() {
+  async findAll(@Query('tree_id') treeId?: string) {
+    if (treeId) {
+      return await this.maintenanceService.findByTreeId(+treeId);
+    }
     return await this.maintenanceService.findAll();
   }
 

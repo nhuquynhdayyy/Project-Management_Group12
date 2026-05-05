@@ -121,4 +121,19 @@ export class TreesService {
   async findAll(): Promise<Tree[]> {
     return await this.treeRepository.find();
   }
+
+  async findAllSpecies(): Promise<TreeSpecies[]> {
+    return await this.speciesRepository.find({ order: { common_name: 'ASC' } });
+  }
+
+  async findAllAreas(): Promise<AdministrativeArea[]> {
+    return await this.areaRepository.find({ order: { area_name: 'ASC' } });
+  }
+
+  async updateHealthStatus(id: number, healthStatus: string): Promise<Tree> {
+    const tree = await this.treeRepository.findOne({ where: { id } });
+    if (!tree) throw new NotFoundException('Tree not found');
+    tree.health_status = healthStatus as any;
+    return await this.treeRepository.save(tree);
+  }
 }
