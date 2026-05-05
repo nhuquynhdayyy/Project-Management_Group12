@@ -47,6 +47,7 @@ const NAV_ITEMS = [
       </svg>
     ),
     roles: ['Admin', 'Manager'],
+    end: true,
   },
   {
     to: '/dashboard/tasks/manage',
