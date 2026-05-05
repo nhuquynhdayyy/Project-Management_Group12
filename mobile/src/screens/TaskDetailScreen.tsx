@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,8 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import { completeTask } from '../api/maintenance';
+import { completeTask, getTaskById } from '../api/maintenance';
+import type { MaintenanceTask } from '../api/maintenance';
 import { RootStackParamList } from '../types/navigation';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'TaskDetail'>;
@@ -23,22 +24,31 @@ type TaskDetailRouteProp = RouteProp<RootStackParamList, 'TaskDetail'>;
 export default function TaskDetailScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<TaskDetailRouteProp>();
-  const task = route.params.task;
 
+  const [task, setTask] = useState<MaintenanceTask>(route.params.task);
+  const [fetchingTask, setFetchingTask] = useState(true);
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
 
+  // Fetch fresh task data on mount to get latest evidence_image_url
+  useEffect(() => {
+    getTaskById(route.params.task.id)
+      .then(setTask)
+      .catch(() => {
+        // Fall back to route params if fetch fails
+      })
+      .finally(() => setFetchingTask(false));
+  }, [route.params.task.id]);
+
   async function handleTakePhoto() {
     try {
-      // Request camera permission
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Lỗi', 'Cần cấp quyền truy cập camera để chụp ảnh');
         return;
       }
 
-      // Show options: Camera or Gallery
       Alert.alert(
         'Chọn ảnh bằng chứng',
         'Bạn muốn chụp ảnh mới hay chọn từ thư viện?',
@@ -52,7 +62,6 @@ export default function TaskDetailScreen() {
                 aspect: [4, 3],
                 quality: 0.8,
               });
-
               if (!result.canceled) {
                 setImageUri(result.assets[0].uri);
               }
@@ -67,32 +76,24 @@ export default function TaskDetailScreen() {
                 aspect: [4, 3],
                 quality: 0.8,
               });
-
               if (!result.canceled) {
                 setImageUri(result.assets[0].uri);
               }
             },
           },
-          {
-            text: 'Hủy',
-            style: 'cancel',
-          },
+          { text: 'Hủy', style: 'cancel' },
         ]
       );
-    } catch (error) {
+    } catch {
       Alert.alert('Lỗi', 'Không thể mở camera');
     }
   }
 
   function handleRemoveImage() {
-    Alert.alert(
-      'Xác nhận',
-      'Bạn có muốn xóa ảnh này?',
-      [
-        { text: 'Hủy', style: 'cancel' },
-        { text: 'Xóa', style: 'destructive', onPress: () => setImageUri(null) },
-      ]
-    );
+    Alert.alert('Xác nhận', 'Bạn có muốn xóa ảnh này?', [
+      { text: 'Hủy', style: 'cancel' },
+      { text: 'Xóa', style: 'destructive', onPress: () => setImageUri(null) },
+    ]);
   }
 
   async function handleComplete() {
@@ -103,26 +104,25 @@ export default function TaskDetailScreen() {
 
     setLoading(true);
     try {
-      // Request location permission
       const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
       if (locationStatus !== 'granted') {
         Alert.alert('Lỗi', 'Cần cấp quyền truy cập vị trí để hoàn thành công việc');
-        setLoading(false);
         return;
       }
 
-      // Get current location
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
 
-      // Complete task with optional image
-      await completeTask(task.id, {
+      const completed = await completeTask(task.id, {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
         notes: notes || undefined,
         imageUri: imageUri || undefined,
       });
+
+      // Update local task state with the completed task returned from API
+      setTask(completed);
 
       Alert.alert('Thành công', 'Đã hoàn thành công việc', [
         { text: 'OK', onPress: () => navigation.goBack() },
@@ -137,28 +137,28 @@ export default function TaskDetailScreen() {
 
   function getStatusColor(status: string) {
     switch (status) {
-      case 'Pending':
-        return '#f59e0b';
-      case 'In_Progress':
-        return '#3b82f6';
-      case 'Completed':
-        return '#10b981';
-      default:
-        return '#6b7280';
+      case 'Pending': return '#f59e0b';
+      case 'In_Progress': return '#3b82f6';
+      case 'Completed': return '#10b981';
+      default: return '#6b7280';
     }
   }
 
   function getStatusText(status: string) {
     switch (status) {
-      case 'Pending':
-        return 'Chờ xử lý';
-      case 'In_Progress':
-        return 'Đang thực hiện';
-      case 'Completed':
-        return 'Hoàn thành';
-      default:
-        return status;
+      case 'Pending': return 'Chờ xử lý';
+      case 'In_Progress': return 'Đang thực hiện';
+      case 'Completed': return 'Hoàn thành';
+      default: return status;
     }
+  }
+
+  if (fetchingTask) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#16a34a" />
+      </View>
+    );
   }
 
   return (
@@ -171,6 +171,7 @@ export default function TaskDetailScreen() {
       </View>
 
       <ScrollView style={styles.content}>
+        {/* Task info card */}
         <View style={styles.card}>
           <View style={styles.row}>
             <Text style={styles.label}>Loại công việc:</Text>
@@ -199,7 +200,8 @@ export default function TaskDetailScreen() {
               <View style={styles.row}>
                 <Text style={styles.label}>Vị trí:</Text>
                 <Text style={styles.value}>
-                  {task.tree.location.coordinates[1].toFixed(6)}, {task.tree.location.coordinates[0].toFixed(6)}
+                  {task.tree.location.coordinates[1].toFixed(6)},{' '}
+                  {task.tree.location.coordinates[0].toFixed(6)}
                 </Text>
               </View>
             </>
@@ -222,6 +224,21 @@ export default function TaskDetailScreen() {
           )}
         </View>
 
+        {/* Evidence image card — shown for all statuses */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Ảnh bằng chứng</Text>
+          {task.evidence_image_url ? (
+            <Image
+              source={{ uri: task.evidence_image_url }}
+              style={styles.evidenceImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <Text style={styles.noImageText}>Chưa có ảnh bằng chứng</Text>
+          )}
+        </View>
+
+        {/* Complete task card — only shown when not yet completed */}
         {task.status !== 'Completed' && (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Hoàn thành công việc</Text>
@@ -239,22 +256,14 @@ export default function TaskDetailScreen() {
               numberOfLines={4}
             />
 
-            {/* Camera Button */}
-            <TouchableOpacity
-              style={styles.cameraButton}
-              onPress={handleTakePhoto}
-            >
+            <TouchableOpacity style={styles.cameraButton} onPress={handleTakePhoto}>
               <Text style={styles.cameraButtonText}>📷 Chụp ảnh bằng chứng (tùy chọn)</Text>
             </TouchableOpacity>
 
-            {/* Image Preview */}
             {imageUri && (
               <View style={styles.imagePreviewContainer}>
                 <Image source={{ uri: imageUri }} style={styles.imagePreview} />
-                <TouchableOpacity
-                  style={styles.removeImageButton}
-                  onPress={handleRemoveImage}
-                >
+                <TouchableOpacity style={styles.removeImageButton} onPress={handleRemoveImage}>
                   <Text style={styles.removeImageText}>✕</Text>
                 </TouchableOpacity>
               </View>
@@ -282,6 +291,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0f172a',
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   header: {
     padding: 16,
@@ -345,6 +360,21 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginBottom: 12,
   },
+  // Evidence image
+  evidenceImage: {
+    width: '100%',
+    height: 220,
+    borderRadius: 8,
+    backgroundColor: '#0f172a',
+  },
+  noImageText: {
+    fontSize: 14,
+    color: '#64748b',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 24,
+  },
+  // Complete task form
   hint: {
     fontSize: 13,
     color: '#f59e0b',

@@ -35,6 +35,11 @@ export async function getMyTasks(): Promise<MaintenanceTask[]> {
   return response.data;
 }
 
+export async function getTaskById(taskId: number): Promise<MaintenanceTask> {
+  const response = await apiClient.get<MaintenanceTask>(`/maintenance/tasks/${taskId}`);
+  return response.data;
+}
+
 export async function completeTask(
   taskId: number,
   data: CompleteTaskRequest
