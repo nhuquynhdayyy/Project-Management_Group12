@@ -31,8 +31,21 @@ export interface CompleteTaskRequest {
 }
 
 export async function getMyTasks(): Promise<MaintenanceTask[]> {
-  const response = await apiClient.get<MaintenanceTask[]>('/maintenance/tasks/my-tasks');
-  return response.data;
+  try {
+    const response = await apiClient.get<MaintenanceTask[]>('/maintenance/tasks/my-tasks');
+    console.log('My tasks response:', response.data);
+    
+    // Ensure we return an array
+    if (!Array.isArray(response.data)) {
+      console.error('Invalid response format:', response.data);
+      return [];
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching my tasks:', error);
+    throw error;
+  }
 }
 
 export async function completeTask(

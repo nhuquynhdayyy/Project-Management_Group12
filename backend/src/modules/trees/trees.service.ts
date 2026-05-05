@@ -121,4 +121,12 @@ export class TreesService {
   async findAll(): Promise<Tree[]> {
     return await this.treeRepository.find();
   }
+
+  async findAllSpecies(): Promise<TreeSpecies[]> {
+    return await this.speciesRepository.find({ order: { common_name: 'ASC' } });
+  }
+
+  async findAllAreas(): Promise<AdministrativeArea[]> {
+    return await this.areaRepository.find({ order: { area_name: 'ASC' } });
+  }
 }
