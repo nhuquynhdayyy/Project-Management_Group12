@@ -16,6 +16,8 @@ import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { completeTask, getTaskById } from '../api/maintenance';
 import type { MaintenanceTask } from '../api/maintenance';
+import { getTreeById } from '../api/trees';
+import type { Tree } from '../api/trees';
 import { RootStackParamList } from '../types/navigation';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'TaskDetail'>;
@@ -26,7 +28,9 @@ export default function TaskDetailScreen() {
   const route = useRoute<TaskDetailRouteProp>();
 
   const [task, setTask] = useState<MaintenanceTask>(route.params.task);
+  const [treeDetails, setTreeDetails] = useState<Tree | null>(null);
   const [fetchingTask, setFetchingTask] = useState(true);
+  const [fetchingTree, setFetchingTree] = useState(true);
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -40,6 +44,20 @@ export default function TaskDetailScreen() {
       })
       .finally(() => setFetchingTask(false));
   }, [route.params.task.id]);
+
+  // Fetch tree details
+  useEffect(() => {
+    if (task.tree_id) {
+      getTreeById(task.tree_id)
+        .then(setTreeDetails)
+        .catch((error) => {
+          console.error('Failed to fetch tree details:', error);
+        })
+        .finally(() => setFetchingTree(false));
+    } else {
+      setFetchingTree(false);
+    }
+  }, [task.tree_id]);
 
   async function handleTakePhoto() {
     try {
@@ -153,7 +171,17 @@ export default function TaskDetailScreen() {
     }
   }
 
-  if (fetchingTask) {
+  function getHealthStatusColor(status: string) {
+    switch (status) {
+      case 'Tốt': return '#10b981';
+      case 'Yếu': return '#f59e0b';
+      case 'Sâu bệnh': return '#ef4444';
+      case 'Chết': return '#6b7280';
+      default: return '#6b7280';
+    }
+  }
+
+  if (fetchingTask || fetchingTree) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#16a34a" />
@@ -173,6 +201,8 @@ export default function TaskDetailScreen() {
       <ScrollView style={styles.content}>
         {/* Task info card */}
         <View style={styles.card}>
+          <Text style={styles.cardTitle}>📋 Thông tin công việc</Text>
+          
           <View style={styles.row}>
             <Text style={styles.label}>Loại công việc:</Text>
             <Text style={styles.value}>{task.task_type}</Text>
@@ -184,28 +214,6 @@ export default function TaskDetailScreen() {
               <Text style={styles.statusText}>{getStatusText(task.status)}</Text>
             </View>
           </View>
-
-          {task.tree && (
-            <>
-              <View style={styles.row}>
-                <Text style={styles.label}>Mã cây:</Text>
-                <Text style={styles.value}>{task.tree.tree_code}</Text>
-              </View>
-
-              <View style={styles.row}>
-                <Text style={styles.label}>Loài cây:</Text>
-                <Text style={styles.value}>{task.tree.species.common_name}</Text>
-              </View>
-
-              <View style={styles.row}>
-                <Text style={styles.label}>Vị trí:</Text>
-                <Text style={styles.value}>
-                  {task.tree.location.coordinates[1].toFixed(6)},{' '}
-                  {task.tree.location.coordinates[0].toFixed(6)}
-                </Text>
-              </View>
-            </>
-          )}
 
           <View style={styles.row}>
             <Text style={styles.label}>Ngày hẹn:</Text>
@@ -222,11 +230,125 @@ export default function TaskDetailScreen() {
               </Text>
             </View>
           )}
+
+          {task.notes && (
+            <View style={styles.notesContainer}>
+              <Text style={styles.label}>Ghi chú:</Text>
+              <Text style={styles.notesText}>{task.notes}</Text>
+            </View>
+          )}
         </View>
+
+        {/* Tree details card */}
+        {treeDetails && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>🌳 Thông tin cây</Text>
+            
+            <View style={styles.row}>
+              <Text style={styles.label}>Mã cây:</Text>
+              <Text style={styles.value}>{treeDetails.tree_code}</Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>Loài cây:</Text>
+              <Text style={styles.value}>{treeDetails.species.common_name}</Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>Tên khoa học:</Text>
+              <Text style={[styles.value, styles.italicText]}>
+                {treeDetails.species.scientific_name}
+              </Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>Khu vực:</Text>
+              <Text style={styles.value}>{treeDetails.area.area_name}</Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>Tình trạng sức khỏe:</Text>
+              <View style={[styles.statusBadge, { backgroundColor: getHealthStatusColor(treeDetails.health_status) }]}>
+                <Text style={styles.statusText}>{treeDetails.health_status}</Text>
+              </View>
+            </View>
+
+            {treeDetails.height_m && (
+              <View style={styles.row}>
+                <Text style={styles.label}>Chiều cao:</Text>
+                <Text style={styles.value}>{treeDetails.height_m} m</Text>
+              </View>
+            )}
+
+            {treeDetails.trunk_diameter_cm && (
+              <View style={styles.row}>
+                <Text style={styles.label}>Đường kính thân:</Text>
+                <Text style={styles.value}>{treeDetails.trunk_diameter_cm} cm</Text>
+              </View>
+            )}
+
+            {treeDetails.planting_year && (
+              <View style={styles.row}>
+                <Text style={styles.label}>Năm trồng:</Text>
+                <Text style={styles.value}>{treeDetails.planting_year}</Text>
+              </View>
+            )}
+
+            {treeDetails.last_maintained_at && (
+              <View style={styles.row}>
+                <Text style={styles.label}>Bảo trì lần cuối:</Text>
+                <Text style={styles.value}>
+                  {new Date(treeDetails.last_maintained_at).toLocaleDateString('vi-VN')}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.locationContainer}>
+              <Text style={styles.label}>Vị trí:</Text>
+              <Text style={styles.coordinatesText}>
+                {treeDetails.location.coordinates[1].toFixed(6)}, {treeDetails.location.coordinates[0].toFixed(6)}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.historyButton}
+              onPress={() => navigation.navigate('TreeHistory', { 
+                treeId: treeDetails.id, 
+                treeCode: treeDetails.tree_code 
+              })}
+            >
+              <Text style={styles.historyButtonText}>📋 Xem lịch sử bảo trì cây này</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Basic tree info from task (fallback if treeDetails not loaded) */}
+        {!treeDetails && task.tree && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>🌳 Thông tin cây</Text>
+            
+            <View style={styles.row}>
+              <Text style={styles.label}>Mã cây:</Text>
+              <Text style={styles.value}>{task.tree.tree_code}</Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>Loài cây:</Text>
+              <Text style={styles.value}>{task.tree.species.common_name}</Text>
+            </View>
+
+            <View style={styles.locationContainer}>
+              <Text style={styles.label}>Vị trí:</Text>
+              <Text style={styles.coordinatesText}>
+                {task.tree.location.coordinates[1].toFixed(6)}, {task.tree.location.coordinates[0].toFixed(6)}
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Evidence image card — shown for all statuses */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Ảnh bằng chứng</Text>
+          <Text style={styles.cardTitle}>📷 Ảnh bằng chứng</Text>
           {task.evidence_image_url ? (
             <Image
               source={{ uri: task.evidence_image_url }}
@@ -241,7 +363,7 @@ export default function TaskDetailScreen() {
         {/* Complete task card — only shown when not yet completed */}
         {task.status !== 'Completed' && (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Hoàn thành công việc</Text>
+            <Text style={styles.cardTitle}>✅ Hoàn thành công việc</Text>
             <Text style={styles.hint}>
               ⚠️ Bạn phải ở trong bán kính 10m từ cây để hoàn thành công việc
             </Text>
@@ -354,11 +476,56 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
     marginBottom: 12,
+  },
+  notesContainer: {
+    marginTop: 4,
+  },
+  notesText: {
+    fontSize: 14,
+    color: '#e2e8f0',
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  italicText: {
+    fontStyle: 'italic',
+    color: '#cbd5e1',
+  },
+  locationContainer: {
+    marginTop: 4,
+  },
+  coordinatesText: {
+    fontSize: 13,
+    color: '#94a3b8',
+    marginTop: 4,
+    fontFamily: 'monospace',
+  },
+  historyButton: {
+    backgroundColor: '#3b82f6',
+    borderRadius: 8,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#60a5fa',
+  },
+  historyButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
   // Evidence image
   evidenceImage: {

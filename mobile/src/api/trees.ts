@@ -29,6 +29,11 @@ export async function getAllTrees(): Promise<Tree[]> {
   return response.data;
 }
 
+export async function getTreeById(treeId: number): Promise<Tree> {
+  const response = await apiClient.get<Tree>(`/trees/${treeId}`);
+  return response.data;
+}
+
 export async function getTreeByCode(treeCode: string): Promise<Tree> {
   const response = await apiClient.get<Tree>(`/trees/code/${treeCode}`);
   return response.data;
