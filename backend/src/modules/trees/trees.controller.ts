@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { TreesService } from './trees.service';
 import { CreateTreeDto } from './dto/create-tree.dto';
@@ -16,8 +16,9 @@ export class TreesController {
   @ApiOperation({ summary: 'Create a new tree' })
   @ApiResponse({ status: 201, description: 'Tree successfully created.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  async create(@Body() createTreeDto: CreateTreeDto) {
-    return await this.treesService.create(createTreeDto);
+  async create(@Body() createTreeDto: CreateTreeDto, @Request() req) {
+    const userId = req.user?.userId ?? req.user?.id ?? null;
+    return await this.treesService.create(createTreeDto, userId);
   }
 
   @Get()

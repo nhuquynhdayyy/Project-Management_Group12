@@ -5,10 +5,10 @@ import { CreateTreeDto } from './dto/create-tree.dto';
 import { FindTreesNearbyDto } from './dto/find-trees-nearby.dto';
 import { HealthStatus } from '../../entities/tree.entity';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtService } from '@nestjs/jwt';
 
 describe('TreesController', () => {
   let controller: TreesController;
-  let service: TreesService;
 
   const mockTreesService = {
     create: jest.fn(),
@@ -21,6 +21,9 @@ describe('TreesController', () => {
     canActivate: jest.fn(() => true),
   };
 
+  // Minimal mock request with JWT user payload
+  const mockReq = { user: { userId: 1, id: 1, username: 'admin', roles: ['admin'] } };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [TreesController],
@@ -29,6 +32,11 @@ describe('TreesController', () => {
           provide: TreesService,
           useValue: mockTreesService,
         },
+        // JwtAuthGuard injects JwtService — provide a mock so NestJS DI doesn't fail
+        {
+          provide: JwtService,
+          useValue: { sign: jest.fn(), verify: jest.fn() },
+        },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -36,7 +44,6 @@ describe('TreesController', () => {
       .compile();
 
     controller = module.get<TreesController>(TreesController);
-    service = module.get<TreesService>(TreesService);
   });
 
   afterEach(() => {
@@ -69,12 +76,12 @@ describe('TreesController', () => {
       mockTreesService.create.mockResolvedValue(mockTree);
 
       // Act
-      const result = await controller.create(createTreeDto);
+      const result = await controller.create(createTreeDto, mockReq);
 
       // Assert
       expect(result).toBeDefined();
       expect(result.id).toBe(1);
-      expect(mockTreesService.create).toHaveBeenCalledWith(createTreeDto);
+      expect(mockTreesService.create).toHaveBeenCalledWith(createTreeDto, 1);
     });
   });
 

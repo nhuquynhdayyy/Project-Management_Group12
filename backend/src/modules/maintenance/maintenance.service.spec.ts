@@ -1,19 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { MaintenanceService } from './maintenance.service';
 import { MaintenanceTask, TaskType, TaskStatus } from '../../entities/maintenance-task.entity';
 import { Tree } from '../../entities/tree.entity';
 import { User } from '../auth/user.entity';
-import { CreateMaintenanceTaskDto } from './dto/create-maintenance-task.dto';
 import { CompleteTaskDto } from './dto/complete-task.dto';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { AuditLogService } from '../audit-log/auditLog.service';
+import { AuditLog } from '../../entities/auditLog.entity';
+import { CreateMaintenanceTaskDto } from './dto/create-maintenance-task.dto';
 
 describe('MaintenanceService', () => {
   let service: MaintenanceService;
-  let taskRepository: Repository<MaintenanceTask>;
-  let treeRepository: Repository<Tree>;
-  let userRepository: Repository<User>;
 
   const mockTaskRepository = {
     create: jest.fn(),
@@ -31,29 +29,29 @@ describe('MaintenanceService', () => {
     findOne: jest.fn(),
   };
 
+  const mockAuditLogService = {
+    log: jest.fn().mockResolvedValue(undefined),
+    findAll: jest.fn().mockResolvedValue([]),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MaintenanceService,
-        {
-          provide: getRepositoryToken(MaintenanceTask),
-          useValue: mockTaskRepository,
-        },
-        {
-          provide: getRepositoryToken(Tree),
-          useValue: mockTreeRepository,
-        },
-        {
-          provide: getRepositoryToken(User),
-          useValue: mockUserRepository,
-        },
+        { provide: getRepositoryToken(MaintenanceTask), useValue: mockTaskRepository },
+        { provide: getRepositoryToken(Tree), useValue: mockTreeRepository },
+        { provide: getRepositoryToken(User), useValue: mockUserRepository },
+        // Provide AuditLogService as a plain value — NestJS will not try to
+        // instantiate it, so its own @InjectRepository(AuditLog) dependency
+        // is never resolved and the circular scan is avoided.
+        { provide: AuditLogService, useValue: mockAuditLogService },
+        // AuditLogService's constructor metadata still lists AuditLog repo as
+        // a dependency token. Providing it here satisfies the DI scanner.
+        { provide: getRepositoryToken(AuditLog), useValue: {} },
       ],
     }).compile();
 
     service = module.get<MaintenanceService>(MaintenanceService);
-    taskRepository = module.get<Repository<MaintenanceTask>>(getRepositoryToken(MaintenanceTask));
-    treeRepository = module.get<Repository<Tree>>(getRepositoryToken(Tree));
-    userRepository = module.get<Repository<User>>(getRepositoryToken(User));
   });
 
   afterEach(() => {

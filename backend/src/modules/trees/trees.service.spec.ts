@@ -7,12 +7,11 @@ import { TreeSpecies } from '../../entities/tree-species.entity';
 import { AdministrativeArea } from '../../entities/administrative-area.entity';
 import { CreateTreeDto } from './dto/create-tree.dto';
 import { FindTreesNearbyDto } from './dto/find-trees-nearby.dto';
+import { AuditLogService } from '../audit-log/auditLog.service';
+import { AuditLog } from '../../entities/auditLog.entity';
 
 describe('TreesService', () => {
   let service: TreesService;
-  let treeRepository: Repository<Tree>;
-  let speciesRepository: Repository<TreeSpecies>;
-  let areaRepository: Repository<AdministrativeArea>;
 
   const mockTreeRepository = {
     create: jest.fn(),
@@ -28,6 +27,11 @@ describe('TreesService', () => {
 
   const mockAreaRepository = {
     findOne: jest.fn(),
+  };
+
+  const mockAuditLogService = {
+    log: jest.fn().mockResolvedValue(undefined),
+    findAll: jest.fn().mockResolvedValue([]),
   };
 
   beforeEach(async () => {
@@ -46,13 +50,13 @@ describe('TreesService', () => {
           provide: getRepositoryToken(AdministrativeArea),
           useValue: mockAreaRepository,
         },
+        { provide: AuditLogService, useValue: mockAuditLogService },
+        // Satisfy AuditLogService's @InjectRepository(AuditLog) metadata scan
+        { provide: getRepositoryToken(AuditLog), useValue: {} },
       ],
     }).compile();
 
     service = module.get<TreesService>(TreesService);
-    treeRepository = module.get<Repository<Tree>>(getRepositoryToken(Tree));
-    speciesRepository = module.get<Repository<TreeSpecies>>(getRepositoryToken(TreeSpecies));
-    areaRepository = module.get<Repository<AdministrativeArea>>(getRepositoryToken(AdministrativeArea));
   });
 
   afterEach(() => {
@@ -288,7 +292,8 @@ describe('TreesService', () => {
 
       // Assert
       expect(result).toBeDefined();
-      expect(result.id).toBe(1);
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe(1);
       expect(mockTreeRepository.findOne).toHaveBeenCalledWith({ where: { id: 1 } });
     });
 

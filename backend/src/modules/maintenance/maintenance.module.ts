@@ -6,11 +6,13 @@ import { MaintenanceTask } from '../../entities/maintenance-task.entity';
 import { Tree } from '../../entities/tree.entity';
 import { User } from '../auth/user.entity';
 import { AuthModule } from '../auth/auth.module';
+import { AuditLogModule } from '../audit-log/auditLog.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([MaintenanceTask, Tree, User]),
     AuthModule,
+    AuditLogModule,
   ],
   controllers: [MaintenanceController],
   providers: [MaintenanceService],

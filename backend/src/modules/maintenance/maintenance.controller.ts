@@ -7,19 +7,31 @@ import {
   Patch,
   UseGuards,
   Request,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiParam,
+  ApiConsumes,
 } from '@nestjs/swagger';
 import { MaintenanceService } from './maintenance.service';
 import { CreateMaintenanceTaskDto } from './dto/create-maintenance-task.dto';
 import { CompleteTaskDto } from './dto/complete-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+
+/** Minimal file descriptor — avoids requiring @types/multer */
+interface UploadedFile {
+  originalname: string;
+  mimetype: string;
+  size: number;
+  buffer?: Buffer;
+}
 
 @ApiTags('maintenance')
 @ApiBearerAuth()
@@ -33,8 +45,9 @@ export class MaintenanceController {
   @ApiResponse({ status: 201, description: 'Task successfully created.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 404, description: 'Tree or User not found.' })
-  async create(@Body() createTaskDto: CreateMaintenanceTaskDto) {
-    return await this.maintenanceService.create(createTaskDto);
+  async create(@Body() createTaskDto: CreateMaintenanceTaskDto, @Request() req) {
+    const userId = req.user?.userId ?? req.user?.id ?? null;
+    return await this.maintenanceService.create(createTaskDto, userId);
   }
 
   @Get('tasks')
@@ -81,6 +94,8 @@ export class MaintenanceController {
   }
 
   @Post('tasks/:id/complete')
+  @UseInterceptors(FileInterceptor('evidence_image'))
+  @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Complete a maintenance task (with geofencing)',
     description:
@@ -88,7 +103,7 @@ export class MaintenanceController {
   })
   @ApiParam({ name: 'id', description: 'Task ID' })
   @ApiResponse({
-    status: 200,
+    status: 201,
     description: 'Task completed successfully.',
   })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
@@ -101,8 +116,9 @@ export class MaintenanceController {
     @Param('id') id: string,
     @Body() completeDto: CompleteTaskDto,
     @Request() req,
+    @UploadedFile() evidenceImage?: UploadedFile,
   ) {
     const userId = req.user.userId || req.user.id;
-    return await this.maintenanceService.completeTask(+id, userId, completeDto);
+    return await this.maintenanceService.completeTask(+id, userId, completeDto, evidenceImage);
   }
 }
