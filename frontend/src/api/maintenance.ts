@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { MaintenanceTask, OverdueTask, StaffPerformance } from '../types';
+import type { MaintenanceTask, OverdueTask, StaffPerformance, CreateMaintenanceTaskPayload } from '../types';
 
 export async function fetchAllTasks(): Promise<MaintenanceTask[]> {
   const { data } = await apiClient.get<MaintenanceTask[]>('/maintenance/tasks');
@@ -11,15 +11,7 @@ export async function fetchTaskById(id: number): Promise<MaintenanceTask> {
   return data;
 }
 
-export interface CreateTaskPayload {
-  tree_id: number;
-  assigned_to: number;
-  task_type: string;
-  scheduled_date: string;
-  notes?: string;
-}
-
-export async function createTask(payload: CreateTaskPayload): Promise<MaintenanceTask> {
+export async function createMaintenanceTask(payload: CreateMaintenanceTaskPayload): Promise<MaintenanceTask> {
   const { data } = await apiClient.post<MaintenanceTask>('/maintenance/tasks', payload);
   return data;
 }

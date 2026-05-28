@@ -107,3 +107,27 @@ export interface OverdueTask extends MaintenanceTask {
     assigned_area_id?: number | null;
   };
 }
+
+export interface CreateTreePayload {
+  tree_code: string;
+  qr_code?: string;
+  species_id: number;
+  area_id: number;
+  latitude: number;
+  longitude: number;
+  planting_year?: number;
+  height_m?: number;
+  trunk_diameter_cm?: number;
+  canopy_diameter_m?: number;
+  tilt_degree?: number;
+  health_status?: HealthStatus;
+  created_by?: number;
+}
+
+export interface CreateMaintenanceTaskPayload {
+  tree_id: number;
+  assigned_to: number;
+  task_type: TaskType;
+  scheduled_date: string;
+  notes?: string;
+}
