@@ -53,6 +53,13 @@ export async function getTaskById(taskId: number): Promise<MaintenanceTask> {
   return response.data;
 }
 
+export async function getTasksByTreeId(treeId: number): Promise<MaintenanceTask[]> {
+  const response = await apiClient.get<MaintenanceTask[]>('/maintenance/tasks', {
+    params: { tree_id: treeId },
+  });
+  return response.data;
+}
+
 export async function completeTask(
   taskId: number,
   data: CompleteTaskRequest
