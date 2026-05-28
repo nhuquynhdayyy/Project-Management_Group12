@@ -8,6 +8,7 @@ import { CreateMaintenanceTaskDto } from './dto/create-maintenance-task.dto';
 import { CompleteTaskDto } from './dto/complete-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { StaffPerformanceDto } from './dto/staff-performance.dto';
+import { CloudStorageService } from '../../services/cloud-storage.service';
 
 @Injectable()
 export class MaintenanceService {
@@ -21,6 +22,7 @@ export class MaintenanceService {
     private readonly treeRepository: Repository<Tree>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly cloudStorageService: CloudStorageService,
   ) {}
 
   async create(createTaskDto: CreateMaintenanceTaskDto): Promise<MaintenanceTask> {
@@ -59,6 +61,7 @@ export class MaintenanceService {
     taskId: number,
     userId: number,
     completeDto: CompleteTaskDto,
+    imageFile?: Express.Multer.File,
   ): Promise<MaintenanceTask> {
     // Find task with tree relationship
     const task = await this.taskRepository.findOne({
@@ -89,14 +92,23 @@ export class MaintenanceService {
 
     if (distance > this.MAX_DISTANCE_METERS) {
       throw new ForbiddenException(
-`You must be within ${this.MAX_DISTANCE_METERS} meters of the tree to complete this task. Current distance: ${distance.toFixed(1)}m`,
+        `You must be within ${this.MAX_DISTANCE_METERS} meters of the tree to complete this task. Current distance: ${distance.toFixed(1)}m`,
+      );
+    }
+
+    // Upload image if provided
+    let imageUrl: string | null = null;
+    if (imageFile) {
+      imageUrl = await this.cloudStorageService.uploadImage(
+        imageFile.buffer,
+        imageFile.originalname,
       );
     }
 
     // Update task
     task.status = TaskStatus.COMPLETED;
     task.completed_at = new Date();
-    task.evidence_image_url = completeDto.evidence_image_url || null;
+    task.evidence_image_url = imageUrl;
     
     // Append completion notes to existing notes
     if (completeDto.notes) {
@@ -148,6 +160,14 @@ export class MaintenanceService {
     return await this.taskRepository.find({
       relations: ['assignedUser'],
       order: { scheduled_date: 'ASC' },
+    });
+  }
+
+  async findByTreeId(treeId: number): Promise<MaintenanceTask[]> {
+    return await this.taskRepository.find({
+      where: { tree_id: treeId },
+      relations: ['assignedUser'],
+      order: { scheduled_date: 'DESC' },
     });
   }
 
