@@ -15,7 +15,7 @@ const NAV_ITEMS = [
   },
   {
     to: '/dashboard',
-    label: '📊 Tổng quan',
+    label: 'Tổng quan',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -27,7 +27,7 @@ const NAV_ITEMS = [
   },
   {
     to: '/dashboard/trees',
-    label: '🌳 Thống kê Cây',
+    label: 'Thống kê Cây',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -51,7 +51,7 @@ const NAV_ITEMS = [
   },
   {
     to: '/dashboard/tasks',
-    label: '🔧 Thống kê Bảo trì',
+    label: 'Thống kê Bảo trì',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -75,7 +75,7 @@ const NAV_ITEMS = [
   },
   {
     to: '/dashboard/staff',
-    label: '👷 Hiệu suất Nhân viên',
+    label: 'Hiệu suất Nhân viên',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -86,7 +86,7 @@ const NAV_ITEMS = [
   },
   {
     to: '/dashboard/users',
-    label: '👥 Quản lý Users',
+    label: 'Quản lý Users',
 icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round"

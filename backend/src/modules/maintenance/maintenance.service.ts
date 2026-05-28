@@ -145,6 +145,7 @@ export class MaintenanceService {
   async findByUserId(userId: number): Promise<MaintenanceTask[]> {
     return await this.taskRepository.find({
       where: { assigned_to: userId },
+      relations: ['tree', 'tree.species'],
       order: { scheduled_date: 'ASC' },
     });
   }

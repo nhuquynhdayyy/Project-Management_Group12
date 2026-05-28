@@ -53,6 +53,14 @@ export class TreesController {
     return await this.treesService.findTreesWithinRadius(findNearbyDto);
   }
 
+  @Get('species')
+  @ApiOperation({ summary: 'Get all tree species' })
+  @ApiResponse({ status: 200, description: 'List of all tree species.' })
+
+  @Get('areas')
+  @ApiOperation({ summary: 'Get all administrative areas' })
+  @ApiResponse({ status: 200, description: 'List of all administrative areas.' })
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a tree by ID' })
   @ApiResponse({ status: 200, description: 'Tree found.' })
