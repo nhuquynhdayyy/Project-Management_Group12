@@ -5,6 +5,11 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import ws from 'ws';
+
+if (!global.WebSocket) {
+  (global as any).WebSocket = ws;
+}
 
 @Injectable()
 export class CloudStorageService {
@@ -23,26 +28,69 @@ export class CloudStorageService {
     }
 
     this.bucketName = bucketName;
-    this.supabase = createClient(supabaseUrl, supabaseKey);
+    // this.supabase = createClient(supabaseUrl, supabaseKey);
+    this.supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: { persistSession: false }
+    });
   }
 
+  // async uploadImage(buffer: Buffer, filename: string): Promise<string> {
+  //   // Validate buffer
+  //   if (!buffer || buffer.length === 0) {
+  //     throw new BadRequestException('Image buffer cannot be empty');
+  //   }
+
+  //   // Validate filename
+  //   if (!filename || filename.trim() === '') {
+  //     throw new BadRequestException('Filename cannot be empty');
+  //   }
+
+  //   // Generate unique filename with timestamp
+  //   const timestamp = Date.now();
+  //   const uniqueFilename = `${timestamp}_${filename}`;
+
+  //   try {
+  //     // Upload to Supabase storage
+  //     const { data, error } = await this.supabase.storage
+  //       .from(this.bucketName)
+  //       .upload(uniqueFilename, buffer, {
+  //         contentType: this.getContentType(filename),
+  //         upsert: false,
+  //       });
+
+  //     if (error) {
+  //       throw new InternalServerErrorException(
+  //         `Failed to upload image: ${error.message}`,
+  //       );
+  //     }
+
+  //     // Get public URL
+  //     const { data: publicUrlData } = this.supabase.storage
+  //       .from(this.bucketName)
+  //       .getPublicUrl(uniqueFilename);
+
+  //     return publicUrlData.publicUrl;
+  //   } catch (error) {
+  //     if (error instanceof BadRequestException) {
+  //       throw error;
+  //     }
+  //     throw new InternalServerErrorException(
+  //       `Failed to upload image: ${error.message}`,
+  //     );
+  //   }
+  // }
   async uploadImage(buffer: Buffer, filename: string): Promise<string> {
-    // Validate buffer
-    if (!buffer || buffer.length === 0) {
-      throw new BadRequestException('Image buffer cannot be empty');
-    }
-
-    // Validate filename
-    if (!filename || filename.trim() === '') {
-      throw new BadRequestException('Filename cannot be empty');
-    }
-
-    // Generate unique filename with timestamp
+    if (!buffer || buffer.length === 0) throw new BadRequestException('Image buffer cannot be empty');
+    
     const timestamp = Date.now();
     const uniqueFilename = `${timestamp}_${filename}`;
 
+    // LOG ĐỂ KIỂM TRA (Hãy nhìn vào terminal sau khi bấm upload)
+    console.log('--- CHECK CONFIG ---');
+    console.log('URL:', this.configService.get('SUPABASE_URL'));
+    console.log('BUCKET:', this.bucketName);
+
     try {
-      // Upload to Supabase storage
       const { data, error } = await this.supabase.storage
         .from(this.bucketName)
         .upload(uniqueFilename, buffer, {
@@ -51,24 +99,20 @@ export class CloudStorageService {
         });
 
       if (error) {
-        throw new InternalServerErrorException(
-          `Failed to upload image: ${error.message}`,
-        );
+        // In lỗi chi tiết từ Supabase ra terminal
+        console.error('SUPABASE ERROR:', error);
+        throw new InternalServerErrorException(`Supabase upload error: ${error.message}`);
       }
 
-      // Get public URL
       const { data: publicUrlData } = this.supabase.storage
         .from(this.bucketName)
         .getPublicUrl(uniqueFilename);
 
       return publicUrlData.publicUrl;
     } catch (error) {
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
-      throw new InternalServerErrorException(
-        `Failed to upload image: ${error.message}`,
-      );
+      // In lỗi hệ thống (như fetch failed) ra terminal
+      console.error('SYSTEM ERROR:', error);
+      throw new InternalServerErrorException(`Failed to upload image: ${error.message}`);
     }
   }
 

@@ -1,5 +1,18 @@
 import apiClient from './client';
-import type { AdministrativeArea, CreateTreePayload, Tree, TreeSpecies } from '../types';
+import type { AdministrativeArea, Tree, TreeSpecies, MaintenanceTask } from '../types';
+
+export interface CreateTreePayload {
+  tree_code: string;
+  species_id: number;
+  area_id: number;
+  latitude: number;
+  longitude: number;
+  health_status?: string;
+  planting_year?: number;
+  height_m?: number;
+  trunk_diameter_cm?: number;
+  notes?: string;
+}
 
 export async function fetchTrees(): Promise<Tree[]> {
   const { data } = await apiClient.get<Tree[]>('/trees');
@@ -21,18 +34,8 @@ export async function fetchAreas(): Promise<AdministrativeArea[]> {
   return data;
 }
 
-export interface CreateTreePayload {
-  tree_code: string;
-  species_id: number;
-  area_id: number;
-  latitude: number;
-  longitude: number;
-  health_status?: string;
-  planting_year?: number;
-  height_m?: number;
-  trunk_diameter_cm?: number;
-  notes?: string;
-}
+// Bổ sung dòng này để sửa lỗi "fetchAdministrativeAreas"
+export const fetchAdministrativeAreas = fetchAreas;
 
 export async function createTree(payload: CreateTreePayload): Promise<Tree> {
   const { data } = await apiClient.post<Tree>('/trees', payload);
@@ -46,14 +49,7 @@ export async function updateTreeHealth(id: number, healthStatus: string): Promis
   return data;
 }
 
-export async function fetchTasksByTreeId(treeId: number): Promise<import('../types').MaintenanceTask[]> {
-  const { data } = await apiClient.get(`/maintenance/tasks?tree_id=${treeId}`);
-export async function fetchTreeSpecies() {
-  const { data } = await apiClient.get('/trees/species');
-  return data;
-}
-
-export async function fetchAdministrativeAreas() {
-  const { data } = await apiClient.get('/trees/areas');
+export async function fetchTasksByTreeId(treeId: number): Promise<MaintenanceTask[]> {
+  const { data } = await apiClient.get<MaintenanceTask[]>(`/maintenance/tasks?tree_id=${treeId}`);
   return data;
 }

@@ -3,6 +3,8 @@ import { ClassSerializerInterceptor } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { SeederService } from './database/seeder/seeder.service';
+import dns from 'node:dns';
+dns.setDefaultResultOrder('ipv4first');
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
