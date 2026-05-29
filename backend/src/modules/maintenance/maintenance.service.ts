@@ -219,7 +219,8 @@ export class MaintenanceService {
         onTimeRate: completed > 0 ? Number(((onTime / completed) * 100).toFixed(2)) : 0,
         avgDaysLate: row.avg_days_late ? Number(parseFloat(row.avg_days_late).toFixed(1)) : 0,
         diversityScore: Number(row.diversity_score) || 0,
-        activeDays: 0, // Placeholder if logic not in DB
+        activeDays: 0,
+        overdueCount: Number(row.overdue_count) || 0, 
       };
     });
   }
