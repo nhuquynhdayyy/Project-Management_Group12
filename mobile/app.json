@@ -7,6 +7,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
+    "scheme": "cayxanh",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -14,8 +15,9 @@
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.danang.cayxanh",
       "infoPlist": {
-        "NSCameraUsageDescription": "Ứng dụng cần quyền truy cập camera để chụp ảnh bằng chứng công việc",
+        "NSCameraUsageDescription": "Ứng dụng cần quyền truy cập camera để chụp ảnh bằng chứng công việc và quét mã QR",
         "NSLocationWhenInUseUsageDescription": "Ứng dụng cần quyền truy cập vị trí để xác minh bạn đang ở gần cây khi hoàn thành công việc"
       }
     },
@@ -24,12 +26,29 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f172a"
       },
+      "package": "com.danang.cayxanh",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "CAMERA",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "cayxanh",
+              "host": "*"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
       ]
     },
     "web": {
@@ -39,7 +58,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Ứng dụng cần quyền truy cập camera để chụp ảnh bằng chứng công việc"
+          "cameraPermission": "Ứng dụng cần quyền truy cập camera để chụp ảnh bằng chứng công việc và quét mã QR"
         }
       ],
       [
@@ -47,7 +66,8 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Ứng dụng cần quyền truy cập vị trí để xác minh bạn đang ở gần cây khi hoàn thành công việc"
         }
-      ]
+      ],
+      "expo-barcode-scanner"
     ]
   }
 }
