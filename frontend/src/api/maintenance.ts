@@ -1,6 +1,9 @@
 import apiClient from './client';
 import type { MaintenanceTask, OverdueTask, StaffPerformance, CreateMaintenanceTaskPayload } from '../types';
 
+// Export type alias for backward compatibility
+export type CreateTaskPayload = CreateMaintenanceTaskPayload;
+
 /**
  * LẤY DANH SÁCH CÔNG VIỆC
  */

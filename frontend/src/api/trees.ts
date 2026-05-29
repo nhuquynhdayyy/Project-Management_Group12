@@ -53,3 +53,43 @@ export async function fetchTasksByTreeId(treeId: number): Promise<MaintenanceTas
   const { data } = await apiClient.get<MaintenanceTask[]>(`/maintenance/tasks?tree_id=${treeId}`);
   return data;
 }
+
+/**
+ * Fetch QR code image as Blob with authentication
+ * @param treeId Tree ID
+ * @returns Blob of QR code image
+ */
+export async function fetchTreeQRCodeBlob(treeId: number): Promise<Blob> {
+  const response = await apiClient.get(`/trees/${treeId}/qrcode`, {
+    responseType: 'blob',
+  });
+  return new Blob([response.data], { type: 'image/png' });
+}
+
+/**
+ * Get QR code image URL for a tree (creates temporary blob URL)
+ * Note: Caller must revoke the URL after use with URL.revokeObjectURL()
+ * @param treeId Tree ID
+ * @returns Promise of temporary blob URL
+ */
+export async function getTreeQRCodeBlobUrl(treeId: number): Promise<string> {
+  const blob = await fetchTreeQRCodeBlob(treeId);
+  return URL.createObjectURL(blob);
+}
+
+/**
+ * Download QR code image for a tree
+ * @param treeId Tree ID
+ * @param filename Optional filename for download
+ */
+export async function downloadTreeQRCode(treeId: number, filename?: string): Promise<void> {
+  const blob = await fetchTreeQRCodeBlob(treeId);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename || `tree-${treeId}-qrcode.png`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}

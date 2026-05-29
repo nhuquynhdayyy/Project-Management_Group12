@@ -6,6 +6,8 @@ import {
   fetchTrees,
   updateTreeHealth,
   fetchTasksByTreeId,
+  getTreeQRCodeBlobUrl,
+  downloadTreeQRCode,
   type CreateTreePayload,
 } from '../../api/trees';
 import { createTask, type CreateTaskPayload } from '../../api/maintenance';
@@ -79,7 +81,7 @@ function TreeDetailModal({
   onClose: () => void;
   onTaskCreated: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<'info' | 'tasks'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'tasks' | 'qrcode'>('info');
   const [healthValue, setHealthValue] = useState<HealthStatus>(tree.health_status);
   const [savingHealth, setSavingHealth] = useState(false);
   const [healthMsg, setHealthMsg] = useState('');
@@ -90,6 +92,11 @@ function TreeDetailModal({
   const [savingTask, setSavingTask] = useState(false);
   const [taskMsg, setTaskMsg] = useState('');
   const [taskMsgType, setTaskMsgType] = useState<'success' | 'error'>('error');
+  const [downloadingQR, setDownloadingQR] = useState(false);
+  const [qrDownloadMsg, setQrDownloadMsg] = useState('');
+  const [qrCodeBlobUrl, setQrCodeBlobUrl] = useState<string | null>(null);
+  const [loadingQRCode, setLoadingQRCode] = useState(false);
+  const [qrCodeError, setQrCodeError] = useState(false);
 
   async function handleHealthUpdate() {
     setSavingHealth(true);
@@ -137,6 +144,49 @@ function TreeDetailModal({
     }
   }
 
+  async function handleDownloadQRCode() {
+    setDownloadingQR(true);
+    setQrDownloadMsg('');
+    try {
+      await downloadTreeQRCode(tree.id, `${tree.tree_code}-qrcode.png`);
+      setQrDownloadMsg('✅ Đã tải QR code thành công!');
+      setTimeout(() => setQrDownloadMsg(''), 3000);
+    } catch (error) {
+      setQrDownloadMsg('❌ Không thể tải QR code. Vui lòng thử lại.');
+    } finally {
+      setDownloadingQR(false);
+    }
+  }
+
+  // Load QR code when QR tab is active
+  useEffect(() => {
+    if (activeTab === 'qrcode' && !qrCodeBlobUrl && !loadingQRCode) {
+      setLoadingQRCode(true);
+      setQrCodeError(false);
+      getTreeQRCodeBlobUrl(tree.id)
+        .then((url) => {
+          setQrCodeBlobUrl(url);
+          setQrCodeError(false);
+        })
+        .catch((error) => {
+          console.error('Failed to load QR code:', error);
+          setQrCodeError(true);
+        })
+        .finally(() => {
+          setLoadingQRCode(false);
+        });
+    }
+  }, [activeTab, tree.id, qrCodeBlobUrl, loadingQRCode]);
+
+  // Cleanup blob URL when modal closes
+  useEffect(() => {
+    return () => {
+      if (qrCodeBlobUrl) {
+        URL.revokeObjectURL(qrCodeBlobUrl);
+      }
+    };
+  }, [qrCodeBlobUrl]);
+
   const coords = tree.location?.coordinates;
   const lat = coords ? coords[1].toFixed(5) : '—';
   const lng = coords ? coords[0].toFixed(5) : '—';
@@ -175,6 +225,12 @@ function TreeDetailModal({
             className={`px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'tasks' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}
           >
             Lịch sử task ({tasks.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('qrcode')}
+            className={`px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'qrcode' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            Mã QR
           </button>
         </div>
 
@@ -290,6 +346,109 @@ function TreeDetailModal({
                   </table>
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === 'qrcode' && (
+            <div className="px-5 py-4">
+              <div className="bg-gray-900 rounded-lg p-6 space-y-4">
+                <div className="text-center">
+                  <h4 className="text-sm font-semibold text-gray-300 mb-2">Mã QR cho cây {tree.tree_code}</h4>
+                  <p className="text-xs text-gray-500 mb-4">
+                    Quét mã QR này bằng ứng dụng di động để xem thông tin cây nhanh chóng
+                  </p>
+                </div>
+
+                {/* QR Code Preview */}
+                <div className="flex justify-center">
+                  <div className="bg-white p-4 rounded-lg shadow-lg">
+                    {loadingQRCode ? (
+                      <div className="w-64 h-64 flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mb-2"></div>
+                          <p className="text-sm text-gray-600">Đang tải QR code...</p>
+                        </div>
+                      </div>
+                    ) : qrCodeError ? (
+                      <div className="w-64 h-64 flex items-center justify-center">
+                        <div className="text-center">
+                          <svg className="w-12 h-12 text-red-500 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <p className="text-sm text-gray-600">Không thể tải QR code</p>
+                          <button
+                            onClick={() => {
+                              setQrCodeError(false);
+                              setLoadingQRCode(false);
+                              setQrCodeBlobUrl(null);
+                            }}
+                            className="mt-2 text-xs text-blue-600 hover:text-blue-700"
+                          >
+                            Thử lại
+                          </button>
+                        </div>
+                      </div>
+                    ) : qrCodeBlobUrl ? (
+                      <img
+                        src={qrCodeBlobUrl}
+                        alt={`QR Code for ${tree.tree_code}`}
+                        className="w-64 h-64 object-contain"
+                      />
+                    ) : (
+                      <div className="w-64 h-64 flex items-center justify-center">
+                        <p className="text-sm text-gray-600">Chưa tải QR code</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* QR Code Info */}
+                <div className="bg-gray-800 rounded-lg p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-4">
+                    <span className="text-xs text-gray-500">Mã cây:</span>
+                    <span className="text-xs text-green-400 font-mono font-semibold">{tree.tree_code}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-4">
+                    <span className="text-xs text-gray-500">QR Data:</span>
+                    <span className="text-xs text-gray-300 font-mono">cayxanh://tree/{tree.id}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-4">
+                    <span className="text-xs text-gray-500">Loài cây:</span>
+                    <span className="text-xs text-gray-300">{tree.species?.common_name ?? '—'}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-4">
+                    <span className="text-xs text-gray-500">Khu vực:</span>
+                    <span className="text-xs text-gray-300">{tree.area?.area_name ?? '—'}</span>
+                  </div>
+                </div>
+
+                {/* Download Button */}
+                <div className="flex flex-col items-center gap-3">
+                  <button
+                    onClick={handleDownloadQRCode}
+                    disabled={downloadingQR || loadingQRCode}
+                    className="flex items-center gap-2 rounded-lg bg-green-600 px-6 py-3 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors w-full justify-center"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    {downloadingQR ? 'Đang tải...' : 'Tải mã QR (PNG)'}
+                  </button>
+                  
+                  {qrDownloadMsg && (
+                    <p className={`text-xs ${qrDownloadMsg.includes('✅') ? 'text-green-400' : 'text-red-400'}`}>
+                      {qrDownloadMsg}
+                    </p>
+                  )}
+
+                  <div className="text-center mt-2">
+                    <p className="text-xs text-gray-500">
+                      💡 <strong>Hướng dẫn:</strong> Tải file PNG này và in ra để dán lên cây. 
+                      Nhân viên có thể quét mã QR bằng ứng dụng di động để xem thông tin và tạo task bảo trì.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
