@@ -239,6 +239,7 @@ export class SeederService {
 
       trees.push({
         tree_code: `LC-${String(i).padStart(4, '0')}`,
+        qr_code: `cayxanh://tree/${i}`, // Auto-generate QR code string
         species_id: species.id,
         area_id: lienChieu.id,
         location: {
@@ -256,8 +257,15 @@ export class SeederService {
       });
     }
 
-    await this.treeRepo.save(trees);
-    this.logger.log(`Seeded 80 trees in Quận Liên Chiểu.`);
+    const savedTrees = await this.treeRepo.save(trees);
+    
+    // Update qr_code with actual IDs after saving
+    for (const tree of savedTrees) {
+      tree.qr_code = `cayxanh://tree/${tree.id}`;
+    }
+    await this.treeRepo.save(savedTrees);
+    
+    this.logger.log(`Seeded 80 trees in Quận Liên Chiểu with QR codes.`);
   }
 
   // ── Maintenance tasks: ~60 tasks spread over the last 14 days ───────────

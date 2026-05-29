@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, Request, Patch } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, Request, Patch, Res, NotFoundException } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { TreesService } from './trees.service';
 import { CreateTreeDto } from './dto/create-tree.dto';
 import { FindTreesNearbyDto } from './dto/find-trees-nearby.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import type { Response } from 'express';
 
 @ApiTags('trees')
 @ApiBearerAuth()
@@ -68,6 +69,47 @@ export class TreesController {
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async findOne(@Param('id') id: string) {
     return await this.treesService.findById(+id);
+  }
+
+  @Get(':id/qrcode')
+  @ApiOperation({ summary: 'Generate QR code for a tree' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'QR code PNG image generated successfully.',
+    content: {
+      'image/png': {
+        schema: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Tree not found.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async getQRCode(@Param('id') id: string, @Res() res: Response) {
+    const qrCodeBuffer = await this.treesService.generateQRCode(+id);
+    
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Disposition', `inline; filename="tree-${id}-qrcode.png"`);
+    res.send(qrCodeBuffer);
+  }
+
+  @Get('qr/:qrCode')
+  @ApiOperation({ summary: 'Get tree by QR code string' })
+  @ApiResponse({ status: 200, description: 'Tree found by QR code.' })
+  @ApiResponse({ status: 404, description: 'Tree not found.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async findByQRCode(@Param('qrCode') qrCode: string) {
+    // Decode URL-encoded QR code (e.g., cayxanh%3A%2F%2Ftree%2F42 -> cayxanh://tree/42)
+    const decodedQRCode = decodeURIComponent(qrCode);
+    const tree = await this.treesService.findByQRCode(decodedQRCode);
+    
+    if (!tree) {
+      throw new NotFoundException('Tree not found with the provided QR code');
+    }
+    
+    return tree;
   }
 
   @Patch(':id/health')
