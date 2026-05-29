@@ -1,0 +1,83 @@
+fix(frontend): QR code image not displaying in TreeDetailModal
+
+Problem:
+- QR code image failed to load in TreeDetailModal
+- Error: "Không thể tải QR code"
+- Root cause: <img> tag cannot send JWT token in HTTP header
+- Backend returned 401 Unauthorized for unauthenticated requests
+
+Solution:
+- Fetch QR code as Blob with JWT authentication
+- Create temporary blob URL using URL.createObjectURL()
+- Use blob URL for <img src> attribute
+- Cleanup blob URL on modal close to prevent memory leaks
+
+Changes:
+- frontend/src/api/trees.ts:
+  * Added fetchTreeQRCodeBlob() - fetch with auth
+  * Added getTreeQRCodeBlobUrl() - create blob URL
+  * Updated downloadTreeQRCode() - use blob fetch
+
+- frontend/src/pages/dashboard/TreeManagementPage.tsx:
+  * Added state: qrCodeBlobUrl, loadingQRCode, qrCodeError
+  * Added useEffect to load QR code when tab active
+  * Added useEffect to cleanup blob URL on unmount
+  * Updated UI with loading/error states
+  * Added retry button for error recovery
+
+Features:
+- ✅ QR code displays correctly with authentication
+- ✅ Loading spinner while fetching
+- ✅ Error message with retry button
+- ✅ Download functionality still works
+- ✅ Memory cleanup prevents leaks
+- ✅ Better UX with clear feedback
+
+Testing:
+- Tested on Chrome, Firefox, Safari, Edge
+- Verified memory cleanup (no leaks)
+- Tested error handling and retry
+- Tested download functionality
+- All TypeScript checks pass
+
+Documentation:
+- Created QR_CODE_IMAGE_FIX.md (detailed explanation)
+- Created QR_CODE_FIX_SUMMARY.md (quick summary)
+- Created TEST_QR_CODE_FIX.md (test plan)
+- Created QR_CODE_FIX_CHECKLIST.md (implementation checklist)
+
+Closes: #[ISSUE_NUMBER]
+Related: Task 1.2 - QR Code Generation
+
+---
+
+Technical Details:
+
+Before:
+```tsx
+<img src={`${API_URL}/trees/${id}/qrcode`} />
+// ❌ No auth header → 401 Unauthorized
+```
+
+After:
+```tsx
+const blob = await fetchTreeQRCodeBlob(id);
+const url = URL.createObjectURL(blob);
+<img src={url} />
+// ✅ Fetched with auth → displays correctly
+```
+
+Cleanup:
+```tsx
+useEffect(() => {
+  return () => {
+    if (qrCodeBlobUrl) {
+      URL.revokeObjectURL(qrCodeBlobUrl);
+    }
+  };
+}, [qrCodeBlobUrl]);
+```
+
+---
+
+Signed-off-by: SV1 <sv1@example.com>
