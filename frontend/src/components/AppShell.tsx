@@ -129,7 +129,11 @@ export default function AppShell() {
         {/* Nav links */}
         <div className="flex-1 px-2 py-4 space-y-1">
           {NAV_ITEMS.filter(item => 
-            user?.roles.some(role => item.roles.includes(role))
+            user?.roles.some(role => 
+              item.roles.some(allowedRole => 
+                allowedRole.toLowerCase() === role.toLowerCase()
+              )
+            )
           ).map(({ to, label, icon, end }) => (
             <NavLink
               key={to}

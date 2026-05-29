@@ -88,8 +88,8 @@ export class AuthService {
       last_login_at: new Date(),
     });
 
-    // Extract role names for JWT payload and normalize to lowercase
-    const roleNames = user.roles.map((role) => role.role_name.toLowerCase());
+    // Extract role names for JWT payload (keep original case for frontend matching)
+    const roleNames = user.roles.map((role) => role.role_name);
 
     // Create JWT payload with roles array
     const payload = {
