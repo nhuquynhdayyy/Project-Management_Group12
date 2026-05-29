@@ -6,6 +6,8 @@ import { User } from './user.entity';
 import { Role } from '../../entities/role.entity';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import * as bcrypt from 'bcrypt';
+import { AuditLogService } from '../audit-log/auditLog.service';
+import { AuditAction } from '../../entities/auditLog.entity';
 
 @Injectable()
 export class AuthService {
@@ -15,6 +17,7 @@ export class AuthService {
     @InjectRepository(Role)
     private rolesRepository: Repository<Role>,
     private jwtService: JwtService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async register(user: User, roleNames: string[]): Promise<Omit<User, 'password'>> {
@@ -59,17 +62,24 @@ export class AuthService {
     });
 
     if (!user) {
+      this.auditLogService.log(null, AuditAction.CREATE, 'auth', null, null, {
+        action: 'login_failed', reason: 'user_not_found', username,
+      }).catch(() => {});
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Check if user is active
     if (!user.is_active) {
+      this.auditLogService.log(user.id, AuditAction.CREATE, 'auth', null, null, {
+        action: 'login_failed', reason: 'account_inactive', username,
+      }).catch(() => {});
       throw new UnauthorizedException('Account is inactive');
     }
 
-    // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
+      this.auditLogService.log(user.id, AuditAction.CREATE, 'auth', null, null, {
+        action: 'login_failed', reason: 'invalid_password', username,
+      }).catch(() => {});
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -78,16 +88,21 @@ export class AuthService {
       last_login_at: new Date(),
     });
 
-    // Extract role names for JWT payload
-    const roleNames = user.roles.map((role) => role.role_name);
+    // Extract role names for JWT payload and normalize to lowercase
+    const roleNames = user.roles.map((role) => role.role_name.toLowerCase());
 
     // Create JWT payload with roles array
     const payload = {
       sub: user.id,
       userId: user.id,
       username: user.username,
-      roles: roleNames, // Array of role names
+      roles: roleNames, // Array of normalized role names
     };
+
+    // Fire-and-forget successful login log
+    this.auditLogService.log(user.id, AuditAction.CREATE, 'auth', null, null, {
+      action: 'login_success', username, roles: roleNames,
+    }).catch(() => {});
 
     return {
       access_token: this.jwtService.sign(payload),

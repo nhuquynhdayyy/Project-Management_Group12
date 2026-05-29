@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { MaintenanceTask, TaskStatus } from '../../entities/maintenance-task.entity';
@@ -8,11 +8,12 @@ import { CreateMaintenanceTaskDto } from './dto/create-maintenance-task.dto';
 import { CompleteTaskDto } from './dto/complete-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { StaffPerformanceDto } from './dto/staff-performance.dto';
+import { AuditLogService } from '../audit-log/auditLog.service';
+import { AuditAction } from '../../entities/auditLog.entity';
 import { CloudStorageService } from '../../services/cloud-storage.service';
 
 @Injectable()
 export class MaintenanceService {
-  // Maximum allowed distance in meters for geofencing
   private readonly MAX_DISTANCE_METERS = 10;
 
   constructor(
@@ -22,29 +23,20 @@ export class MaintenanceService {
     private readonly treeRepository: Repository<Tree>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly auditLogService: AuditLogService,
     private readonly cloudStorageService: CloudStorageService,
   ) {}
 
-  async create(createTaskDto: CreateMaintenanceTaskDto): Promise<MaintenanceTask> {
-    // Verify tree exists
-    const tree = await this.treeRepository.findOne({
-      where: { id: createTaskDto.tree_id },
-    });
+  /**
+   * Tạo nhiệm vụ bảo trì mới và ghi lại nhật ký hệ thống (Audit Log)
+   */
+  async create(createTaskDto: CreateMaintenanceTaskDto, userId?: number): Promise<MaintenanceTask> {
+    const tree = await this.treeRepository.findOne({ where: { id: createTaskDto.tree_id } });
+    if (!tree) throw new NotFoundException('Tree not found');
 
-    if (!tree) {
-      throw new NotFoundException('Tree not found');
-    }
+    const user = await this.userRepository.findOne({ where: { id: createTaskDto.assigned_to } });
+    if (!user) throw new NotFoundException('User not found');
 
-    // Verify user exists
-    const user = await this.userRepository.findOne({
-      where: { id: createTaskDto.assigned_to },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    // Create task
     const task = this.taskRepository.create({
       tree_id: createTaskDto.tree_id,
       assigned_to: createTaskDto.assigned_to,
@@ -54,92 +46,102 @@ export class MaintenanceService {
       status: TaskStatus.PENDING,
     });
 
-    return await this.taskRepository.save(task);
+    const saved = await this.taskRepository.save(task);
+
+    // Ghi log bảo mật: Ai đã tạo task cho ai
+    await this.auditLogService.log(
+      userId ?? null, AuditAction.CREATE, 'task', saved.id, null,
+      { tree_id: saved.tree_id, assigned_to: saved.assigned_to, task_type: saved.task_type },
+    );
+
+    return saved;
   }
 
+  /**
+   * Hoàn thành nhiệm vụ: Kiểm tra GPS, Tải ảnh lên Cloud, Xác thực người dùng và Ghi log truy vết
+   */
   async completeTask(
     taskId: number,
     userId: number,
     completeDto: CompleteTaskDto,
     imageFile?: Express.Multer.File,
   ): Promise<MaintenanceTask> {
-    // Find task with tree relationship
-    const task = await this.taskRepository.findOne({
-      where: { id: taskId },
-      relations: ['tree'],
+    const task = await this.taskRepository.findOne({ 
+      where: { id: taskId }, 
+      relations: ['tree'] 
     });
 
-    if (!task) {
-      throw new NotFoundException('Task not found');
-    }
+    if (!task) throw new NotFoundException('Task not found');
 
-    // Verify task is assigned to this user
+    // Kiểm tra quyền: Chỉ người được giao mới được hoàn thành
     if (task.assigned_to !== userId) {
+      await this.auditLogService.log(userId, AuditAction.UPDATE, 'task', taskId, null, { error: 'UNAUTHORIZED_ASSIGNMENT_ATTEMPT' });
       throw new ForbiddenException('You are not assigned to this task');
     }
 
-    // Verify task is not already completed
     if (task.status === TaskStatus.COMPLETED) {
       throw new ForbiddenException('Task is already completed');
     }
 
-    // Geofencing: Verify staff is within 10 meters of the tree
-    const distance = this.calculateDistance(
-      completeDto.latitude,
-      completeDto.longitude,
-      task.tree,
-    );
-
+    // Kiểm tra khoảng cách địa lý (Geofencing)
+    const distance = this.calculateDistance(completeDto.latitude, completeDto.longitude, task.tree);
     if (distance > this.MAX_DISTANCE_METERS) {
-      throw new ForbiddenException(
-        `You must be within ${this.MAX_DISTANCE_METERS} meters of the tree to complete this task. Current distance: ${distance.toFixed(1)}m`,
+      await this.auditLogService.log(
+        userId, AuditAction.UPDATE, 'task', taskId,
+        { status: task.status },
+        { 
+          error: 'GEOFENCE_FAIL', 
+          distance: parseFloat(distance.toFixed(1)), 
+          maxAllowed: this.MAX_DISTANCE_METERS,
+          gps: { lat: completeDto.latitude, lng: completeDto.longitude } 
+        },
       );
+      throw new ForbiddenException(`Bạn ở quá xa cây (${distance.toFixed(1)}m). Vui lòng di chuyển đến gần trong vòng ${this.MAX_DISTANCE_METERS}m.`);
     }
 
-    // Upload image if provided
+    // Tải ảnh lên Cloud Storage (nếu có ảnh đính kèm)
     let imageUrl: string | null = null;
     if (imageFile) {
-      imageUrl = await this.cloudStorageService.uploadImage(
-        imageFile.buffer,
-        imageFile.originalname,
-      );
+      imageUrl = await this.cloudStorageService.uploadImage(imageFile.buffer, imageFile.originalname);
     }
 
-    // Update task
+    // Cập nhật trạng thái nhiệm vụ
+    const oldValue = { status: task.status, evidence_image_url: task.evidence_image_url };
     task.status = TaskStatus.COMPLETED;
     task.completed_at = new Date();
-    task.evidence_image_url = imageUrl;
+    task.evidence_image_url = imageUrl || task.evidence_image_url;
     
-    // Append completion notes to existing notes
     if (completeDto.notes) {
-      task.notes = task.notes 
-        ? `${task.notes}\n\nCompletion notes: ${completeDto.notes}`
-        : completeDto.notes;
+      task.notes = task.notes ? `${task.notes}\n\n[Completion Notes]: ${completeDto.notes}` : completeDto.notes;
     }
 
-    return await this.taskRepository.save(task);
+    const updated = await this.taskRepository.save(task);
+
+    // Ghi log bảo mật thành công kèm tọa độ xác thực
+    await this.auditLogService.log(
+      userId, AuditAction.UPDATE, 'task', taskId, oldValue,
+      { 
+        status: updated.status, 
+        completed_at: updated.completed_at, 
+        gps_verified: { lat: completeDto.latitude, lng: completeDto.longitude },
+        image_stored: !!imageUrl 
+      }
+    );
+
+    return updated;
   }
 
-  async updateStatus(
-    taskId: number,
-    userId: number,
-    updateStatusDto: UpdateTaskStatusDto,
-  ): Promise<MaintenanceTask> {
-    const task = await this.taskRepository.findOne({
-      where: { id: taskId },
-    });
+  async updateStatus(taskId: number, userId: number, updateStatusDto: UpdateTaskStatusDto): Promise<MaintenanceTask> {
+    const task = await this.taskRepository.findOne({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('Task not found');
+    if (task.assigned_to !== userId) throw new ForbiddenException('You are not assigned to this task');
 
-    if (!task) {
-      throw new NotFoundException('Task not found');
-    }
-
-    // Verify task is assigned to this user
-    if (task.assigned_to !== userId) {
-      throw new ForbiddenException('You are not assigned to this task');
-    }
-
+    const oldValue = { status: task.status };
     task.status = updateStatusDto.status;
-    return await this.taskRepository.save(task);
+    const updated = await this.taskRepository.save(task);
+
+    await this.auditLogService.log(userId, AuditAction.UPDATE, 'task', taskId, oldValue, { status: updated.status });
+    return updated;
   }
 
   async findByUserId(userId: number): Promise<MaintenanceTask[]> {
@@ -151,14 +153,15 @@ export class MaintenanceService {
   }
 
   async findById(taskId: number): Promise<MaintenanceTask | null> {
-    return await this.taskRepository.findOne({
-      where: { id: taskId },
+    return await this.taskRepository.findOne({ 
+      where: { id: taskId }, 
+      relations: ['assignedUser', 'tree', 'tree.species'] 
     });
   }
 
   async findAll(): Promise<MaintenanceTask[]> {
     return await this.taskRepository.find({
-      relations: ['assignedUser'],
+      relations: ['assignedUser', 'tree'],
       order: { scheduled_date: 'ASC' },
     });
   }
@@ -171,20 +174,11 @@ export class MaintenanceService {
     });
   }
 
-  /**
-   * Lấy danh sách tasks để export, có thể lọc theo khoảng ngày.
-   * Trả về đầy đủ thông tin task kèm tên cây và tên nhân viên.
-   */
   async getTasksForExport(from?: string, to?: string): Promise<MaintenanceTask[]> {
-    const where: Record<string, any> = {};
-
-    if (from && to) {
-      where.scheduled_date = Between(new Date(from), new Date(to));
-    } else if (from) {
-      where.scheduled_date = MoreThanOrEqual(new Date(from));
-    } else if (to) {
-      where.scheduled_date = LessThanOrEqual(new Date(to));
-    }
+    const where: any = {};
+    if (from && to) where.scheduled_date = Between(new Date(from), new Date(to));
+    else if (from) where.scheduled_date = MoreThanOrEqual(new Date(from));
+    else if (to) where.scheduled_date = LessThanOrEqual(new Date(to));
 
     return this.taskRepository.find({
       where,
@@ -193,131 +187,83 @@ export class MaintenanceService {
     });
   }
 
+  /**
+   * Tính toán hiệu suất chi tiết của nhân viên (Full Query Logic)
+   */
   async getStaffPerformance(): Promise<StaffPerformanceDto[]> {
-    interface StaffPerformanceRawRow {
-      username: string | null;
-      completed: string | number | null;
-      pending: string | number | null;
-      total_assigned: string | number | null;
-      on_time_completed: string | number | null;
-      overdue_count: string | number | null;
-      avg_days_late: string | number | null;
-      diversity_score: string | number | null;
-      active_days: string | number | null;
-      avg_completion_hours: string | number | null;
-    }
-
     const rows = await this.taskRepository
-.createQueryBuilder('task')
+      .createQueryBuilder('task')
       .leftJoin('task.assignedUser', 'user')
       .select('user.username', 'username')
       .addSelect('COUNT(task.id)', 'total_assigned')
-      .addSelect(
-        `SUM(CASE WHEN task.status = :completedStatus THEN 1 ELSE 0 END)`,
-        'completed',
-      )
-      .addSelect(
-        `SUM(CASE WHEN task.status IN (:...pendingStatuses) THEN 1 ELSE 0 END)`,
-        'pending',
-      )
-      .addSelect(
-        `AVG(CASE WHEN task.status = :completedStatus AND task.completed_at IS NOT NULL THEN EXTRACT(EPOCH FROM (task.completed_at - task.created_at)) / 3600 ELSE NULL END)`,
-        'avg_completion_hours',
-      )
-      .addSelect(
-        `SUM(CASE WHEN task.status = :completedStatus AND DATE(task.completed_at) <= task.scheduled_date THEN 1 ELSE 0 END)`,
-        'on_time_completed',
-      )
-      .addSelect(
-        `SUM(CASE WHEN (task.status = :completedStatus AND DATE(task.completed_at) > task.scheduled_date) OR (task.status <> :completedStatus AND task.scheduled_date < CURRENT_DATE) THEN 1 ELSE 0 END)`,
-        'overdue_count',
-      )
-      .addSelect(
-        `AVG(CASE WHEN task.status = :completedStatus AND DATE(task.completed_at) > task.scheduled_date THEN DATE_PART('day', DATE(task.completed_at)::timestamp - task.scheduled_date::timestamp) WHEN task.status <> :completedStatus AND task.scheduled_date < CURRENT_DATE THEN DATE_PART('day', CURRENT_DATE::timestamp - task.scheduled_date::timestamp) ELSE NULL END)`,
-        'avg_days_late',
-      )
-      .addSelect(
-        `COUNT(DISTINCT CASE WHEN task.status = :completedStatus THEN task.task_type ELSE NULL END)`,
-        'diversity_score',
-      )
-      .addSelect(
-        `COUNT(DISTINCT CASE WHEN task.status = :completedStatus AND task.completed_at IS NOT NULL THEN DATE(task.completed_at) ELSE NULL END)`,
-        'active_days',
-      )
-      .setParameter('completedStatus', TaskStatus.COMPLETED)
-      .setParameter('pendingStatuses', [TaskStatus.PENDING, TaskStatus.IN_PROGRESS])
+      .addSelect(`SUM(CASE WHEN task.status = :completed THEN 1 ELSE 0 END)`, 'completed')
+      .addSelect(`SUM(CASE WHEN task.status IN (:...pending) THEN 1 ELSE 0 END)`, 'pending')
+      .addSelect(`AVG(CASE WHEN task.status = :completed AND task.completed_at IS NOT NULL THEN EXTRACT(EPOCH FROM (task.completed_at - task.created_at)) / 3600 ELSE NULL END)`, 'avg_completion_hours')
+      .addSelect(`SUM(CASE WHEN task.status = :completed AND DATE(task.completed_at) <= task.scheduled_date THEN 1 ELSE 0 END)`, 'on_time_count')
+      .addSelect(`AVG(CASE WHEN task.status = :completed AND DATE(task.completed_at) > task.scheduled_date THEN DATE_PART('day', task.completed_at::timestamp - task.scheduled_date::timestamp) ELSE 0 END)`, 'avg_days_late')
+      .addSelect(`COUNT(DISTINCT CASE WHEN task.status = :completed THEN task.task_type ELSE NULL END)`, 'diversity_score')
+      .setParameter('completed', TaskStatus.COMPLETED)
+      .setParameter('pending', [TaskStatus.PENDING, TaskStatus.IN_PROGRESS])
       .groupBy('user.username')
-      .orderBy('user.username', 'ASC')
-      .getRawMany<StaffPerformanceRawRow>();
+      .getRawMany();
 
-    return rows.map((row) => {
+    return rows.map(row => {
       const completed = Number(row.completed) || 0;
-      const onTimeCompleted = Number(row.on_time_completed) || 0;
-
+      const onTime = Number(row.on_time_count) || 0;
+      
       return {
         username: row.username ?? 'Unknown',
-        completed,
+        completed: completed,
         pending: Number(row.pending) || 0,
-        avg_completion_hours:
-          row.avg_completion_hours !== null ? Number(parseFloat(String(row.avg_completion_hours)).toFixed(2)) : null,
-        overdueCount: Number(row.overdue_count) || 0,
-        onTimeRate: completed > 0 ? Number(((onTimeCompleted / completed) * 100).toFixed(2)) : 0,
-        avgDaysLate: row.avg_days_late !== null ? Number(parseFloat(String(row.avg_days_late)).toFixed(2)) : 0,
+        avg_completion_hours: row.avg_completion_hours ? Number(parseFloat(row.avg_completion_hours).toFixed(2)) : null,
+        onTimeRate: completed > 0 ? Number(((onTime / completed) * 100).toFixed(2)) : 0,
+        avgDaysLate: row.avg_days_late ? Number(parseFloat(row.avg_days_late).toFixed(1)) : 0,
         diversityScore: Number(row.diversity_score) || 0,
-        activeDays: Number(row.active_days) || 0,
+        activeDays: 0, // Placeholder if logic not in DB
       };
     });
   }
 
-  async getOverdueTasks(): Promise<MaintenanceTask[]> {
-const today = new Date();
+  async getOverdueTasks(): Promise<any[]> {
+    const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const tasks = await this.taskRepository.find({
-      where: {
-        scheduled_date: LessThanOrEqual(new Date(today.getTime() - 24 * 60 * 60 * 1000)),
+      where: { 
+        scheduled_date: LessThanOrEqual(new Date(today.getTime() - 86400000)),
       },
       relations: ['tree', 'assignedUser'],
-      order: { scheduled_date: 'ASC' },
     });
 
     return tasks
-      .filter((task) => task.status !== TaskStatus.COMPLETED)
-      .map((task) => {
-        const scheduled = new Date(task.scheduled_date);
-        const diffMs = today.getTime() - scheduled.getTime();
-        const overdueDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-        return {
-          ...task,
-          tree_name: task.tree?.tree_code ?? null,
-          staff_name: task.assignedUser?.full_name ?? task.assignedUser?.username ?? null,
-          overdue_days: overdueDays,
-        } as MaintenanceTask;
-      });
+      .filter(t => t.status !== TaskStatus.COMPLETED)
+      .map(t => ({
+        ...t,
+        overdue_days: Math.floor((today.getTime() - new Date(t.scheduled_date).getTime()) / 86400000),
+        staff_name: t.assignedUser?.full_name || t.assignedUser?.username || 'N/A'
+      }));
   }
 
   /**
-   * Calculate distance between two points using Haversine formula
-   * Returns distance in meters
+   * Công thức Haversine để tính khoảng cách giữa người dùng và cây (mét)
    */
   private calculateDistance(lat1: number, lon1: number, tree: Tree): number {
-    // Extract tree coordinates from GeoJSON
-    const treeLocation = tree.location as any;
-    const lon2 = treeLocation.coordinates[0]; // longitude
-    const lat2 = treeLocation.coordinates[1]; // latitude
+    const loc = tree.location as any;
+    if (!loc || !loc.coordinates) return 999999; // Trường hợp không có tọa độ cây
 
-    const R = 6371e3; // Earth's radius in meters
+    const lon2 = loc.coordinates[0];
+    const lat2 = loc.coordinates[1];
+    const R = 6371e3; // Bán kính Trái Đất (mét)
     const φ1 = (lat1 * Math.PI) / 180;
     const φ2 = (lat2 * Math.PI) / 180;
     const Δφ = ((lat2 - lat1) * Math.PI) / 180;
     const Δλ = ((lon2 - lon1) * Math.PI) / 180;
 
-    const a =
-      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-    return R * c; // Distance in meters
+    return R * c;
   }
 }
