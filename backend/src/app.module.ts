@@ -7,6 +7,7 @@ import { TreesModule } from './modules/trees/trees.module';
 import { SeederModule } from './database/seeder/seeder.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { AuditLogModule } from './modules/audit-log/auditLog.module';
+import { CloudStorageService } from './services/cloud-storage.service';
 
 @Module({
   imports: [
@@ -52,5 +53,7 @@ import { AuditLogModule } from './modules/audit-log/auditLog.module';
     AuditLogModule,
   ],
   controllers: [AppController],
+  providers: [CloudStorageService],
+  exports: [CloudStorageService],
 })
 export class AppModule {}

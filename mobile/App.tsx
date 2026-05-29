@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import LoginScreen from './src/screens/LoginScreen';
 import TaskListScreen from './src/screens/TaskListScreen';
 import TaskDetailScreen from './src/screens/TaskDetailScreen';
+import TreeHistoryScreen from './src/screens/TreeHistoryScreen';
 import { ActivityIndicator, View } from 'react-native';
 import { RootStackParamList } from './src/types/navigation';
 
@@ -30,6 +31,7 @@ function AppNavigator() {
           <>
             <Stack.Screen name="TaskList" component={TaskListScreen} />
             <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
+            <Stack.Screen name="TreeHistory" component={TreeHistoryScreen} />
           </>
         )}
       </Stack.Navigator>
