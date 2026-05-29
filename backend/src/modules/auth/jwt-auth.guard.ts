@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { CanActivate, ExecutionContext, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { JwtService } from '@nestjs/jwt';
 

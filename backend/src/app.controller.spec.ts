@@ -16,7 +16,9 @@ describe('AppController', () => {
 
   describe('root', () => {
     it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toEqual({ message: "Urban Tree Management Backend Running 🚀" });
+      expect(appController.getHello()).toEqual({
+        message: 'Urban Tree Management Backend Running 🚀',
+      });
     });
   });
 });

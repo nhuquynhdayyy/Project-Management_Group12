@@ -31,9 +31,11 @@ describe('AuthService', () => {
   };
 
   const mockUserRepository = {
-    save: jest.fn().mockImplementation((user) =>
-      Promise.resolve({ ...mockUser, ...user, id: 1 }),
-    ),
+    save: jest
+      .fn()
+      .mockImplementation((user) =>
+        Promise.resolve({ ...mockUser, ...user, id: 1 }),
+      ),
     findOne: jest.fn().mockResolvedValue(mockUser),
     find: jest.fn().mockResolvedValue([]),
     update: jest.fn().mockResolvedValue({ affected: 1 }),
@@ -91,6 +93,32 @@ describe('AuthService', () => {
     expect(result).toBeDefined();
     expect(result.username).toBe('test');
     expect(result.access_token).toBeDefined();
+  });
+
+  it('should create a LOGIN audit log on successful login', async () => {
+    await service.login('test', 'test');
+
+    expect(mockAuditLogService.log).toHaveBeenCalledWith(
+      1,
+      'LOGIN',
+      'auth',
+      null,
+      null,
+      expect.objectContaining({ username: 'test', roles: ['admin'] }),
+    );
+  });
+
+  it('should create a LOGOUT audit log', async () => {
+    await service.logout(1, 'test');
+
+    expect(mockAuditLogService.log).toHaveBeenCalledWith(
+      1,
+      'LOGOUT',
+      'auth',
+      null,
+      null,
+      { username: 'test' },
+    );
   });
 
   it('should validate a user', async () => {

@@ -6,7 +6,11 @@ import { AdministrativeArea } from '../../entities/administrative-area.entity';
 import { Role } from '../../entities/role.entity';
 import { User } from '../../modules/auth/user.entity';
 import { Tree, HealthStatus } from '../../entities/tree.entity';
-import { MaintenanceTask, TaskType, TaskStatus } from '../../entities/maintenance-task.entity';
+import {
+  MaintenanceTask,
+  TaskType,
+  TaskStatus,
+} from '../../entities/maintenance-task.entity';
 import * as bcrypt from 'bcrypt';
 
 const SPECIES_SEED: Partial<TreeSpecies>[] = [
@@ -23,7 +27,8 @@ const SPECIES_SEED: Partial<TreeSpecies>[] = [
   {
     common_name: 'Phượng vĩ',
     scientific_name: 'Delonix regia',
-    description: 'Cây phượng vĩ có hoa đỏ rực, thường trồng ở đường phố và công viên',
+    description:
+      'Cây phượng vĩ có hoa đỏ rực, thường trồng ở đường phố và công viên',
   },
   {
     common_name: 'Sao đen',
@@ -79,7 +84,14 @@ export class SeederService {
     private readonly taskRepo: Repository<MaintenanceTask>,
   ) {}
 
-  async seed(): Promise<{ species: string; areas: string; roles: string; users: string; trees: string; tasks: string }> {
+  async seed(): Promise<{
+    species: string;
+    areas: string;
+    roles: string;
+    users: string;
+    trees: string;
+    tasks: string;
+  }> {
     // Order matters: roles → species → areas → users → trees → tasks
     await this.upsertRoles();
     await this.upsertSpecies();
@@ -136,9 +148,15 @@ export class SeederService {
   // Create test users with roles for development/testing
   private async upsertTestUsers(): Promise<void> {
     // Find roles first
-    const adminRole = await this.roleRepo.findOne({ where: { role_name: 'Admin' } });
-    const managerRole = await this.roleRepo.findOne({ where: { role_name: 'Manager' } });
-    const staffRole = await this.roleRepo.findOne({ where: { role_name: 'Staff' } });
+    const adminRole = await this.roleRepo.findOne({
+      where: { role_name: 'Admin' },
+    });
+    const managerRole = await this.roleRepo.findOne({
+      where: { role_name: 'Manager' },
+    });
+    const staffRole = await this.roleRepo.findOne({
+      where: { role_name: 'Staff' },
+    });
 
     if (!adminRole || !managerRole || !staffRole) {
       this.logger.warn('Roles not found. Skipping test user creation.');
@@ -193,7 +211,9 @@ export class SeederService {
       if (!existingUser) {
         const user = this.userRepo.create(userData);
         await this.userRepo.save(user);
-        this.logger.log(`Created test user: ${userData.username} with roles: ${userData.roles.map(r => r.role_name).join(', ')}`);
+        this.logger.log(
+          `Created test user: ${userData.username} with roles: ${userData.roles.map((r) => r.role_name).join(', ')}`,
+        );
       }
     }
   }
@@ -203,7 +223,9 @@ export class SeederService {
   private async seedTrees(): Promise<void> {
     const existingCount = await this.treeRepo.count();
     if (existingCount > 0) {
-      this.logger.log(`Trees already seeded (${existingCount} rows). Skipping.`);
+      this.logger.log(
+        `Trees already seeded (${existingCount} rows). Skipping.`,
+      );
       return;
     }
 
@@ -227,7 +249,8 @@ export class SeederService {
 
     const rand = (min: number, max: number) =>
       Math.random() * (max - min) + min;
-    const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+    const pick = <T>(arr: T[]): T =>
+      arr[Math.floor(Math.random() * arr.length)];
 
     const trees: Partial<Tree>[] = [];
     for (let i = 1; i <= 80; i++) {
@@ -264,13 +287,19 @@ export class SeederService {
   private async seedMaintenanceTasks(): Promise<void> {
     const existingCount = await this.taskRepo.count();
     if (existingCount > 0) {
-      this.logger.log(`Tasks already seeded (${existingCount} rows). Skipping.`);
+      this.logger.log(
+        `Tasks already seeded (${existingCount} rows). Skipping.`,
+      );
       return;
     }
 
     const trees = await this.treeRepo.find();
-    const staffUser = await this.userRepo.findOne({ where: { username: 'staff' } });
-    const supervisorUser = await this.userRepo.findOne({ where: { username: 'supervisor' } });
+    const staffUser = await this.userRepo.findOne({
+      where: { username: 'staff' },
+    });
+    const supervisorUser = await this.userRepo.findOne({
+      where: { username: 'supervisor' },
+    });
 
     if (!trees.length || !staffUser || !supervisorUser) {
       this.logger.warn('Trees or users not found. Skipping task seeding.');
@@ -281,7 +310,8 @@ export class SeederService {
     const assignees = [staffUser, supervisorUser];
     const rand = (min: number, max: number) =>
       Math.random() * (max - min) + min;
-    const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+    const pick = <T>(arr: T[]): T =>
+      arr[Math.floor(Math.random() * arr.length)];
 
     const now = Date.now();
     const tasks: Partial<MaintenanceTask>[] = [];

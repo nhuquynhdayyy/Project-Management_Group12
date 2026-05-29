@@ -1,7 +1,14 @@
-﻿import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+﻿import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { MaintenanceTask, TaskStatus } from '../../entities/maintenance-task.entity';
+import {
+  MaintenanceTask,
+  TaskStatus,
+} from '../../entities/maintenance-task.entity';
 import { Tree } from '../../entities/tree.entity';
 import { User } from '../auth/user.entity';
 import { CreateMaintenanceTaskDto } from './dto/create-maintenance-task.dto';
@@ -32,11 +39,18 @@ export class MaintenanceService {
     private readonly auditLogService: AuditLogService,
   ) {}
 
-  async create(createTaskDto: CreateMaintenanceTaskDto, userId?: number): Promise<MaintenanceTask> {
-    const tree = await this.treeRepository.findOne({ where: { id: createTaskDto.tree_id } });
+  async create(
+    createTaskDto: CreateMaintenanceTaskDto,
+    userId?: number,
+  ): Promise<MaintenanceTask> {
+    const tree = await this.treeRepository.findOne({
+      where: { id: createTaskDto.tree_id },
+    });
     if (!tree) throw new NotFoundException('Tree not found');
 
-    const user = await this.userRepository.findOne({ where: { id: createTaskDto.assigned_to } });
+    const user = await this.userRepository.findOne({
+      where: { id: createTaskDto.assigned_to },
+    });
     if (!user) throw new NotFoundException('User not found');
 
     const task = this.taskRepository.create({
@@ -51,20 +65,42 @@ export class MaintenanceService {
     const saved = await this.taskRepository.save(task);
 
     await this.auditLogService.log(
-      userId ?? null, AuditAction.CREATE, 'task', saved.id, null,
-      { tree_id: saved.tree_id, assigned_to: saved.assigned_to, task_type: saved.task_type },
+      userId ?? null,
+      AuditAction.CREATE,
+      'task',
+      saved.id,
+      null,
+      {
+        tree_id: saved.tree_id,
+        assigned_to: saved.assigned_to,
+        task_type: saved.task_type,
+      },
     );
 
     return saved;
   }
 
-  async completeTask(taskId: number, userId: number, completeDto: CompleteTaskDto, evidenceImage?: UploadedFile): Promise<MaintenanceTask> {
-    const task = await this.taskRepository.findOne({ where: { id: taskId }, relations: ['tree'] });
+  async completeTask(
+    taskId: number,
+    userId: number,
+    completeDto: CompleteTaskDto,
+    evidenceImage?: UploadedFile,
+  ): Promise<MaintenanceTask> {
+    const task = await this.taskRepository.findOne({
+      where: { id: taskId },
+      relations: ['tree'],
+    });
     if (!task) throw new NotFoundException('Task not found');
 
     if (task.assigned_to !== userId) {
-      await this.auditLogService.log(userId, AuditAction.UPDATE, 'task', taskId, null,
-        { error: 'Not assigned to this task' });
+      await this.auditLogService.log(
+        userId,
+        AuditAction.UPDATE,
+        'task',
+        taskId,
+        null,
+        { error: 'Not assigned to this task' },
+      );
       throw new ForbiddenException('You are not assigned to this task');
     }
 
@@ -72,16 +108,29 @@ export class MaintenanceService {
       throw new ForbiddenException('Task is already completed');
     }
 
-    const distance = this.calculateDistance(completeDto.latitude, completeDto.longitude, task.tree);
+    const distance = this.calculateDistance(
+      completeDto.latitude,
+      completeDto.longitude,
+      task.tree,
+    );
 
     if (distance > this.MAX_DISTANCE_METERS) {
       // Fire-and-forget geofence failure log
       await this.auditLogService.log(
-        userId, AuditAction.UPDATE, 'task', taskId,
+        userId,
+        AuditAction.UPDATE,
+        'task',
+        taskId,
         { status: task.status },
-        { error: 'GEOFENCE_FAIL', distance: parseFloat(distance.toFixed(1)),
+        {
+          error: 'GEOFENCE_FAIL',
+          distance: parseFloat(distance.toFixed(1)),
           maxDistance: this.MAX_DISTANCE_METERS,
-          gps: { latitude: completeDto.latitude, longitude: completeDto.longitude } },
+          gps: {
+            latitude: completeDto.latitude,
+            longitude: completeDto.longitude,
+          },
+        },
       );
       throw new ForbiddenException(
         `You must be within ${this.MAX_DISTANCE_METERS} meters of the tree to complete this task. Current distance: ${distance.toFixed(1)}m`,
@@ -91,17 +140,31 @@ export class MaintenanceService {
     const oldValue = { status: task.status };
     task.status = TaskStatus.COMPLETED;
     task.completed_at = new Date();
-    task.evidence_image_url = completeDto.evidence_image_url || (evidenceImage ? this.generateEvidenceImageUrl(evidenceImage) : null);
+    task.evidence_image_url =
+      completeDto.evidence_image_url ||
+      (evidenceImage ? this.generateEvidenceImageUrl(evidenceImage) : null);
     if (completeDto.notes) {
-      task.notes = task.notes ? `${task.notes}\n\nCompletion notes: ${completeDto.notes}` : completeDto.notes;
+      task.notes = task.notes
+        ? `${task.notes}\n\nCompletion notes: ${completeDto.notes}`
+        : completeDto.notes;
     }
 
     const updated = await this.taskRepository.save(task);
 
     await this.auditLogService.log(
-      userId, AuditAction.UPDATE, 'task', taskId, oldValue,
-      { status: updated.status, completed_at: updated.completed_at,
-        gps: { latitude: completeDto.latitude, longitude: completeDto.longitude } },
+      userId,
+      AuditAction.COMPLETE,
+      'task',
+      taskId,
+      oldValue,
+      {
+        status: updated.status,
+        completed_at: updated.completed_at,
+        gps: {
+          latitude: completeDto.latitude,
+          longitude: completeDto.longitude,
+        },
+      },
     );
 
     return updated;
@@ -112,24 +175,37 @@ export class MaintenanceService {
     return `https://fake-storage.example.com/evidence/${Date.now()}-${safeName}`;
   }
 
-  async updateStatus(taskId: number, userId: number, updateStatusDto: UpdateTaskStatusDto): Promise<MaintenanceTask> {
+  async updateStatus(
+    taskId: number,
+    userId: number,
+    updateStatusDto: UpdateTaskStatusDto,
+  ): Promise<MaintenanceTask> {
     const task = await this.taskRepository.findOne({ where: { id: taskId } });
     if (!task) throw new NotFoundException('Task not found');
-    if (task.assigned_to !== userId) throw new ForbiddenException('You are not assigned to this task');
+    if (task.assigned_to !== userId)
+      throw new ForbiddenException('You are not assigned to this task');
 
     const oldValue = { status: task.status };
     task.status = updateStatusDto.status;
     const updated = await this.taskRepository.save(task);
 
     await this.auditLogService.log(
-      userId, AuditAction.UPDATE, 'task', taskId, oldValue, { status: updated.status },
+      userId,
+      AuditAction.UPDATE,
+      'task',
+      taskId,
+      oldValue,
+      { status: updated.status },
     );
 
     return updated;
   }
 
   async findByUserId(userId: number): Promise<MaintenanceTask[]> {
-    return await this.taskRepository.find({ where: { assigned_to: userId }, order: { scheduled_date: 'ASC' } });
+    return await this.taskRepository.find({
+      where: { assigned_to: userId },
+      order: { scheduled_date: 'ASC' },
+    });
   }
 
   async findById(taskId: number): Promise<MaintenanceTask | null> {
@@ -149,7 +225,9 @@ export class MaintenanceService {
     const p2 = (lat2 * Math.PI) / 180;
     const dp = ((lat2 - lat1) * Math.PI) / 180;
     const dl = ((lon2 - lon1) * Math.PI) / 180;
-    const a = Math.sin(dp/2)**2 + Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const a =
+      Math.sin(dp / 2) ** 2 +
+      Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 }

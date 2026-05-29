@@ -26,7 +26,9 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('Urban Green Infrastructure API')
-    .setDescription('API documentation for the Urban Green Infrastructure Management System')
+    .setDescription(
+      'API documentation for the Urban Green Infrastructure Management System',
+    )
     .setVersion('1.0')
     .addBearerAuth()
     .build();

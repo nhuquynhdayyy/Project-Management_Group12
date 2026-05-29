@@ -23,9 +23,15 @@ describe('Maintenance Module (e2e)', () => {
     if (typeof location === 'string') {
       const match = location.match(/POINT\(([-\d.]+)\s+([\d.-]+)\)/);
       if (!match) return null;
-      return { longitude: parseFloat(match[1]), latitude: parseFloat(match[2]) };
+      return {
+        longitude: parseFloat(match[1]),
+        latitude: parseFloat(match[2]),
+      };
     }
-    return { longitude: location.coordinates[0], latitude: location.coordinates[1] };
+    return {
+      longitude: location.coordinates[0],
+      latitude: location.coordinates[1],
+    };
   };
 
   beforeAll(async () => {
@@ -90,7 +96,9 @@ describe('Maintenance Module (e2e)', () => {
 
       expect(Array.isArray(res.body)).toBe(true);
       expect(res.body.length).toBeGreaterThan(0);
-      const staffTasks = res.body.filter((task: any) => task.assigned_to === staffUserId);
+      const staffTasks = res.body.filter(
+        (task: any) => task.assigned_to === staffUserId,
+      );
       expect(staffTasks.length).toBeGreaterThan(0);
     });
   });
@@ -105,7 +113,9 @@ describe('Maintenance Module (e2e)', () => {
         .set('Authorization', `Bearer ${staffToken}`)
         .expect(200);
 
-      const pendingTask = myTasks.body.find((task: any) => task.status === PENDING_STATUS);
+      const pendingTask = myTasks.body.find(
+        (task: any) => task.status === PENDING_STATUS,
+      );
       expect(pendingTask).toBeDefined();
       taskId = pendingTask.id;
 
@@ -184,7 +194,9 @@ describe('Maintenance Module (e2e)', () => {
         .set('Authorization', `Bearer ${staffToken}`)
         .expect(200);
 
-      const pendingTask = myTasks.body.find((task: any) => task.status === PENDING_STATUS);
+      const pendingTask = myTasks.body.find(
+        (task: any) => task.status === PENDING_STATUS,
+      );
       expect(pendingTask).toBeDefined();
       taskId = pendingTask.id;
 
@@ -200,7 +212,11 @@ describe('Maintenance Module (e2e)', () => {
         .field('latitude', taskLocation.latitude + NEAR_DELTA)
         .field('longitude', taskLocation.longitude)
         .field('notes', 'Completed with multipart image upload')
-        .attach('evidence_image', Buffer.from('fake-image-bytes'), 'task-image.jpg')
+        .attach(
+          'evidence_image',
+          Buffer.from('fake-image-bytes'),
+          'task-image.jpg',
+        )
         .expect(201);
 
       expect(res.body.status).toBe('Completed');

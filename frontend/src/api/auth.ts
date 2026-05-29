@@ -8,3 +8,7 @@ export async function login(username: string, password: string): Promise<LoginRe
   });
   return data;
 }
+
+export async function logout(): Promise<void> {
+  await apiClient.post('/auth/logout');
+}

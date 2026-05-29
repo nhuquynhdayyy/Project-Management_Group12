@@ -1,7 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { MaintenanceService } from './maintenance.service';
-import { MaintenanceTask, TaskType, TaskStatus } from '../../entities/maintenance-task.entity';
+import {
+  MaintenanceTask,
+  TaskType,
+  TaskStatus,
+} from '../../entities/maintenance-task.entity';
 import { Tree } from '../../entities/tree.entity';
 import { User } from '../auth/user.entity';
 import { CompleteTaskDto } from './dto/complete-task.dto';
@@ -38,7 +42,10 @@ describe('MaintenanceService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MaintenanceService,
-        { provide: getRepositoryToken(MaintenanceTask), useValue: mockTaskRepository },
+        {
+          provide: getRepositoryToken(MaintenanceTask),
+          useValue: mockTaskRepository,
+        },
         { provide: getRepositoryToken(Tree), useValue: mockTreeRepository },
         { provide: getRepositoryToken(User), useValue: mockUserRepository },
         // Provide AuditLogService as a plain value — NestJS will not try to
@@ -108,8 +115,12 @@ describe('MaintenanceService', () => {
       expect(result.assigned_to).toBe(2);
       expect(result.task_type).toBe(TaskType.PRUNING);
       expect(result.status).toBe(TaskStatus.PENDING);
-      expect(mockTreeRepository.findOne).toHaveBeenCalledWith({ where: { id: 1 } });
-      expect(mockUserRepository.findOne).toHaveBeenCalledWith({ where: { id: 2 } });
+      expect(mockTreeRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 1 },
+      });
+      expect(mockUserRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 2 },
+      });
       expect(mockTaskRepository.save).toHaveBeenCalled();
     });
 
@@ -125,8 +136,12 @@ describe('MaintenanceService', () => {
       mockTreeRepository.findOne.mockResolvedValue(null);
 
       // Act & Assert
-      await expect(service.create(createTaskDto)).rejects.toThrow(NotFoundException);
-      await expect(service.create(createTaskDto)).rejects.toThrow('Tree not found');
+      await expect(service.create(createTaskDto)).rejects.toThrow(
+        NotFoundException,
+      );
+      await expect(service.create(createTaskDto)).rejects.toThrow(
+        'Tree not found',
+      );
     });
 
     it('should fail if user does not exist', async () => {
@@ -143,8 +158,12 @@ describe('MaintenanceService', () => {
       mockUserRepository.findOne.mockResolvedValue(null);
 
       // Act & Assert
-      await expect(service.create(createTaskDto)).rejects.toThrow(NotFoundException);
-      await expect(service.create(createTaskDto)).rejects.toThrow('User not found');
+      await expect(service.create(createTaskDto)).rejects.toThrow(
+        NotFoundException,
+      );
+      await expect(service.create(createTaskDto)).rejects.toThrow(
+        'User not found',
+      );
     });
   });
 
@@ -182,10 +201,12 @@ describe('MaintenanceService', () => {
       mockTaskRepository.findOne.mockResolvedValue(mockTask);
 
       // Act & Assert
-      await expect(service.completeTask(taskId, userId, completeDto)).rejects.toThrow(
-        ForbiddenException,
-      );
-      await expect(service.completeTask(taskId, userId, completeDto)).rejects.toThrow(
+      await expect(
+        service.completeTask(taskId, userId, completeDto),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.completeTask(taskId, userId, completeDto),
+      ).rejects.toThrow(
         'You must be within 10 meters of the tree to complete this task',
       );
     });
@@ -241,6 +262,14 @@ describe('MaintenanceService', () => {
       expect(result.completed_at).toBeDefined();
       expect(result.evidence_image_url).toBe(completeDto.evidence_image_url);
       expect(mockTaskRepository.save).toHaveBeenCalled();
+      expect(mockAuditLogService.log).toHaveBeenCalledWith(
+        userId,
+        'COMPLETE',
+        'task',
+        taskId,
+        expect.objectContaining({ status: TaskStatus.IN_PROGRESS }),
+        expect.objectContaining({ status: TaskStatus.COMPLETED }),
+      );
     });
 
     it('should fail if task is not assigned to the user', async () => {
@@ -263,12 +292,12 @@ describe('MaintenanceService', () => {
       mockTaskRepository.findOne.mockResolvedValue(mockTask);
 
       // Act & Assert
-      await expect(service.completeTask(taskId, userId, completeDto)).rejects.toThrow(
-        ForbiddenException,
-      );
-      await expect(service.completeTask(taskId, userId, completeDto)).rejects.toThrow(
-        'You are not assigned to this task',
-      );
+      await expect(
+        service.completeTask(taskId, userId, completeDto),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.completeTask(taskId, userId, completeDto),
+      ).rejects.toThrow('You are not assigned to this task');
     });
 
     it('should fail if task is already completed', async () => {
@@ -290,12 +319,12 @@ describe('MaintenanceService', () => {
       mockTaskRepository.findOne.mockResolvedValue(mockTask);
 
       // Act & Assert
-      await expect(service.completeTask(taskId, userId, completeDto)).rejects.toThrow(
-        ForbiddenException,
-      );
-      await expect(service.completeTask(taskId, userId, completeDto)).rejects.toThrow(
-        'Task is already completed',
-      );
+      await expect(
+        service.completeTask(taskId, userId, completeDto),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.completeTask(taskId, userId, completeDto),
+      ).rejects.toThrow('Task is already completed');
     });
   });
 
@@ -351,7 +380,9 @@ describe('MaintenanceService', () => {
       // Assert
       expect(result).toBeDefined();
       expect(result.id).toBe(taskId);
-      expect(mockTaskRepository.findOne).toHaveBeenCalledWith({ where: { id: taskId } });
+      expect(mockTaskRepository.findOne).toHaveBeenCalledWith({
+        where: { id: taskId },
+      });
     });
 
     it('should return null if task not found', async () => {

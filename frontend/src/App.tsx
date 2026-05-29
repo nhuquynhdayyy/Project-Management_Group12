@@ -6,13 +6,14 @@ import AppShell from './components/AppShell';
 import LoginPage from './pages/LoginPage';
 import MapPage from './pages/MapPage';
 import DashboardPage from './pages/DashboardPage';
+import ActivityLogsPage from './pages/ActivityLogsPage';
 
 function DefaultRedirect() {
   const { user } = useAuth();
   
   // Admin and Manager → Dashboard
   // Staff → Map
-  const hasManagerAccess = user?.roles.some(role => ['Admin', 'Manager'].includes(role));
+  const hasManagerAccess = user?.roles.some(role => ['admin', 'manager'].includes(role.toLowerCase()));
   const defaultPath = hasManagerAccess ? '/dashboard' : '/map';
   
   return <Navigate to={defaultPath} replace />;
@@ -34,6 +35,10 @@ export default function App() {
               {/* Dashboard - Admin/Manager only */}
               <Route element={<RoleGuard allowedRoles={['Admin', 'Manager']} />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
+              </Route>
+
+              <Route element={<RoleGuard allowedRoles={['Admin']} />}>
+                <Route path="/activity-logs" element={<ActivityLogsPage />} />
               </Route>
             </Route>
           </Route>

@@ -10,7 +10,10 @@ import {
 import { Tree } from './tree.entity';
 import { User } from '../modules/auth/user.entity';
 
-const MAINTENANCE_TIMESTAMP_COLUMN = process.env.DB_TYPE === 'sqlite' ? 'datetime' as const : 'timestamp' as const;
+const MAINTENANCE_TIMESTAMP_COLUMN =
+  process.env.DB_TYPE === 'sqlite'
+    ? ('datetime' as const)
+    : ('timestamp' as const);
 
 export enum TaskType {
   PRUNING = 'Cắt tỉa',

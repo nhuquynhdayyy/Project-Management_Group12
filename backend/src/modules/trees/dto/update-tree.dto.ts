@@ -1,33 +1,38 @@
 import {
-  IsString,
-  IsInt,
-  IsOptional,
   IsEnum,
+  IsInt,
   IsNumber,
-  Min,
+  IsOptional,
+  IsString,
   Max,
+  Min,
 } from 'class-validator';
 import { HealthStatus } from '../../../entities/tree.entity';
 
-export class CreateTreeDto {
+export class UpdateTreeDto {
+  @IsOptional()
   @IsString()
-  tree_code: string;
+  tree_code?: string;
 
   @IsOptional()
   @IsString()
   qr_code?: string;
 
+  @IsOptional()
   @IsInt()
-  species_id: number;
+  species_id?: number;
 
+  @IsOptional()
   @IsInt()
-  area_id: number;
+  area_id?: number;
 
+  @IsOptional()
   @IsNumber()
-  latitude: number;
+  latitude?: number;
 
+  @IsOptional()
   @IsNumber()
-  longitude: number;
+  longitude?: number;
 
   @IsOptional()
   @IsInt()
@@ -56,8 +61,4 @@ export class CreateTreeDto {
   @IsOptional()
   @IsEnum(HealthStatus)
   health_status?: HealthStatus;
-
-  @IsOptional()
-  @IsInt()
-  created_by?: number;
 }

@@ -25,7 +25,9 @@ describe('MaintenanceController', () => {
   };
 
   // Minimal mock request with JWT user payload
-  const mockReq = { user: { userId: 2, id: 2, username: 'staff', roles: ['field_worker'] } };
+  const mockReq = {
+    user: { userId: 2, id: 2, username: 'staff', roles: ['field_worker'] },
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -79,7 +81,10 @@ describe('MaintenanceController', () => {
       // Assert
       expect(result).toBeDefined();
       expect(result.id).toBe(1);
-      expect(mockMaintenanceService.create).toHaveBeenCalledWith(createTaskDto, 2);
+      expect(mockMaintenanceService.create).toHaveBeenCalledWith(
+        createTaskDto,
+        2,
+      );
     });
   });
 
@@ -167,12 +172,20 @@ describe('MaintenanceController', () => {
       mockMaintenanceService.updateStatus.mockResolvedValue(mockTask);
 
       // Act
-      const result = await controller.updateStatus('1', updateStatusDto, mockRequest);
+      const result = await controller.updateStatus(
+        '1',
+        updateStatusDto,
+        mockRequest,
+      );
 
       // Assert
       expect(result).toBeDefined();
       expect(result.status).toBe(TaskStatus.IN_PROGRESS);
-      expect(mockMaintenanceService.updateStatus).toHaveBeenCalledWith(1, 2, updateStatusDto);
+      expect(mockMaintenanceService.updateStatus).toHaveBeenCalledWith(
+        1,
+        2,
+        updateStatusDto,
+      );
     });
   });
 

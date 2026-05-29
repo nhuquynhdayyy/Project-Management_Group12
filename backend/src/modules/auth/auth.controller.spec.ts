@@ -9,6 +9,7 @@ describe('AuthController', () => {
   const mockAuthService = {
     register: jest.fn(),
     login: jest.fn(),
+    logout: jest.fn(),
     getUsersByRole: jest.fn(),
     getAllUsers: jest.fn(),
   };
@@ -45,10 +46,16 @@ describe('AuthController', () => {
       roles: ['admin'],
     };
 
-    const mockResult = { id: 1, username: 'test', email: null, full_name: null, roles: [] };
+    const mockResult = {
+      id: 1,
+      username: 'test',
+      email: null,
+      full_name: null,
+      roles: [],
+    };
     mockAuthService.register.mockResolvedValue(mockResult);
 
-    const result = await controller.register(registerDto as any);
+    const result = await controller.register(registerDto);
 
     expect(result).toBeDefined();
     expect(result.username).toBe('test');
@@ -57,7 +64,12 @@ describe('AuthController', () => {
 
   it('should login a user and return access token', async () => {
     const loginDto = { username: 'test', password: 'Test@123' };
-    const mockResult = { access_token: 'jwt.token.here', id: 1, username: 'test', roles: ['admin'] };
+    const mockResult = {
+      access_token: 'jwt.token.here',
+      id: 1,
+      username: 'test',
+      roles: ['admin'],
+    };
     mockAuthService.login.mockResolvedValue(mockResult);
 
     const result = await controller.login(loginDto);
@@ -76,5 +88,15 @@ describe('AuthController', () => {
     expect(result).toBeDefined();
     expect(result.length).toBe(1);
     expect(mockAuthService.getUsersByRole).toHaveBeenCalledWith('admin');
+  });
+
+  it('should logout the current user', async () => {
+    mockAuthService.logout.mockResolvedValue(undefined);
+    const req = { user: { userId: 1, username: 'test' } };
+
+    const result = await controller.logout(req);
+
+    expect(result).toEqual({ success: true });
+    expect(mockAuthService.logout).toHaveBeenCalledWith(1, 'test');
   });
 });

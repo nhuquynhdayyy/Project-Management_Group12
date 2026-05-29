@@ -45,7 +45,10 @@ export class MaintenanceController {
   @ApiResponse({ status: 201, description: 'Task successfully created.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 404, description: 'Tree or User not found.' })
-  async create(@Body() createTaskDto: CreateMaintenanceTaskDto, @Request() req) {
+  async create(
+    @Body() createTaskDto: CreateMaintenanceTaskDto,
+    @Request() req,
+  ) {
     const userId = req.user?.userId ?? req.user?.id ?? null;
     return await this.maintenanceService.create(createTaskDto, userId);
   }
@@ -60,7 +63,10 @@ export class MaintenanceController {
 
   @Get('tasks/my-tasks')
   @ApiOperation({ summary: 'Get tasks assigned to the current user' })
-  @ApiResponse({ status: 200, description: 'List of tasks assigned to the user.' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of tasks assigned to the user.',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async getMyTasks(@Request() req) {
     const userId = req.user.userId || req.user.id;
@@ -90,7 +96,11 @@ export class MaintenanceController {
     @Request() req,
   ) {
     const userId = req.user.userId || req.user.id;
-    return await this.maintenanceService.updateStatus(+id, userId, updateStatusDto);
+    return await this.maintenanceService.updateStatus(
+      +id,
+      userId,
+      updateStatusDto,
+    );
   }
 
   @Post('tasks/:id/complete')
@@ -109,7 +119,8 @@ export class MaintenanceController {
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({
     status: 403,
-    description: 'Not assigned to this task, already completed, or outside geofence radius.',
+    description:
+      'Not assigned to this task, already completed, or outside geofence radius.',
   })
   @ApiResponse({ status: 404, description: 'Task not found.' })
   async completeTask(
@@ -119,6 +130,11 @@ export class MaintenanceController {
     @UploadedFile() evidenceImage?: UploadedFile,
   ) {
     const userId = req.user.userId || req.user.id;
-    return await this.maintenanceService.completeTask(+id, userId, completeDto, evidenceImage);
+    return await this.maintenanceService.completeTask(
+      +id,
+      userId,
+      completeDto,
+      evidenceImage,
+    );
   }
 }

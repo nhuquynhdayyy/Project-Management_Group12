@@ -12,6 +12,8 @@ describe('TreesController', () => {
 
   const mockTreesService = {
     create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
     findAll: jest.fn(),
     findById: jest.fn(),
     findTreesWithinRadius: jest.fn(),
@@ -22,7 +24,9 @@ describe('TreesController', () => {
   };
 
   // Minimal mock request with JWT user payload
-  const mockReq = { user: { userId: 1, id: 1, username: 'admin', roles: ['admin'] } };
+  const mockReq = {
+    user: { userId: 1, id: 1, username: 'admin', roles: ['admin'] },
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -149,7 +153,36 @@ describe('TreesController', () => {
       // Assert
       expect(result).toBeDefined();
       expect(result.length).toBe(2);
-      expect(mockTreesService.findTreesWithinRadius).toHaveBeenCalledWith(findNearbyDto);
+      expect(mockTreesService.findTreesWithinRadius).toHaveBeenCalledWith(
+        findNearbyDto,
+      );
+    });
+  });
+
+  describe('update', () => {
+    it('should update a tree with the current user id', async () => {
+      const mockTree = { id: 1, tree_code: 'TREE001', height_m: 8 };
+      mockTreesService.update.mockResolvedValue(mockTree);
+
+      const result = await controller.update('1', { height_m: 8 }, mockReq);
+
+      expect(result).toBe(mockTree);
+      expect(mockTreesService.update).toHaveBeenCalledWith(
+        1,
+        { height_m: 8 },
+        1,
+      );
+    });
+  });
+
+  describe('delete', () => {
+    it('should delete a tree with the current user id', async () => {
+      mockTreesService.delete.mockResolvedValue(undefined);
+
+      const result = await controller.delete('1', mockReq);
+
+      expect(result).toEqual({ success: true });
+      expect(mockTreesService.delete).toHaveBeenCalledWith(1, 1);
     });
   });
 });
