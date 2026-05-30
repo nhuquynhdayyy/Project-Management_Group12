@@ -89,9 +89,10 @@ export class AuthController {
   @ApiBody({
     schema: {
       type: 'object',
+      required: ['is_active'],
       properties: {
         is_active: { type: 'boolean', example: false },
-        reason: { type: 'string', example: 'Nhân viên nghỉ việc', required: false },
+        reason: { type: 'string', example: 'Nhân viên nghỉ việc' },
       },
     },
   })
