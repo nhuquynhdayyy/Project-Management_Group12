@@ -6,6 +6,7 @@ import AppShell from './components/AppShell';
 import LoginPage from './pages/LoginPage';
 import MapPage from './pages/MapPage';
 import DashboardPage from './pages/DashboardPage';
+import ActivityLogsPage from './pages/ActivityLogsPage';
 import TreeStatsPage from './pages/dashboard/TreeStatsPage';
 import TaskStatsPage from './pages/dashboard/TaskStatsPage';
 import TaskManagementPage from './pages/dashboard/TaskManagementPage';
@@ -18,7 +19,7 @@ function DefaultRedirect() {
   
   // Admin and Manager → Dashboard
   // Staff → Map
-  const hasManagerAccess = user?.roles.some(role => ['Admin', 'Manager'].includes(role));
+  const hasManagerAccess = user?.roles.some(role => ['admin', 'manager'].includes(role.toLowerCase()));
   const defaultPath = hasManagerAccess ? '/dashboard' : '/map';
   
   return <Navigate to={defaultPath} replace />;
@@ -48,6 +49,10 @@ export default function App() {
               </Route>
               <Route element={<RoleGuard allowedRoles={['Admin']} />}>
                 <Route path="/dashboard/users" element={<UsersPage />} />
+              </Route>
+
+              <Route element={<RoleGuard allowedRoles={['Admin']} />}>
+                <Route path="/activity-logs" element={<ActivityLogsPage />} />
               </Route>
             </Route>
           </Route>

@@ -20,30 +20,25 @@ import { CloudStorageService } from './services/cloud-storage.service';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-  type: (config.get<string>('DB_TYPE') as any) || 'postgres',
+        type: (config.get<string>('DB_TYPE') as any) || 'postgres',
 
-  host: config.get<string>('DB_HOST') || 'localhost',
+        host: config.get<string>('DB_HOST') || 'localhost',
 
-  port: parseInt(
-    config.get<string>('DB_PORT') || '5432',
-    10,
-  ),
+        port: parseInt(config.get<string>('DB_PORT') || '5432', 10),
 
-  username:
-    config.get<string>('DB_USERNAME') || 'postgres',
+        username: config.get<string>('DB_USERNAME') || 'postgres',
 
-  password:
-    config.get<string>('DB_PASSWORD') || '123456',
+        password: config.get<string>('DB_PASSWORD') || '123456',
 
-  database:
-    config.get<string>('DB_DATABASE') ||
-    config.get<string>('DB_NAME') ||
-    'urban_tree',
+        database:
+          config.get<string>('DB_DATABASE') ||
+          config.get<string>('DB_NAME') ||
+          'urban_tree',
 
-  autoLoadEntities: true,
+        autoLoadEntities: true,
 
-  synchronize: true,
-}),
+        synchronize: true,
+      }),
     }),
 
     AuthModule,

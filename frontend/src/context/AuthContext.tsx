@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { logout } from '../api/auth';
 import type { LoginResponse } from '../types';
 
 // Normalize roles: backend có thể trả về string[] hoặc {role_name: string}[]
@@ -22,7 +23,7 @@ interface AuthContextValue {
   user: AuthUser | null;
   token: string | null;
   signIn: (data: LoginResponse) => void;
-  signOut: () => void;
+  signOut: () => Promise<void>;
   isAuthenticated: boolean;
 }
 
@@ -59,7 +60,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(u);
   }, []);
 
-  const signOut = useCallback(() => {
+  const signOut = useCallback(async () => {
+    try {
+      await logout();
+    } catch {
+      // Local logout must still happen if the server token is already invalid.
+    }
     localStorage.removeItem('access_token');
     localStorage.removeItem('user');
     setToken(null);
@@ -75,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>');

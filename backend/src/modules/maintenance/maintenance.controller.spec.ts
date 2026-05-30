@@ -110,7 +110,10 @@ describe('MaintenanceController', () => {
       // Assert
       expect(result).toBeDefined();
       expect(result.id).toBe(1);
-      expect(mockMaintenanceService.create).toHaveBeenCalledWith(createTaskDto, 2);
+      expect(mockMaintenanceService.create).toHaveBeenCalledWith(
+        createTaskDto,
+        2,
+      );
     });
   });
 
@@ -198,12 +201,20 @@ describe('MaintenanceController', () => {
       mockMaintenanceService.updateStatus.mockResolvedValue(mockTask);
 
       // Act
-      const result = await controller.updateStatus('1', updateStatusDto, mockRequest);
+      const result = await controller.updateStatus(
+        '1',
+        updateStatusDto,
+        mockRequest,
+      );
 
       // Assert
       expect(result).toBeDefined();
       expect(result.status).toBe(TaskStatus.IN_PROGRESS);
-      expect(mockMaintenanceService.updateStatus).toHaveBeenCalledWith(1, 2, updateStatusDto);
+      expect(mockMaintenanceService.updateStatus).toHaveBeenCalledWith(
+        1,
+        2,
+        updateStatusDto,
+      );
     });
   });
 

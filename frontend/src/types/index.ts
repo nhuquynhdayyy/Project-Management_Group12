@@ -81,6 +81,45 @@ export interface MaintenanceTask {
   updated_at: string;
 }
 
+export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | 'COMPLETE';
+
+export interface AuditUser {
+  id: number;
+  username: string;
+}
+
+export interface ActivityLog {
+  id: number;
+  created_at: string;
+  user_id: number | null;
+  user: AuditUser | null;
+  action: AuditAction;
+  entity_type: string;
+  entity_id: number | null;
+  old_value: Record<string, unknown> | null;
+  new_value: Record<string, unknown> | null;
+  ip_address?: string | null;
+}
+
+export interface ActivityLogFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  userId?: number;
+  action?: AuditAction | '';
+  entityType?: string;
+  from?: string;
+  to?: string;
+}
+
+export interface PaginatedActivityLogs {
+  data: ActivityLog[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
 export interface StaffPerformance {
   username: string;
   completed: number;

@@ -10,7 +10,8 @@ export default function RoleGuard({ allowedRoles, redirectTo = '/map' }: RoleGua
   const { user } = useAuth();
 
   // Check if user has at least one of the allowed roles
-  const hasAccess = user?.roles.some(role => allowedRoles.includes(role));
+  const normalizedAllowedRoles = allowedRoles.map(role => role.toLowerCase());
+  const hasAccess = user?.roles.some(role => normalizedAllowedRoles.includes(role.toLowerCase()));
 
   if (!hasAccess) {
     return <Navigate to={redirectTo} replace />;

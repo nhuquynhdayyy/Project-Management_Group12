@@ -10,14 +10,15 @@
 import { User } from '../modules/auth/user.entity';
 
 const AUDIT_LOG_JSON_TYPE: any =
-  process.env.DB_TYPE === 'sqlite'
-    ? 'simple-json'
-    : 'jsonb';
+  process.env.DB_TYPE === 'sqlite' ? 'simple-json' : 'jsonb';
 
 export enum AuditAction {
   CREATE = 'CREATE',
   UPDATE = 'UPDATE',
   DELETE = 'DELETE',
+  LOGIN = 'LOGIN',
+  LOGOUT = 'LOGOUT',
+  COMPLETE = 'COMPLETE',
 }
 
 @Entity('audit_logs')

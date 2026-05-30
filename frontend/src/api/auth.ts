@@ -9,6 +9,9 @@ export async function login(username: string, password: string): Promise<LoginRe
   return data;
 }
 
+export async function logout(): Promise<void> {
+  await apiClient.post('/auth/logout');
+}
 export async function fetchUsers(): Promise<DashboardUser[]> {
   const { data } = await apiClient.get<DashboardUser[]>('/auth/users');
   return data;

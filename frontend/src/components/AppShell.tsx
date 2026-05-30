@@ -97,14 +97,30 @@ icon: (
     ),
     roles: ['Admin'],
   },
+  {
+    to: '/activity-logs',
+    label: 'Nhật ký hoạt động',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5l5 5v11a2 2 0 01-2 2z" />
+      </svg>
+    ),
+    roles: ['Admin'],
+  },
 ];
+
+function hasAnyRole(userRoles: string[] | undefined, allowedRoles: string[]) {
+  const normalizedAllowedRoles = allowedRoles.map(role => role.toLowerCase());
+  return userRoles?.some(role => normalizedAllowedRoles.includes(role.toLowerCase())) ?? false;
+}
 
 export default function AppShell() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
 
-  function handleLogout() {
-    signOut();
+  async function handleLogout() {
+    await signOut();
     navigate('/login', { replace: true });
   }
 
@@ -128,13 +144,7 @@ export default function AppShell() {
 
         {/* Nav links */}
         <div className="flex-1 px-2 py-4 space-y-1">
-          {NAV_ITEMS.filter(item => 
-            user?.roles.some(role => 
-              item.roles.some(allowedRole => 
-                allowedRole.toLowerCase() === role.toLowerCase()
-              )
-            )
-          ).map(({ to, label, icon, end }) => (
+          {NAV_ITEMS.filter(item => hasAnyRole(user?.roles, item.roles)).map(({ to, label, icon, end }) => (
             <NavLink
               key={to}
               to={to}

@@ -162,7 +162,11 @@ export default function MapPage() {
   const toggleFilter = useCallback((status: HealthStatus) => {
     setActiveFilters((prev) => {
       const next = new Set(prev);
-      next.has(status) ? next.delete(status) : next.add(status);
+      if (next.has(status)) {
+        next.delete(status);
+      } else {
+        next.add(status);
+      }
       return next;
     });
   }, []);

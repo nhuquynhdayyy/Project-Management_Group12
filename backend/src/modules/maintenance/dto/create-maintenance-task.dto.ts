@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsEnum, IsDateString, IsOptional, IsString } from 'class-validator';
+import {
+  IsInt,
+  IsEnum,
+  IsDateString,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import { TaskType } from '../../../entities/maintenance-task.entity';
 
 export class CreateMaintenanceTaskDto {

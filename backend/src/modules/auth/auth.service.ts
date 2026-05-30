@@ -20,7 +20,10 @@ export class AuthService {
     private readonly auditLogService: AuditLogService,
   ) {}
 
-  async register(user: User, roleNames: string[]): Promise<Omit<User, 'password'>> {
+  async register(
+    user: User,
+    roleNames: string[],
+  ): Promise<Omit<User, 'password'>> {
     // Hash password
     const hashedPassword = await bcrypt.hash(user.password, 10);
     user.password = hashedPassword;
@@ -62,24 +65,36 @@ export class AuthService {
     });
 
     if (!user) {
-      this.auditLogService.log(null, AuditAction.CREATE, 'auth', null, null, {
-        action: 'login_failed', reason: 'user_not_found', username,
-      }).catch(() => {});
+      this.auditLogService
+        .log(null, AuditAction.CREATE, 'auth', null, null, {
+          action: 'login_failed',
+          reason: 'user_not_found',
+          username,
+        })
+        .catch(() => {});
       throw new UnauthorizedException('Invalid credentials');
     }
 
     if (!user.is_active) {
-      this.auditLogService.log(user.id, AuditAction.CREATE, 'auth', null, null, {
-        action: 'login_failed', reason: 'account_inactive', username,
-      }).catch(() => {});
+      this.auditLogService
+        .log(user.id, AuditAction.CREATE, 'auth', null, null, {
+          action: 'login_failed',
+          reason: 'account_inactive',
+          username,
+        })
+        .catch(() => {});
       throw new UnauthorizedException('Account is inactive');
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      this.auditLogService.log(user.id, AuditAction.CREATE, 'auth', null, null, {
-        action: 'login_failed', reason: 'invalid_password', username,
-      }).catch(() => {});
+      this.auditLogService
+        .log(user.id, AuditAction.CREATE, 'auth', null, null, {
+          action: 'login_failed',
+          reason: 'invalid_password',
+          username,
+        })
+        .catch(() => {});
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -100,9 +115,12 @@ export class AuthService {
     };
 
     // Fire-and-forget successful login log
-    this.auditLogService.log(user.id, AuditAction.CREATE, 'auth', null, null, {
-      action: 'login_success', username, roles: roleNames,
-    }).catch(() => {});
+    this.auditLogService
+      .log(user.id, AuditAction.LOGIN, 'auth', null, null, {
+        username,
+        roles: roleNames,
+      })
+      .catch(() => {});
 
     return {
       access_token: this.jwtService.sign(payload),
@@ -118,6 +136,19 @@ export class AuthService {
       where: { id: payload.sub },
 relations: ['roles'],
     });
+  }
+
+  async logout(userId: number, username?: string): Promise<void> {
+    await this.auditLogService.log(
+      userId,
+      AuditAction.LOGOUT,
+      'auth',
+      null,
+      null,
+      {
+        username,
+      },
+    );
   }
 
   async getUsersByRole(roleName: string): Promise<Omit<User, 'password'>[]> {

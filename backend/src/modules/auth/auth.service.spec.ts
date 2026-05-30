@@ -42,9 +42,13 @@ describe('AuthService', () => {
 
   // Các Mock Repositories và Services
   const mockUserRepository = {
-    save: jest.fn(),
-    findOne: jest.fn(),
-    find: jest.fn(),
+    save: jest
+      .fn()
+      .mockImplementation((user) =>
+        Promise.resolve({ ...mockUser, ...user, id: 1 }),
+      ),
+    findOne: jest.fn().mockResolvedValue(mockUser),
+    find: jest.fn().mockResolvedValue([]),
     update: jest.fn().mockResolvedValue({ affected: 1 }),
     createQueryBuilder: jest.fn(),
   };
@@ -145,6 +149,32 @@ describe('AuthService', () => {
         UnauthorizedException,
       );
     });
+  });
+
+  it('should create a LOGIN audit log on successful login', async () => {
+    await service.login('test', 'test');
+
+    expect(mockAuditLogService.log).toHaveBeenCalledWith(
+      1,
+      'LOGIN',
+      'auth',
+      null,
+      null,
+      expect.objectContaining({ username: 'test', roles: ['admin'] }),
+    );
+  });
+
+  it('should create a LOGOUT audit log', async () => {
+    await service.logout(1, 'test');
+
+    expect(mockAuditLogService.log).toHaveBeenCalledWith(
+      1,
+      'LOGOUT',
+      'auth',
+      null,
+      null,
+      { username: 'test' },
+    );
   });
 
   // ─────────────────────────────────────────────────────────────────────────────

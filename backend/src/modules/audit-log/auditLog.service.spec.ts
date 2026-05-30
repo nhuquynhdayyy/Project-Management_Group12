@@ -14,6 +14,7 @@ describe('AuditLogService', () => {
       return log;
     }),
     find: jest.fn(async () => savedLogs),
+    createQueryBuilder: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -30,9 +31,15 @@ describe('AuditLogService', () => {
     service = module.get<AuditLogService>(AuditLogService);
   });
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   describe('log()', () => {
     it('should save an audit log entry with correct fields', async () => {
-      await service.log(1, AuditAction.CREATE, 'tree', 42, null, { tree_code: 'T001' });
+      await service.log(1, AuditAction.CREATE, 'tree', 42, null, {
+        tree_code: 'T001',
+      });
 
       expect(mockRepo.save).toHaveBeenCalledTimes(1);
       const saved = savedLogs[0];
@@ -41,6 +48,16 @@ describe('AuditLogService', () => {
       expect(saved.entity_type).toBe('tree');
       expect(saved.entity_id).toBe(42);
       expect(saved.new_value).toEqual({ tree_code: 'T001' });
+    });
+
+    it('should store created_at using Vietnam current time', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-05-30T01:00:00.000Z'));
+
+      await service.log(1, AuditAction.LOGIN, 'auth', null);
+
+      expect(savedLogs[0].created_at).toEqual(
+        new Date('2026-05-30T08:00:00.000Z'),
+      );
     });
 
     it('should NOT throw when the repository throws', async () => {
@@ -69,14 +86,11 @@ describe('AuditLogService', () => {
     });
 
     it('should strip token and access_token from values', async () => {
-      await service.log(
-        1,
-        AuditAction.CREATE,
-        'auth',
-        null,
-        null,
-        { access_token: 'jwt.token.here', token: 'abc', userId: 3 },
-      );
+      await service.log(1, AuditAction.CREATE, 'auth', null, null, {
+        access_token: 'jwt.token.here',
+        token: 'abc',
+        userId: 3,
+      });
 
       const saved = savedLogs[0];
       expect(saved.new_value).not.toHaveProperty('access_token');
@@ -138,6 +152,90 @@ describe('AuditLogService', () => {
           order: { created_at: 'DESC' },
         }),
       );
+    });
+  });
+
+  describe('findActivityLogs()', () => {
+    const createQueryBuilder = () => {
+      const builder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([
+          [
+            {
+              id: 1,
+              action: AuditAction.CREATE,
+              entity_type: 'tree',
+              user: { id: 1, username: 'admin', password: 'secret' },
+            } as AuditLog,
+          ],
+          1,
+        ]),
+      };
+      mockRepo.createQueryBuilder.mockReturnValue(builder);
+      return builder;
+    };
+
+    it('should return paginated activity logs with metadata', async () => {
+      createQueryBuilder();
+
+      const result = await service.findActivityLogs({ page: 2, limit: 10 });
+
+      expect(result.meta).toEqual({
+        total: 1,
+        page: 2,
+        limit: 10,
+        totalPages: 1,
+      });
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('should apply user, action, entity type, search, and date filters', async () => {
+      const builder = createQueryBuilder();
+
+      await service.findActivityLogs({
+        user_id: 1,
+        action: AuditAction.UPDATE,
+        entity_type: 'task',
+        search: 'TREE-001',
+        from: new Date('2026-05-01T00:00:00.000Z'),
+        to: new Date('2026-05-31T23:59:59.999Z'),
+      });
+
+      expect(builder.andWhere).toHaveBeenCalledWith('log.user_id = :userId', {
+        userId: 1,
+      });
+      expect(builder.andWhere).toHaveBeenCalledWith('log.action = :action', {
+        action: AuditAction.UPDATE,
+      });
+      expect(builder.andWhere).toHaveBeenCalledWith(
+        'log.entity_type = :entityType',
+        {
+          entityType: 'task',
+        },
+      );
+      expect(builder.andWhere).toHaveBeenCalledWith('log.created_at >= :from', {
+        from: new Date('2026-05-01T00:00:00.000Z'),
+      });
+      expect(builder.andWhere).toHaveBeenCalledWith('log.created_at <= :to', {
+        to: new Date('2026-05-31T23:59:59.999Z'),
+      });
+      expect(builder.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('LOWER'),
+        expect.objectContaining({ search: '%tree-001%' }),
+      );
+    });
+
+    it('should strip user passwords from paginated results', async () => {
+      createQueryBuilder();
+
+      const result = await service.findActivityLogs();
+
+      expect((result.data[0].user as any).password).toBeUndefined();
     });
   });
 });

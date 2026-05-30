@@ -12,6 +12,7 @@ describe('AuthController', () => {
   const mockAuthService = {
     register: jest.fn(),
     login: jest.fn(),
+    logout: jest.fn(),
     getUsersByRole: jest.fn(),
     getAllUsers: jest.fn(),
   };
@@ -118,5 +119,15 @@ describe('AuthController', () => {
       const result = await controller.getUsersByRole('NonExistentRole');
       expect(result).toEqual([]);
     });
+  });
+
+  it('should logout the current user', async () => {
+    mockAuthService.logout.mockResolvedValue(undefined);
+    const req = { user: { userId: 1, username: 'test' } };
+
+    const result = await controller.logout(req);
+
+    expect(result).toEqual({ success: true });
+    expect(mockAuthService.logout).toHaveBeenCalledWith(1, 'test');
   });
 });

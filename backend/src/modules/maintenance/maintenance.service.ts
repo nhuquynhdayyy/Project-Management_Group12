@@ -34,7 +34,9 @@ export class MaintenanceService {
     const tree = await this.treeRepository.findOne({ where: { id: createTaskDto.tree_id } });
     if (!tree) throw new NotFoundException('Tree not found');
 
-    const user = await this.userRepository.findOne({ where: { id: createTaskDto.assigned_to } });
+    const user = await this.userRepository.findOne({
+      where: { id: createTaskDto.assigned_to },
+    });
     if (!user) throw new NotFoundException('User not found');
 
     const task = this.taskRepository.create({
@@ -50,8 +52,16 @@ export class MaintenanceService {
 
     // Ghi log bảo mật: Ai đã tạo task cho ai
     await this.auditLogService.log(
-      userId ?? null, AuditAction.CREATE, 'task', saved.id, null,
-      { tree_id: saved.tree_id, assigned_to: saved.assigned_to, task_type: saved.task_type },
+      userId ?? null,
+      AuditAction.CREATE,
+      'task',
+      saved.id,
+      null,
+      {
+        tree_id: saved.tree_id,
+        assigned_to: saved.assigned_to,
+        task_type: saved.task_type,
+      },
     );
 
     return saved;
@@ -64,13 +74,12 @@ export class MaintenanceService {
     taskId: number,
     userId: number,
     completeDto: CompleteTaskDto,
-    imageFile?: Express.Multer.File,
+    evidenceImage?: UploadedFile,
   ): Promise<MaintenanceTask> {
-    const task = await this.taskRepository.findOne({ 
-      where: { id: taskId }, 
-      relations: ['tree'] 
+    const task = await this.taskRepository.findOne({
+      where: { id: taskId },
+      relations: ['tree'],
     });
-
     if (!task) throw new NotFoundException('Task not found');
 
     // Kiểm tra quyền: Chỉ người được giao mới được hoàn thành
@@ -87,13 +96,19 @@ export class MaintenanceService {
     const distance = this.calculateDistance(completeDto.latitude, completeDto.longitude, task.tree);
     if (distance > this.MAX_DISTANCE_METERS) {
       await this.auditLogService.log(
-        userId, AuditAction.UPDATE, 'task', taskId,
+        userId,
+        AuditAction.UPDATE,
+        'task',
+        taskId,
         { status: task.status },
-        { 
-          error: 'GEOFENCE_FAIL', 
-          distance: parseFloat(distance.toFixed(1)), 
-          maxAllowed: this.MAX_DISTANCE_METERS,
-          gps: { lat: completeDto.latitude, lng: completeDto.longitude } 
+        {
+          error: 'GEOFENCE_FAIL',
+          distance: parseFloat(distance.toFixed(1)),
+          maxDistance: this.MAX_DISTANCE_METERS,
+          gps: {
+            latitude: completeDto.latitude,
+            longitude: completeDto.longitude,
+          },
         },
       );
       throw new ForbiddenException(`Bạn ở quá xa cây (${distance.toFixed(1)}m). Vui lòng di chuyển đến gần trong vòng ${this.MAX_DISTANCE_METERS}m.`);
@@ -109,32 +124,51 @@ export class MaintenanceService {
     const oldValue = { status: task.status, evidence_image_url: task.evidence_image_url };
     task.status = TaskStatus.COMPLETED;
     task.completed_at = new Date();
-    task.evidence_image_url = imageUrl || task.evidence_image_url;
-    
+    task.evidence_image_url =
+      completeDto.evidence_image_url ||
+      (evidenceImage ? this.generateEvidenceImageUrl(evidenceImage) : null);
     if (completeDto.notes) {
-      task.notes = task.notes ? `${task.notes}\n\n[Completion Notes]: ${completeDto.notes}` : completeDto.notes;
+      task.notes = task.notes
+        ? `${task.notes}\n\nCompletion notes: ${completeDto.notes}`
+        : completeDto.notes;
     }
 
     const updated = await this.taskRepository.save(task);
 
     // Ghi log bảo mật thành công kèm tọa độ xác thực
     await this.auditLogService.log(
-      userId, AuditAction.UPDATE, 'task', taskId, oldValue,
-      { 
-        status: updated.status, 
-        completed_at: updated.completed_at, 
-        gps_verified: { lat: completeDto.latitude, lng: completeDto.longitude },
-        image_stored: !!imageUrl 
-      }
+      userId,
+      AuditAction.COMPLETE,
+      'task',
+      taskId,
+      oldValue,
+      {
+        status: updated.status,
+        completed_at: updated.completed_at,
+        gps: {
+          latitude: completeDto.latitude,
+          longitude: completeDto.longitude,
+        },
+      },
     );
 
     return updated;
   }
 
-  async updateStatus(taskId: number, userId: number, updateStatusDto: UpdateTaskStatusDto): Promise<MaintenanceTask> {
+  private generateEvidenceImageUrl(file: UploadedFile): string {
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '-');
+    return `https://fake-storage.example.com/evidence/${Date.now()}-${safeName}`;
+  }
+
+  async updateStatus(
+    taskId: number,
+    userId: number,
+    updateStatusDto: UpdateTaskStatusDto,
+  ): Promise<MaintenanceTask> {
     const task = await this.taskRepository.findOne({ where: { id: taskId } });
     if (!task) throw new NotFoundException('Task not found');
-    if (task.assigned_to !== userId) throw new ForbiddenException('You are not assigned to this task');
+    if (task.assigned_to !== userId)
+      throw new ForbiddenException('You are not assigned to this task');
 
     const oldValue = { status: task.status };
     task.status = updateStatusDto.status;
@@ -254,17 +288,14 @@ export class MaintenanceService {
 
     const lon2 = loc.coordinates[0];
     const lat2 = loc.coordinates[1];
-    const R = 6371e3; // Bán kính Trái Đất (mét)
-    const φ1 = (lat1 * Math.PI) / 180;
-    const φ2 = (lat2 * Math.PI) / 180;
-    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c;
+    const R = 6371e3;
+    const p1 = (lat1 * Math.PI) / 180;
+    const p2 = (lat2 * Math.PI) / 180;
+    const dp = ((lat2 - lat1) * Math.PI) / 180;
+    const dl = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dp / 2) ** 2 +
+      Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 }
