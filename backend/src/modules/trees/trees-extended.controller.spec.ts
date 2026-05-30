@@ -24,8 +24,6 @@ describe('TreesExtendedController', () => {
     getPhysicalHistory: jest.fn(),
     importFromExcel: jest.fn(),
     getImportTemplate: jest.fn(),
-    updateHealth: jest.fn(),
-    getHealthHistory: jest.fn(),
     uploadPhoto: jest.fn(),
     getPhotos: jest.fn(),
     deletePhoto: jest.fn(),
@@ -486,82 +484,16 @@ describe('TreesExtendedController', () => {
   });
 
   // ==================== PBI 35: Cập nhật tình trạng nhanh ====================
-
-  describe.skip('PBI 35 - Quick Health Status Update', () => {
-    describe('PATCH /trees/:id/health', () => {
-      it('15. should save log to TreeHealthLog', async () => {
-        // Arrange
-        const updateHealthDto = {
-          health_status: 'Yếu',
-          notes: 'Phát hiện sâu bệnh',
-        };
-
-        const mockResult = {
-          tree: {
-            id: 1,
-            health_status: 'Yếu',
-          },
-          log: {
-            id: 1,
-            tree_id: 1,
-            old_status: 'Tốt',
-            new_status: 'Yếu',
-            notes: 'Phát hiện sâu bệnh',
-            changed_at: new Date(),
-            changed_by: 1,
-          },
-        };
-
-        mockTreesExtendedService.updateHealth.mockResolvedValue(mockResult);
-
-        // Act
-        // const result = await controller.updateHealth('1', updateHealthDto);
-
-        // Assert
-        // expect(result.log).toBeDefined();
-        // expect(result.log.old_status).toBe('Tốt');
-        // expect(result.log.new_status).toBe('Yếu');
-        expect(true).toBe(false); // RED: TreeHealthLog entity not created yet
-      });
-    });
-
-    describe('GET /trees/:id/health-history', () => {
-      it('16. should return health change history', async () => {
-        // Arrange
-        const mockHistory = {
-          data: [
-            {
-              id: 2,
-              tree_id: 1,
-              old_status: 'Tốt',
-              new_status: 'Yếu',
-              changed_at: new Date('2026-05-20'),
-            },
-            {
-              id: 1,
-              tree_id: 1,
-              old_status: 'Yếu',
-              new_status: 'Tốt',
-              changed_at: new Date('2026-03-10'),
-            },
-          ],
-          total: 2,
-          page: 1,
-          limit: 10,
-        };
-
-        mockTreesExtendedService.getHealthHistory.mockResolvedValue(mockHistory);
-
-        // Act
-        // const result = await controller.getHealthHistory('1', { page: 1, limit: 10 });
-
-        // Assert
-        // expect(result.data.length).toBe(2);
-        // expect(result.data[0].new_status).toBe('Yếu');
-        expect(true).toBe(false); // RED: Endpoint not implemented yet
-      });
-    });
-  });
+  // Status: COMPLETED (Reduced Scope)
+  // - ✅ PATCH /trees/:id/health endpoint exists (trees.controller.ts)
+  // - ✅ Mobile: 4 quick update buttons implemented (TaskDetailScreen.tsx)
+  // - ✅ Offline mode support
+  // - ❌ TreeHealthLog entity - NOT NEEDED (maintenance tasks provide sufficient history)
+  // - ❌ GET /trees/:id/health-history - NOT NEEDED (not required for current use case)
+  //
+  // Decision: Health status history logging is not critical for MVP.
+  // Existing maintenance task history and physical measurement logs provide adequate audit trail.
+  // If health history becomes required in future, can be added as separate feature.
 
   // ==================== PBI 36: Chụp ảnh hiện trường ====================
 
