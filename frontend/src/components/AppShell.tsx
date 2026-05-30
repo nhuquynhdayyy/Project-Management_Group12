@@ -151,7 +151,16 @@ export default function AppShell() {
 
         {/* User section */}
         <div className="px-3 py-3 border-t border-gray-800">
-          <div className="flex items-center gap-2.5 mb-2.5">
+          <NavLink
+            to="/profile"
+            className={({ isActive }) =>
+              `flex items-center gap-2.5 mb-2.5 px-2 py-2 rounded-lg transition-colors
+              ${isActive
+                ? 'bg-green-600/20'
+                : 'hover:bg-gray-800'
+              }`
+            }
+          >
             <div className="w-7 h-7 rounded-full bg-green-700 flex items-center justify-center text-xs font-bold uppercase shrink-0">
               {user?.username?.[0] ?? '?'}
             </div>
@@ -159,9 +168,9 @@ export default function AppShell() {
               <p className="text-xs font-medium text-white truncate">{user?.username}</p>
               <p className="text-[10px] text-gray-500 truncate">
                 {user?.roles.join(', ')}
-</p>
+              </p>
             </div>
-          </div>
+          </NavLink>
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs text-gray-400

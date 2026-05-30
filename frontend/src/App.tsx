@@ -4,6 +4,9 @@ import ProtectedRoute from './components/ProtectedRoute';
 import RoleGuard from './components/RoleGuard';
 import AppShell from './components/AppShell';
 import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
+import ProfilePage from './pages/ProfilePage';
 import MapPage from './pages/MapPage';
 import DashboardPage from './pages/DashboardPage';
 import TreeStatsPage from './pages/dashboard/TreeStatsPage';
@@ -31,11 +34,14 @@ export default function App() {
         <Routes>
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
 
           {/* Protected — all share the AppShell sidebar */}
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
               <Route path="/map" element={<MapPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
               
               {/* Dashboard - Admin/Manager only */}
               <Route element={<RoleGuard allowedRoles={['Admin', 'Manager']} />}>

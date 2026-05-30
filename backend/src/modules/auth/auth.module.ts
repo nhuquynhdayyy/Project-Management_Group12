@@ -10,6 +10,8 @@ import { Role } from '../../entities/role.entity';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { MailModule } from '../mail/mail.module';
+import { StorageModule } from '../storage/storage.module';
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { RolesGuard } from '../../common/guards/roles.guard';
         signOptions: { expiresIn: '1h' },
       }),
     }),
+    MailModule,
+    StorageModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, JwtAuthGuard, RolesGuard],
