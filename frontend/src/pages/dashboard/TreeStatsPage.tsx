@@ -12,7 +12,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { fetchTrees, fetchAreas } from '../../api/trees';
+import {
+  fetchTrees,
+  fetchAreas,
+} from '../../api/trees';
 import type { HealthStatus, Tree, AdministrativeArea } from '../../types';
 import {
   BAR_COLOR,

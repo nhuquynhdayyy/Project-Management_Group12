@@ -1,6 +1,36 @@
 import apiClient from './client';
 import type { AdministrativeArea, Tree, TreeSpecies } from '../types';
 
+export interface ExcelTreeRow {
+  tree_code: string;
+  species: string;
+  area_name: string;
+  latitude: number;
+  longitude: number;
+  height_m?: number;
+  trunk_diameter_cm?: number;
+  health_status?: string;
+  planting_year?: number;
+}
+
+export interface TreeImportError {
+  row: number;
+  message: string;
+}
+
+export interface TreeImportPreview {
+  total: number;
+  rows: ExcelTreeRow[];
+  errors: TreeImportError[];
+}
+
+export interface TreeImportResult {
+  total: number;
+  imported: number;
+  skipped: number;
+  errors: TreeImportError[];
+}
+
 export async function fetchTrees(): Promise<Tree[]> {
   const { data } = await apiClient.get<Tree[]>('/trees');
   return data;
@@ -18,6 +48,31 @@ export async function fetchTreeSpecies(): Promise<TreeSpecies[]> {
 
 export async function fetchAreas(): Promise<AdministrativeArea[]> {
   const { data } = await apiClient.get<AdministrativeArea[]>('/trees/areas');
+  return data;
+}
+
+export async function previewTreeImport(file: File): Promise<TreeImportPreview> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await apiClient.post<TreeImportPreview>('/trees/import/preview', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
+
+export async function importTreesFromExcel(file: File): Promise<TreeImportResult> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await apiClient.post<TreeImportResult>('/trees/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
+
+export async function downloadTreeImportTemplate(): Promise<Blob> {
+  const { data } = await apiClient.get<Blob>('/trees/import/template', {
+    responseType: 'blob',
+  });
   return data;
 }
 

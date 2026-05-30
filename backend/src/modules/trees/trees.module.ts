@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TreesController } from './trees.controller';
 import { TreesService } from './trees.service';
+import { ImportService } from './import.service';
 import { Tree } from '../../entities/tree.entity';
 import { TreeSpecies } from '../../entities/tree-species.entity';
 import { AdministrativeArea } from '../../entities/administrative-area.entity';
@@ -14,7 +15,7 @@ import { AuthModule } from '../auth/auth.module';
     AuthModule,
   ],
   controllers: [TreesController],
-  providers: [TreesService],
+  providers: [TreesService, ImportService],
   exports: [TreesService],
 })
 export class TreesModule {}

@@ -1,8 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AreasController } from './areas.controller';
 import { AreasService } from './areas.service';
-import { CreateAreaDto, AreaType } from './dto/create-area.dto';
+import { CreateAreaDto } from './dto/create-area.dto';
 import { UpdateAreaDto } from './dto/update-area.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 describe('AreasController', () => {
   let controller: AreasController;
@@ -23,7 +25,12 @@ describe('AreasController', () => {
           useValue: mockAreasService,
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: jest.fn(() => true) })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: jest.fn(() => true) })
+      .compile();
 
     controller = module.get<AreasController>(AreasController);
     service = module.get<AreasService>(AreasService);
@@ -37,7 +44,6 @@ describe('AreasController', () => {
     it('should create a new area', async () => {
       const createDto: CreateAreaDto = {
         name: 'Quận Liên Chiểu',
-        type: AreaType.DISTRICT,
       };
 
       const mockResult = {

@@ -219,12 +219,12 @@ describe('MaintenanceController', () => {
       mockMaintenanceService.completeTask.mockResolvedValue(mockTask);
 
       // Act
-      const result = await controller.completeTask('1', completeDto, mockRequest);
+      const result = await controller.completeTask('1', completeDto, undefined as any, mockRequest);
 
       // Assert
       expect(result).toBeDefined();
       expect(result.status).toBe(TaskStatus.COMPLETED);
-      expect(mockMaintenanceService.completeTask).toHaveBeenCalledWith(1, 2, completeDto);
+      expect(mockMaintenanceService.completeTask).toHaveBeenCalledWith(1, 2, completeDto, undefined);
     });
   });
 

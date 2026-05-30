@@ -338,8 +338,6 @@ describe('TreesService', () => {
       expect(mockTreeRepository.find).toHaveBeenCalled();
     });
   });
-});
-
   describe('updatePhysical', () => {
     it('should update physical measurements and create log', async () => {
       // Arrange
@@ -618,3 +616,4 @@ describe('TreesService', () => {
       await expect(service.getPhysicalHistory(treeId, query)).rejects.toThrow('Tree not found');
     });
   });
+});

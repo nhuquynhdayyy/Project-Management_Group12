@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TreesController } from './trees.controller';
 import { TreesService } from './trees.service';
+import { ImportService } from './import.service';
 import { CreateTreeDto } from './dto/create-tree.dto';
 import { FindTreesNearbyDto } from './dto/find-trees-nearby.dto';
 import { HealthStatus } from '../../entities/tree.entity';
@@ -17,6 +18,13 @@ describe('TreesController', () => {
     findTreesWithinRadius: jest.fn(),
   };
 
+  const mockImportService = {
+    createTemplate: jest.fn(),
+    parseExcel: jest.fn(),
+    previewRows: jest.fn(),
+    importTrees: jest.fn(),
+  };
+
   const mockJwtAuthGuard = {
     canActivate: jest.fn(() => true),
   };
@@ -28,6 +36,10 @@ describe('TreesController', () => {
         {
           provide: TreesService,
           useValue: mockTreesService,
+        },
+        {
+          provide: ImportService,
+          useValue: mockImportService,
         },
       ],
     })
@@ -143,6 +155,40 @@ describe('TreesController', () => {
       expect(result).toBeDefined();
       expect(result.length).toBe(2);
       expect(mockTreesService.findTreesWithinRadius).toHaveBeenCalledWith(findNearbyDto);
+    });
+  });
+
+  describe('importTrees', () => {
+    it('should parse and import xlsx file', async () => {
+      // Arrange
+      const file = {
+        originalname: 'trees.xlsx',
+        buffer: Buffer.from('fake-xlsx'),
+      } as Express.Multer.File;
+      const rows = [{ tree_code: 'LC-001' }];
+      const importResult = { total: 1, imported: 1, skipped: 0, errors: [] };
+
+      mockImportService.parseExcel.mockResolvedValue(rows);
+      mockImportService.importTrees.mockResolvedValue(importResult);
+
+      // Act
+      const result = await controller.importTrees(file);
+
+      // Assert
+      expect(result).toEqual(importResult);
+      expect(mockImportService.parseExcel).toHaveBeenCalledWith(file.buffer);
+      expect(mockImportService.importTrees).toHaveBeenCalledWith(rows);
+    });
+
+    it('should reject non-xlsx files', async () => {
+      // Arrange
+      const file = {
+        originalname: 'trees.csv',
+        buffer: Buffer.from('csv'),
+      } as Express.Multer.File;
+
+      // Act & Assert
+      await expect(controller.importTrees(file)).rejects.toThrow('Only .xlsx files are supported');
     });
   });
 });
