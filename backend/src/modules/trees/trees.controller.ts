@@ -150,4 +150,40 @@ export class TreesController {
   ) {
     return await this.treesService.updateHealthStatus(+id, healthStatus);
   }
+
+  @Get('check-code')
+  @UseGuards(RolesGuard)
+  @Roles('Admin', 'Manager')
+  @ApiOperation({ summary: 'Check if tree code exists' })
+  @ApiQuery({ name: 'code', required: true, type: String })
+  @ApiQuery({ name: 'excludeId', required: false, type: Number })
+  async checkTreeCode(
+    @Query('code') code: string,
+    @Query('excludeId') excludeId?: string,
+  ) {
+    // Trả về true/false trực tiếp để khớp với logic "return response.data" ở Frontend
+    return await this.treesService.checkTreeCodeExists(
+      code,
+      excludeId ? +excludeId : undefined,
+    );
+  }
+
+  @Get('check-location')
+  @UseGuards(RolesGuard)
+  @Roles('Admin', 'Manager')
+  @ApiOperation({ summary: 'Check if location has existing tree' })
+  @ApiQuery({ name: 'lat', required: true, type: Number })
+  @ApiQuery({ name: 'lng', required: true, type: Number })
+  @ApiQuery({ name: 'excludeId', required: false, type: Number })
+  async checkLocation(
+    @Query('lat') lat: string,
+    @Query('lng') lng: string,
+    @Query('excludeId') excludeId?: string,
+  ) {
+    return await this.treesService.checkLocationExists(
+      +lat,
+      +lng,
+      excludeId ? +excludeId : undefined,
+    );
+  }
 }

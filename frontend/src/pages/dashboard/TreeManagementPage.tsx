@@ -8,6 +8,8 @@ import {
   fetchTasksByTreeId,
   getTreeQRCodeBlobUrl,
   downloadTreeQRCode,
+  checkTreeCodeExists,
+  checkLocationExists,
   type CreateTreePayload,
 } from '../../api/trees';
 import { createTask, type CreateTaskPayload } from '../../api/maintenance';
@@ -481,10 +483,78 @@ function CreateTreeModal({
   const [trunkDiameter, setTrunkDiameter] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  
+  // Validation states
+  const [treeCodeError, setTreeCodeError] = useState('');
+  const [locationError, setLocationError] = useState('');
+  const [checkingTreeCode, setCheckingTreeCode] = useState(false);
+  const [checkingLocation, setCheckingLocation] = useState(false);
+
+  // Kiểm tra mã cây khi người dùng nhập xong (onBlur)
+  async function handleTreeCodeBlur() {
+    const code = treeCode.trim();
+    if (!code) {
+      setTreeCodeError('');
+      return;
+    }
+
+    setCheckingTreeCode(true);
+    setTreeCodeError('');
+    try {
+      const exists = await checkTreeCodeExists(code);
+      if (exists) {
+        setTreeCodeError('⚠️ Mã cây này đã tồn tại trong hệ thống');
+      }
+    } catch (err) {
+      console.error('Error checking tree code:', err);
+    } finally {
+      setCheckingTreeCode(false);
+    }
+  }
+
+  // Kiểm tra tọa độ
+  async function checkLocation(lat: string, lng: string) {
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+    
+    if (!lat || !lng || isNaN(latNum) || isNaN(lngNum)) {
+      setLocationError('');
+      return;
+    }
+
+    setCheckingLocation(true);
+    setLocationError('');
+    try {
+      const result = await checkLocationExists(latNum, lngNum);
+      if (result.exists && result.tree) {
+        setLocationError(
+          `⚠️ Vị trí này đã được đăng ký cho cây ${result.tree.tree_code}. Vui lòng kiểm tra lại.`
+        );
+      }
+    } catch (err) {
+      console.error('Error checking location:', err);
+    } finally {
+      setCheckingLocation(false);
+    }
+  }
+
+  // Kiểm tra tọa độ khi người dùng nhập xong
+  function handleLocationBlur() {
+    if (latitude && longitude) {
+      checkLocation(latitude, longitude);
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setFormError('');
+    
+    // Kiểm tra lỗi validation trước khi submit
+    if (treeCodeError || locationError) {
+      setFormError('Vui lòng sửa các lỗi trước khi lưu');
+      return;
+    }
+    
     if (!treeCode.trim() || !speciesId || !areaId || !latitude || !longitude) {
       setFormError('Vui lòng điền đầy đủ các trường bắt buộc.');
       return;
@@ -527,7 +597,27 @@ function CreateTreeModal({
         <form onSubmit={handleSubmit} className="px-5 py-4 space-y-3 max-h-[70vh] overflow-y-auto">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-gray-400">Mã cây <span className="text-red-400">*</span></label>
-            <input type="text" value={treeCode} onChange={(e) => setTreeCode(e.target.value)} required className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500" />
+            <input 
+              type="text" 
+              value={treeCode} 
+              onChange={(e) => {
+                setTreeCode(e.target.value);
+                setTreeCodeError(''); // Xóa lỗi khi người dùng đang nhập
+              }}
+              onBlur={handleTreeCodeBlur}
+              required 
+              className={`w-full rounded-lg border px-3 py-2 text-sm text-gray-200 outline-none ${
+                treeCodeError
+                  ? 'border-red-600 bg-red-900/20 focus:border-red-500'
+                  : 'border-gray-700 bg-gray-900 focus:border-green-500'
+              }`}
+            />
+            {checkingTreeCode && (
+              <p className="mt-1 text-xs text-blue-400">Đang kiểm tra...</p>
+            )}
+            {treeCodeError && (
+              <p className="mt-1 text-xs text-red-400">{treeCodeError}</p>
+            )}
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-medium text-gray-400">Loài cây <span className="text-red-400">*</span></label>
@@ -546,13 +636,55 @@ function CreateTreeModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-xs font-medium text-gray-400">Vĩ độ <span className="text-red-400">*</span></label>
-              <input type="number" step="any" value={latitude} onChange={(e) => setLatitude(e.target.value)} required placeholder="10.7769" className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500" />
+              <input 
+                type="number" 
+                step="any" 
+                value={latitude} 
+                onChange={(e) => {
+                  setLatitude(e.target.value);
+                  setLocationError(''); // Xóa lỗi khi người dùng đang nhập
+                }}
+                onBlur={handleLocationBlur}
+                required 
+                placeholder="10.7769" 
+                className={`w-full rounded-lg border px-3 py-2 text-sm text-gray-200 outline-none ${
+                  locationError
+                    ? 'border-red-600 bg-red-900/20 focus:border-red-500'
+                    : 'border-gray-700 bg-gray-900 focus:border-green-500'
+                }`}
+              />
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-gray-400">Kinh độ <span className="text-red-400">*</span></label>
-              <input type="number" step="any" value={longitude} onChange={(e) => setLongitude(e.target.value)} required placeholder="106.7009" className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500" />
+              <input 
+                type="number" 
+                step="any" 
+                value={longitude} 
+                onChange={(e) => {
+                  setLongitude(e.target.value);
+                  setLocationError(''); // Xóa lỗi khi người dùng đang nhập
+                }}
+                onBlur={handleLocationBlur}
+                required 
+                placeholder="106.7009" 
+                className={`w-full rounded-lg border px-3 py-2 text-sm text-gray-200 outline-none ${
+                  locationError
+                    ? 'border-red-600 bg-red-900/20 focus:border-red-500'
+                    : 'border-gray-700 bg-gray-900 focus:border-green-500'
+                }`}
+              />
             </div>
           </div>
+          {(checkingLocation || locationError) && (
+            <div>
+              {checkingLocation && (
+                <p className="text-xs text-blue-400">Đang kiểm tra vị trí...</p>
+              )}
+              {locationError && (
+                <p className="text-xs text-red-400">{locationError}</p>
+              )}
+            </div>
+          )}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-gray-400">Sức khỏe</label>
             <select value={healthStatus} onChange={(e) => setHealthStatus(e.target.value as HealthStatus)} className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500">
@@ -578,7 +710,12 @@ function CreateTreeModal({
           )}
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={onClose} className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors">Hủy</button>
-            <button type="submit" disabled={saving} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            <button 
+              type="submit" 
+              // Thêm điều kiện disable nút nếu đang check hoặc đang có lỗi
+              disabled={saving || checkingTreeCode || checkingLocation || !!treeCodeError || !!locationError} 
+              className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
               {saving ? 'Đang lưu...' : 'Thêm cây'}
             </button>
           </div>

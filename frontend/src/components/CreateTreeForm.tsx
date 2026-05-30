@@ -1,5 +1,5 @@
 import { useState, useEffect, type FormEvent } from 'react';
-import { createTree, fetchTreeSpecies, fetchAdministrativeAreas } from '../api/trees';
+import { createTree, fetchTreeSpecies, fetchAdministrativeAreas, checkTreeCodeExists, checkLocationExists } from '../api/trees';
 import type { CreateTreePayload, TreeSpecies, AdministrativeArea, Tree, HealthStatus } from '../types';
 import MapPicker from './MapPicker';
 
@@ -13,6 +13,12 @@ export default function CreateTreeForm({ onSuccess, onCancel }: CreateTreeFormPr
   const [areas, setAreas] = useState<AdministrativeArea[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Validation states
+  const [treeCodeError, setTreeCodeError] = useState<string | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [checkingTreeCode, setCheckingTreeCode] = useState(false);
+  const [checkingLocation, setCheckingLocation] = useState(false);
 
   const [formData, setFormData] = useState<CreateTreePayload>({
     tree_code: '',
@@ -47,6 +53,13 @@ export default function CreateTreeForm({ onSuccess, onCancel }: CreateTreeFormPr
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
+    
+    // Kiểm tra lỗi validation trước khi submit
+    if (treeCodeError || locationError) {
+      setError('Vui lòng sửa các lỗi trước khi lưu');
+      return;
+    }
+    
     setLoading(true);
 
     try {
@@ -87,6 +100,60 @@ export default function CreateTreeForm({ onSuccess, onCancel }: CreateTreeFormPr
       latitude: parseFloat(lat.toFixed(6)),
       longitude: parseFloat(lng.toFixed(6)),
     }));
+    // Kiểm tra tọa độ ngay khi chọn trên bản đồ
+    checkLocation(parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6)));
+  };
+
+  // Kiểm tra mã cây khi người dùng nhập xong (onBlur)
+  const handleTreeCodeBlur = async () => {
+    const treeCode = formData.tree_code.trim();
+    if (!treeCode) {
+      setTreeCodeError(null);
+      return;
+    }
+
+    setCheckingTreeCode(true);
+    setTreeCodeError(null);
+    try {
+      const exists = await checkTreeCodeExists(treeCode);
+      if (exists) {
+        setTreeCodeError('⚠️ Mã cây này đã tồn tại trong hệ thống');
+      }
+    } catch (err) {
+      console.error('Error checking tree code:', err);
+    } finally {
+      setCheckingTreeCode(false);
+    }
+  };
+
+  // Kiểm tra tọa độ
+  const checkLocation = async (lat: number, lng: number) => {
+    if (!lat || !lng) {
+      setLocationError(null);
+      return;
+    }
+
+    setCheckingLocation(true);
+    setLocationError(null);
+    try {
+      const result = await checkLocationExists(lat, lng);
+      if (result.exists && result.tree) {
+        setLocationError(
+          `⚠️ Vị trí này đã được đăng ký cho cây ${result.tree.tree_code}. Vui lòng kiểm tra lại trên bản đồ.`
+        );
+      }
+    } catch (err) {
+      console.error('Error checking location:', err);
+    } finally {
+      setCheckingLocation(false);
+    }
+  };
+
+  // Kiểm tra tọa độ khi người dùng nhập xong
+  const handleLocationBlur = () => {
+    if (formData.latitude && formData.longitude) {
+      checkLocation(formData.latitude, formData.longitude);
+    }
   };
 
   return (
@@ -110,10 +177,24 @@ export default function CreateTreeForm({ onSuccess, onCancel }: CreateTreeFormPr
             type="text"
             required
             value={formData.tree_code}
-            onChange={(e) => handleInputChange('tree_code', e.target.value)}
-            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-green-600"
+            onChange={(e) => {
+              handleInputChange('tree_code', e.target.value);
+              setTreeCodeError(null); // Xóa lỗi khi người dùng đang nhập
+            }}
+            onBlur={handleTreeCodeBlur}
+            className={`w-full px-3 py-2 bg-gray-800 border rounded text-white focus:outline-none focus:ring-2 ${
+              treeCodeError
+                ? 'border-red-600 focus:ring-red-600'
+                : 'border-gray-700 focus:ring-green-600'
+            }`}
             placeholder="VD: TREE-001"
           />
+          {checkingTreeCode && (
+            <p className="mt-1 text-xs text-blue-400">Đang kiểm tra...</p>
+          )}
+          {treeCodeError && (
+            <p className="mt-1 text-xs text-red-400">{treeCodeError}</p>
+          )}
         </div>
 
         {/* QR Code - Optional */}
@@ -186,8 +267,16 @@ export default function CreateTreeForm({ onSuccess, onCancel }: CreateTreeFormPr
             min={-90}
             max={90}
             value={formData.latitude || ''}
-            onChange={(e) => handleInputChange('latitude', parseFloat(e.target.value))}
-            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-green-600"
+            onChange={(e) => {
+              handleInputChange('latitude', parseFloat(e.target.value));
+              setLocationError(null); // Xóa lỗi khi người dùng đang nhập
+            }}
+            onBlur={handleLocationBlur}
+            className={`w-full px-3 py-2 bg-gray-800 border rounded text-white focus:outline-none focus:ring-2 ${
+              locationError
+                ? 'border-red-600 focus:ring-red-600'
+                : 'border-gray-700 focus:ring-green-600'
+            }`}
             placeholder="VD: 16.0544"
           />
         </div>
@@ -205,11 +294,36 @@ export default function CreateTreeForm({ onSuccess, onCancel }: CreateTreeFormPr
             min={-180}
             max={180}
             value={formData.longitude || ''}
-            onChange={(e) => handleInputChange('longitude', parseFloat(e.target.value))}
-            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-green-600"
+            onChange={(e) => {
+              handleInputChange('longitude', parseFloat(e.target.value));
+              setLocationError(null); // Xóa lỗi khi người dùng đang nhập
+            }}
+            onBlur={handleLocationBlur}
+            className={`w-full px-3 py-2 bg-gray-800 border rounded text-white focus:outline-none focus:ring-2 ${
+              locationError
+                ? 'border-red-600 focus:ring-red-600'
+                : 'border-gray-700 focus:ring-green-600'
+            }`}
             placeholder="VD: 108.2022"
           />
         </div>
+      </div>
+
+      {/* Location Error Message */}
+      {(checkingLocation || locationError) && (
+        <div className="mt-2">
+          {checkingLocation && (
+            <p className="text-xs text-blue-400">Đang kiểm tra vị trí...</p>
+          )}
+          {locationError && (
+            <div className="bg-red-900/20 border border-red-800 text-red-400 px-4 py-3 rounded">
+              {locationError}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         {/* Planting Year - Optional */}
         <div>
@@ -332,7 +446,7 @@ export default function CreateTreeForm({ onSuccess, onCancel }: CreateTreeFormPr
       <div className="flex gap-3 pt-4">
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || checkingTreeCode || checkingLocation || !!treeCodeError || !!locationError}
           className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? 'Đang tạo...' : 'Tạo cây'}

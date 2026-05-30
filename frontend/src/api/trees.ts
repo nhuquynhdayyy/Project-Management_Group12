@@ -93,3 +93,46 @@ export async function downloadTreeQRCode(treeId: number, filename?: string): Pro
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Kiểm tra xem mã cây có tồn tại không
+ * @param treeCode Mã cây cần kiểm tra
+ * @param excludeId ID cây cần loại trừ (dùng khi update)
+ * @returns true nếu mã cây đã tồn tại
+ */
+export async function checkTreeCodeExists(
+  treeCode: string,
+  excludeId?: number,
+): Promise<boolean> {
+  const params = excludeId ? `?excludeId=${excludeId}` : '';
+  const { data } = await apiClient.get<{ exists: boolean }>(
+    `/trees/check/tree-code/${encodeURIComponent(treeCode)}${params}`,
+  );
+  return data.exists;
+}
+
+/**
+ * Kiểm tra xem tọa độ có cây nào đã đăng ký không
+ * @param latitude Vĩ độ
+ * @param longitude Kinh độ
+ * @param excludeId ID cây cần loại trừ (dùng khi update)
+ * @returns Thông tin cây nếu tồn tại
+ */
+export async function checkLocationExists(
+  latitude: number,
+  longitude: number,
+  excludeId?: number,
+): Promise<{ exists: boolean; tree?: { id: number; tree_code: string } }> {
+  const params = new URLSearchParams({
+    latitude: latitude.toString(),
+    longitude: longitude.toString(),
+  });
+  if (excludeId) {
+    params.append('excludeId', excludeId.toString());
+  }
+  const { data } = await apiClient.get<{
+    exists: boolean;
+    tree?: { id: number; tree_code: string };
+  }>(`/trees/check/location?${params.toString()}`);
+  return data;
+}

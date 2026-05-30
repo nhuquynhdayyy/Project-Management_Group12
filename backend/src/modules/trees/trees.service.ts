@@ -2,6 +2,7 @@
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -30,6 +31,25 @@ export class TreesService {
   async create(createTreeDto: CreateTreeDto, userId?: number): Promise<Tree> {
     if (!createTreeDto.tree_code) {
       throw new BadRequestException('tree_code is required');
+    }
+
+    // Kiểm tra trùng mã cây
+    const existingTreeByCode = await this.treeRepository.findOne({
+      where: { tree_code: createTreeDto.tree_code },
+    });
+    if (existingTreeByCode) {
+      throw new ConflictException('Mã cây này đã tồn tại');
+    }
+
+    // Kiểm tra trùng tọa độ (cho phép sai số 0.00001 độ ~ 1 mét)
+    const existingTreeByLocation = await this.findTreeAtLocation(
+      createTreeDto.latitude,
+      createTreeDto.longitude,
+    );
+    if (existingTreeByLocation) {
+      throw new ConflictException(
+        `Tọa độ này đã có một cây khác đăng ký (Mã cây: ${existingTreeByLocation.tree_code})`,
+      );
     }
 
     const species = await this.speciesRepository.findOne({
@@ -125,6 +145,33 @@ export class TreesService {
   ): Promise<Tree> {
     const tree = await this.treeRepository.findOne({ where: { id } });
     if (!tree) throw new NotFoundException('Tree not found');
+
+    // Kiểm tra trùng mã cây (nếu đang cập nhật tree_code)
+    if (updateTreeDto.tree_code && updateTreeDto.tree_code !== tree.tree_code) {
+      const existingTreeByCode = await this.treeRepository.findOne({
+        where: { tree_code: updateTreeDto.tree_code },
+      });
+      if (existingTreeByCode) {
+        throw new ConflictException('Mã cây này đã tồn tại');
+      }
+    }
+
+    // Kiểm tra trùng tọa độ (nếu đang cập nhật vị trí)
+    if (updateTreeDto.latitude !== undefined || updateTreeDto.longitude !== undefined) {
+      const newLatitude = updateTreeDto.latitude ?? this.getLatitude(tree);
+      const newLongitude = updateTreeDto.longitude ?? this.getLongitude(tree);
+      
+      const existingTreeByLocation = await this.findTreeAtLocation(
+        newLatitude,
+        newLongitude,
+        id, // Loại trừ cây hiện tại
+      );
+      if (existingTreeByLocation) {
+        throw new ConflictException(
+          `Tọa độ này đã có một cây khác đăng ký (Mã cây: ${existingTreeByLocation.tree_code})`,
+        );
+      }
+    }
 
     if (updateTreeDto.species_id !== undefined) {
       const species = await this.speciesRepository.findOne({
@@ -292,5 +339,81 @@ export class TreesService {
   
   async findAllSpecies(): Promise<TreeSpecies[]> {
     return await this.speciesRepository.find({ order: { common_name: 'ASC' } });
+  }
+
+  /**
+   * Tìm cây tại vị trí cụ thể (cho phép sai số 0.00001 độ ~ 1 mét)
+   * @param latitude Vĩ độ
+   * @param longitude Kinh độ
+   * @param excludeId ID cây cần loại trừ (dùng khi update)
+   * @returns Cây tại vị trí đó hoặc null
+   */
+  private async findTreeAtLocation(
+    latitude: number,
+    longitude: number,
+    excludeId?: number,
+  ): Promise<Tree | null> {
+    const tolerance = 0.00001; // ~1 mét
+    
+    const query = this.treeRepository
+      .createQueryBuilder('tree')
+      .where(
+        'ABS(ST_X(tree.location::geometry) - :longitude) < :tolerance',
+        { longitude, tolerance },
+      )
+      .andWhere(
+        'ABS(ST_Y(tree.location::geometry) - :latitude) < :tolerance',
+        { latitude, tolerance },
+      );
+
+    if (excludeId) {
+      query.andWhere('tree.id != :excludeId', { excludeId });
+    }
+
+    return await query.getOne();
+  }
+
+  /**
+   * Kiểm tra xem mã cây có tồn tại không
+   * @param treeCode Mã cây cần kiểm tra
+   * @param excludeId ID cây cần loại trừ (dùng khi update)
+   * @returns true nếu mã cây đã tồn tại
+   */
+  async checkTreeCodeExists(
+    treeCode: string,
+    excludeId?: number,
+  ): Promise<boolean> {
+    const query = this.treeRepository
+      .createQueryBuilder('tree')
+      .where('tree.tree_code = :treeCode', { treeCode });
+
+    if (excludeId) {
+      query.andWhere('tree.id != :excludeId', { excludeId });
+    }
+
+    const count = await query.getCount();
+    return count > 0;
+  }
+
+  /**
+   * Kiểm tra xem tọa độ có cây nào đã đăng ký không
+   * @param latitude Vĩ độ
+   * @param longitude Kinh độ
+   * @param excludeId ID cây cần loại trừ (dùng khi update)
+   * @returns Thông tin cây nếu tồn tại, null nếu không
+   */
+  async checkLocationExists(
+    latitude: number,
+    longitude: number,
+    excludeId?: number,
+  ): Promise<{ exists: boolean; tree?: { id: number; tree_code: string } }> {
+    const tree = await this.findTreeAtLocation(latitude, longitude, excludeId);
+    if (tree) {
+      return {
+        exists: true,
+        tree: { id: tree.id, tree_code: tree.tree_code },
+      };
+    }
+    return { exists: false };
   }
 }
