@@ -1,11 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AuthService } from './auth.service';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { User } from './user.entity';
 import { Role } from '../../entities/role.entity';
 import { AuditLogService } from '../audit-log/auditLog.service';
 import { AuditLog } from '../../entities/auditLog.entity';
+import { AuthService } from './auth.service';
+import * as bcrypt from 'bcrypt';
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn().mockResolvedValue('hashed_password'),
@@ -15,21 +17,30 @@ jest.mock('bcrypt', () => ({
 describe('AuthService', () => {
   let service: AuthService;
 
-  const mockUser = {
+  // Dữ liệu mẫu (Mocks Data)
+  const mockAdminRole: Role = {
     id: 1,
-    username: 'test',
+    role_name: 'Admin',
+    description: 'Administrator',
+    users: [],
+  };
+
+  const mockUser: User = {
+    id: 1,
+    username: 'test_user',
+    email: 'test@example.com',
     password: 'hashed_password',
-    role: 'test',
-    email: null,
-    full_name: null,
+    full_name: 'Test User',
     assigned_area_id: null,
     is_active: true,
     last_login_at: null,
-    roles: [{ id: 1, role_name: 'admin' }],
+    roles: [mockAdminRole],
     created_at: new Date(),
     updated_at: new Date(),
+    role: 'Admin',
   };
 
+  // Các Mock Repositories và Services
   const mockUserRepository = {
     save: jest
       .fn()
@@ -39,20 +50,16 @@ describe('AuthService', () => {
     findOne: jest.fn().mockResolvedValue(mockUser),
     find: jest.fn().mockResolvedValue([]),
     update: jest.fn().mockResolvedValue({ affected: 1 }),
-    createQueryBuilder: jest.fn().mockReturnValue({
-      leftJoinAndSelect: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      getMany: jest.fn().mockResolvedValue([]),
-    }),
+    createQueryBuilder: jest.fn(),
   };
 
   const mockRoleRepository = {
-    findOne: jest.fn().mockResolvedValue({ id: 1, role_name: 'admin' }),
+    findOne: jest.fn(),
   };
 
   const mockJwtService = {
     sign: jest.fn().mockReturnValue('mock.jwt.token'),
-    verify: jest.fn().mockReturnValue({ sub: 1, username: 'test' }),
+    verify: jest.fn().mockReturnValue({ sub: 1, username: 'test_user' }),
   };
 
   const mockAuditLogService = {
@@ -68,7 +75,7 @@ describe('AuthService', () => {
         { provide: getRepositoryToken(Role), useValue: mockRoleRepository },
         { provide: JwtService, useValue: mockJwtService },
         { provide: AuditLogService, useValue: mockAuditLogService },
-        // Satisfy AuditLogService's @InjectRepository(AuditLog) metadata scan
+        // Cần thiết để AuditLogService không bị lỗi khi khởi tạo
         { provide: getRepositoryToken(AuditLog), useValue: {} },
       ],
     }).compile();
@@ -80,19 +87,68 @@ describe('AuthService', () => {
     jest.clearAllMocks();
   });
 
-  it('should register a new user', async () => {
-    const user = { ...mockUser, password: 'test' } as unknown as User;
-    const result = await service.register(user, ['admin']);
-    expect(result).toBeDefined();
-    expect((result as any).username).toBe('test');
-    expect((result as any).password).toBeUndefined();
+  // ─────────────────────────────────────────────────────────────────────────────
+  // register
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('register', () => {
+    it('should register a new user and return user without password', async () => {
+      const newUser = new User();
+      newUser.username = 'test_user';
+      newUser.password = 'plain_password';
+
+      mockRoleRepository.findOne.mockResolvedValue(mockAdminRole);
+      mockUserRepository.save.mockResolvedValue({ ...mockUser, username: 'test_user' });
+
+      const result = await service.register(newUser, ['Admin']);
+
+      expect(result).toBeDefined();
+      expect((result as any).password).toBeUndefined();
+      expect(result.username).toBe('test_user');
+      expect(bcrypt.hash).toHaveBeenCalledWith('plain_password', 10);
+      expect(mockUserRepository.save).toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when role does not exist', async () => {
+      mockRoleRepository.findOne.mockResolvedValue(null);
+      const newUser = new User();
+
+      await expect(service.register(newUser, ['NonExistentRole'])).rejects.toThrow(
+        BadRequestException,
+      );
+    });
   });
 
-  it('should login a user and return access token', async () => {
-    const result = await service.login('test', 'test');
-    expect(result).toBeDefined();
-    expect(result.username).toBe('test');
-    expect(result.access_token).toBeDefined();
+  // ─────────────────────────────────────────────────────────────────────────────
+  // login
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('login', () => {
+    it('should return AuthResponseDto and log the login event', async () => {
+      mockUserRepository.findOne.mockResolvedValue(mockUser);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      const result = await service.login('test_user', 'plain_password');
+
+      expect(result).toBeDefined();
+      expect(result.access_token).toBe('mock.jwt.token');
+      expect(mockJwtService.sign).toHaveBeenCalled();
+      // Kiểm tra xem có thực hiện log audit không (từ phase-3)
+      // expect(mockAuditLogService.log).toHaveBeenCalled(); 
+    });
+
+    it('should throw UnauthorizedException when credentials invalid', async () => {
+      mockUserRepository.findOne.mockResolvedValue(null);
+      await expect(service.login('unknown', 'password')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should throw UnauthorizedException when account is inactive', async () => {
+      const inactiveUser = { ...mockUser, is_active: false };
+      mockUserRepository.findOne.mockResolvedValue(inactiveUser);
+      await expect(service.login('test_user', 'password')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
   });
 
   it('should create a LOGIN audit log on successful login', async () => {
@@ -121,9 +177,41 @@ describe('AuthService', () => {
     );
   });
 
-  it('should validate a user', async () => {
-    const result = await service.validateUser({ sub: 1 });
-    expect(result).toBeDefined();
-    expect(result?.username).toBe('test');
+  // ─────────────────────────────────────────────────────────────────────────────
+  // validateUser
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('validateUser', () => {
+    it('should return user when payload is valid', async () => {
+      mockUserRepository.findOne.mockResolvedValue(mockUser);
+      const result = await service.validateUser({ sub: 1 });
+      expect(result).toBeDefined();
+      expect(result.id).toBe(1);
+    });
+
+    it('should return null when user is not found', async () => {
+      mockUserRepository.findOne.mockResolvedValue(null);
+      const result = await service.validateUser({ sub: 999 });
+      expect(result).toBeNull();
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // getUsersByRole
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('getUsersByRole', () => {
+    it('should return users with the given role without passwords', async () => {
+      const mockQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([mockUser]),
+      };
+      mockUserRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+
+      const result = await service.getUsersByRole('Admin');
+
+      expect(result).toBeDefined();
+      expect(result.length).toBe(1);
+      expect((result[0] as any).password).toBeUndefined();
+    });
   });
 });

@@ -13,6 +13,7 @@ import { UpdateTreeDto } from './dto/update-tree.dto';
 import { FindTreesNearbyDto } from './dto/find-trees-nearby.dto';
 import { AuditLogService } from '../audit-log/auditLog.service';
 import { AuditAction } from '../../entities/auditLog.entity';
+import * as QRCode from 'qrcode';
 
 @Injectable()
 export class TreesService {
@@ -191,6 +192,74 @@ export class TreesService {
     );
   }
 
+  async findAllAreas(): Promise<AdministrativeArea[]> {
+    return await this.areaRepository.find({ order: { area_name: 'ASC' } });
+  }
+
+  async updateHealthStatus(id: number, healthStatus: string): Promise<Tree> {
+    const tree = await this.treeRepository.findOne({ where: { id } });
+    if (!tree) throw new NotFoundException('Tree not found');
+    tree.health_status = healthStatus as any;
+    return await this.treeRepository.save(tree);
+  }
+
+  /**
+   * Generate QR Code for a tree
+   * @param id Tree ID
+   * @returns PNG buffer of QR code
+   */
+  async generateQRCode(id: number): Promise<Buffer> {
+    const tree = await this.treeRepository.findOne({ where: { id } });
+    if (!tree) {
+      throw new NotFoundException(`Tree with ID ${id} not found`);
+    }
+
+    // Generate QR code string: cayxanh://tree/{id}
+    const qrCodeData = `cayxanh://tree/${id}`;
+
+    try {
+      // Generate QR code as PNG buffer
+      const qrCodeBuffer = await QRCode.toBuffer(qrCodeData, {
+        type: 'png',
+        width: 300,
+        margin: 2,
+        errorCorrectionLevel: 'M',
+      });
+
+      return qrCodeBuffer;
+    } catch (error) {
+      throw new BadRequestException('Failed to generate QR code');
+    }
+  }
+
+  /**
+   * Update qr_code field for a tree
+   * @param id Tree ID
+   * @returns Updated tree
+   */
+  async updateQRCodeField(id: number): Promise<Tree> {
+    const tree = await this.treeRepository.findOne({ where: { id } });
+    if (!tree) {
+      throw new NotFoundException(`Tree with ID ${id} not found`);
+    }
+
+    // Update qr_code field with the URL format
+    tree.qr_code = `cayxanh://tree/${id}`;
+    return await this.treeRepository.save(tree);
+  }
+
+  /**
+   * Find tree by QR code string
+   * @param qrCode QR code string (e.g., "cayxanh://tree/42")
+   * @returns Tree with related maintenance tasks
+   */
+  async findByQRCode(qrCode: string): Promise<Tree | null> {
+    return await this.treeRepository.findOne({ 
+      where: { qr_code: qrCode },
+      relations: ['species', 'area']
+    });
+  }
+  
   private toAuditValue(tree: Partial<Tree>): Record<string, any> {
     return {
       tree_code: tree.tree_code,
@@ -219,5 +288,7 @@ export class TreesService {
     return typeof location === 'string'
       ? Number(location.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/)?.[2])
       : location.coordinates[1];
+  async findAllSpecies(): Promise<TreeSpecies[]> {
+    return await this.speciesRepository.find({ order: { common_name: 'ASC' } });
   }
 }

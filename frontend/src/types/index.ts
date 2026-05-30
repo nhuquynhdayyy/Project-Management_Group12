@@ -3,6 +3,31 @@ export interface LoginResponse {
   id: number;
   username: string;
   roles: string[];
+  assigned_area_id?: number | null;
+}
+
+export type UserRole = 'Admin' | 'Manager' | 'Staff';
+
+export interface DashboardUser {
+  id: number;
+  username: string;
+  email: string | null;
+  full_name: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  roles: {
+    id: number;
+    role_name: UserRole;
+    description: string | null;
+  }[];
+}
+
+export interface RegisterUserPayload {
+  username: string;
+  password: string;
+  full_name: string;
+  roles: UserRole[];
 }
 
 export interface TreeSpecies {
@@ -95,4 +120,53 @@ export interface PaginatedActivityLogs {
     limit: number;
     totalPages: number;
   };
+export interface StaffPerformance {
+  username: string;
+  completed: number;
+  pending: number;
+  avg_completion_hours: number | null;
+  overdueCount: number;
+  onTimeRate: number;
+  avgDaysLate: number;
+  diversityScore: number;
+  activeDays: number;
+}
+
+export interface OverdueTask extends MaintenanceTask {
+  tree_name?: string | null;
+  staff_name?: string | null;
+  overdue_days?: number;
+  tree?: {
+    tree_code?: string;
+  };
+  assignedUser?: {
+    id?: number;
+    full_name?: string | null;
+    username?: string;
+    assigned_area_id?: number | null;
+  };
+}
+
+export interface CreateTreePayload {
+  tree_code: string;
+  qr_code?: string;
+  species_id: number;
+  area_id: number;
+  latitude: number;
+  longitude: number;
+  planting_year?: number;
+  height_m?: number;
+  trunk_diameter_cm?: number;
+  canopy_diameter_m?: number;
+  tilt_degree?: number;
+  health_status?: HealthStatus;
+  created_by?: number;
+}
+
+export interface CreateMaintenanceTaskPayload {
+  tree_id: number;
+  assigned_to: number;
+  task_type: TaskType;
+  scheduled_date: string;
+  notes?: string;
 }

@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  UnauthorizedException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
@@ -107,8 +103,8 @@ export class AuthService {
       last_login_at: new Date(),
     });
 
-    // Extract role names for JWT payload and normalize to lowercase
-    const roleNames = user.roles.map((role) => role.role_name.toLowerCase());
+    // Extract role names for JWT payload (keep original case for frontend matching)
+    const roleNames = user.roles.map((role) => role.role_name);
 
     // Create JWT payload with roles array
     const payload = {
@@ -131,13 +127,14 @@ export class AuthService {
       id: user.id,
       username: user.username,
       roles: roleNames,
+      assigned_area_id: user.assigned_area_id ?? null,
     };
   }
 
   async validateUser(payload: { sub: number }): Promise<User | null> {
     return this.usersRepository.findOne({
       where: { id: payload.sub },
-      relations: ['roles'],
+relations: ['roles'],
     });
   }
 
@@ -168,8 +165,58 @@ export class AuthService {
   async getAllUsers(): Promise<Omit<User, 'password'>[]> {
     const users = await this.usersRepository.find({
       relations: ['roles'],
+      order: { created_at: 'DESC' },
     });
 
     return users.map(({ password, ...rest }) => rest);
+  }
+
+  async updateUserRole(userId: number, roleName: string): Promise<Omit<User, 'password'>> {
+    const user = await this.usersRepository.findOne({
+      where: { id: userId },
+      relations: ['roles'],
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const role = await this.rolesRepository.findOne({
+      where: { role_name: roleName },
+    });
+
+    if (!role) {
+      throw new BadRequestException(`Role "${roleName}" not found`);
+    }
+
+    user.roles = [role];
+    user.role = role.role_name;
+    const saved = await this.usersRepository.save(user);
+    const { password, ...result } = saved;
+    return result;
+  }
+
+  async updateUserStatus(
+    userId: number,
+    isActive: boolean,
+    currentUserId: number,
+  ): Promise<Omit<User, 'password'>> {
+    if (userId === currentUserId && !isActive) {
+      throw new ForbiddenException('Cannot lock the current signed-in account');
+    }
+
+    const user = await this.usersRepository.findOne({
+      where: { id: userId },
+      relations: ['roles'],
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    user.is_active = isActive;
+    const saved = await this.usersRepository.save(user);
+    const { password, ...result } = saved;
+    return result;
   }
 }

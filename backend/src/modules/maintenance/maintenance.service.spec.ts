@@ -12,16 +12,23 @@ import { CompleteTaskDto } from './dto/complete-task.dto';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { AuditLogService } from '../audit-log/auditLog.service';
 import { AuditLog } from '../../entities/auditLog.entity';
+import { CloudStorageService } from '../../services/cloud-storage.service';
 import { CreateMaintenanceTaskDto } from './dto/create-maintenance-task.dto';
 
 describe('MaintenanceService', () => {
   let service: MaintenanceService;
+  let taskRepository: Repository<MaintenanceTask>;
+  let treeRepository: Repository<Tree>;
+  let userRepository: Repository<User>;
+  let cloudStorageService: CloudStorageService;
+  let auditLogService: AuditLogService;
 
   const mockTaskRepository = {
     create: jest.fn(),
     save: jest.fn(),
     findOne: jest.fn(),
     find: jest.fn(),
+    update: jest.fn(),
     createQueryBuilder: jest.fn(),
   };
 
@@ -38,6 +45,11 @@ describe('MaintenanceService', () => {
     findAll: jest.fn().mockResolvedValue([]),
   };
 
+  const mockCloudStorageService = {
+    uploadImage: jest.fn(),
+    deleteImage: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -46,19 +58,39 @@ describe('MaintenanceService', () => {
           provide: getRepositoryToken(MaintenanceTask),
           useValue: mockTaskRepository,
         },
-        { provide: getRepositoryToken(Tree), useValue: mockTreeRepository },
-        { provide: getRepositoryToken(User), useValue: mockUserRepository },
-        // Provide AuditLogService as a plain value — NestJS will not try to
-        // instantiate it, so its own @InjectRepository(AuditLog) dependency
-        // is never resolved and the circular scan is avoided.
-        { provide: AuditLogService, useValue: mockAuditLogService },
-        // AuditLogService's constructor metadata still lists AuditLog repo as
-        // a dependency token. Providing it here satisfies the DI scanner.
-        { provide: getRepositoryToken(AuditLog), useValue: {} },
+        {
+          provide: getRepositoryToken(Tree),
+          useValue: mockTreeRepository,
+        },
+        {
+          provide: getRepositoryToken(User),
+          useValue: mockUserRepository,
+        },
+        // CloudStorageService phục vụ upload ảnh (từ main)
+        {
+          provide: CloudStorageService,
+          useValue: mockCloudStorageService,
+        },
+        // AuditLogService phục vụ truy vết bảo mật (từ phase-3)
+        // Cung cấp dưới dạng useValue để tránh lỗi vòng lặp DI (circular dependency)
+        { 
+          provide: AuditLogService, 
+          useValue: mockAuditLogService 
+        },
+        // Mock Repository này để thỏa mãn dependency scanner của NestJS
+        { 
+          provide: getRepositoryToken(AuditLog), 
+          useValue: {} 
+        },
       ],
     }).compile();
 
     service = module.get<MaintenanceService>(MaintenanceService);
+    taskRepository = module.get<Repository<MaintenanceTask>>(getRepositoryToken(MaintenanceTask));
+    treeRepository = module.get<Repository<Tree>>(getRepositoryToken(Tree));
+    userRepository = module.get<Repository<User>>(getRepositoryToken(User));
+    cloudStorageService = module.get<CloudStorageService>(CloudStorageService);
+    auditLogService = module.get<AuditLogService>(AuditLogService);
   });
 
   afterEach(() => {
@@ -238,7 +270,6 @@ describe('MaintenanceService', () => {
       const completeDto: CompleteTaskDto = {
         latitude: 16.05444, // ~4.4 meters north
         longitude: 108.2022,
-        evidence_image_url: 'https://storage.example.com/evidence.jpg',
         notes: 'Task completed successfully',
       };
 
@@ -246,7 +277,7 @@ describe('MaintenanceService', () => {
         ...mockTask,
         status: TaskStatus.COMPLETED,
         completed_at: new Date(),
-        evidence_image_url: completeDto.evidence_image_url,
+        evidence_image_url: null,
         notes: completeDto.notes,
       };
 
@@ -260,7 +291,7 @@ describe('MaintenanceService', () => {
       expect(result).toBeDefined();
       expect(result.status).toBe(TaskStatus.COMPLETED);
       expect(result.completed_at).toBeDefined();
-      expect(result.evidence_image_url).toBe(completeDto.evidence_image_url);
+      expect(result.evidence_image_url).toBeNull();
       expect(mockTaskRepository.save).toHaveBeenCalled();
       expect(mockAuditLogService.log).toHaveBeenCalledWith(
         userId,
@@ -325,6 +356,112 @@ describe('MaintenanceService', () => {
       await expect(
         service.completeTask(taskId, userId, completeDto),
       ).rejects.toThrow('Task is already completed');
+    });
+
+    it('should upload image and save URL when image file is provided', async () => {
+      // Arrange
+      const taskId = 1;
+      const userId = 2;
+
+      const mockTree = {
+        id: 1,
+        tree_code: 'TREE001',
+        location: {
+          type: 'Point',
+          coordinates: [108.2022, 16.0544],
+        },
+      };
+
+      const mockTask = {
+        id: taskId,
+        tree_id: 1,
+        assigned_to: userId,
+        status: TaskStatus.IN_PROGRESS,
+        tree: mockTree,
+      };
+
+      const completeDto: CompleteTaskDto = {
+        latitude: 16.05444,
+        longitude: 108.2022,
+        notes: 'Task completed with image',
+      };
+
+      const mockImageFile = {
+        buffer: Buffer.from('fake-image-data'),
+        originalname: 'evidence.jpg',
+        mimetype: 'image/jpeg',
+      } as Express.Multer.File;
+
+      const mockImageUrl = 'https://test.supabase.co/storage/v1/object/public/test-bucket/1234567890_evidence.jpg';
+
+      mockTaskRepository.findOne.mockResolvedValue(mockTask);
+      mockCloudStorageService.uploadImage.mockResolvedValue(mockImageUrl);
+      mockTaskRepository.save.mockResolvedValue({
+        ...mockTask,
+        status: TaskStatus.COMPLETED,
+        completed_at: new Date(),
+        evidence_image_url: mockImageUrl,
+      });
+
+      // Act
+      const result = await service.completeTask(taskId, userId, completeDto, mockImageFile);
+
+      // Assert
+      expect(result).toBeDefined();
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      expect(result.evidence_image_url).toBe(mockImageUrl);
+      expect(mockCloudStorageService.uploadImage).toHaveBeenCalledWith(
+        mockImageFile.buffer,
+        mockImageFile.originalname,
+      );
+      expect(mockTaskRepository.save).toHaveBeenCalled();
+    });
+
+    it('should complete task without image when no file is provided', async () => {
+      // Arrange
+      const taskId = 1;
+      const userId = 2;
+
+      const mockTree = {
+        id: 1,
+        tree_code: 'TREE001',
+        location: {
+          type: 'Point',
+          coordinates: [108.2022, 16.0544],
+        },
+      };
+
+      const mockTask = {
+        id: taskId,
+        tree_id: 1,
+        assigned_to: userId,
+        status: TaskStatus.IN_PROGRESS,
+        tree: mockTree,
+      };
+
+      const completeDto: CompleteTaskDto = {
+        latitude: 16.05444,
+        longitude: 108.2022,
+        notes: 'Task completed without image',
+      };
+
+      mockTaskRepository.findOne.mockResolvedValue(mockTask);
+      mockTaskRepository.save.mockResolvedValue({
+        ...mockTask,
+        status: TaskStatus.COMPLETED,
+        completed_at: new Date(),
+        evidence_image_url: null,
+      });
+
+      // Act
+      const result = await service.completeTask(taskId, userId, completeDto, undefined);
+
+      // Assert
+      expect(result).toBeDefined();
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      expect(result.evidence_image_url).toBeNull();
+      expect(mockCloudStorageService.uploadImage).not.toHaveBeenCalled();
+      expect(mockTaskRepository.save).toHaveBeenCalled();
     });
   });
 
@@ -394,6 +531,106 @@ describe('MaintenanceService', () => {
 
       // Assert
       expect(result).toBeNull();
+    });
+  });
+
+  describe('getTasksForExport', () => {
+    it('should return all tasks with tree and user relations when no filter provided', async () => {
+      // Arrange
+      const mockTasks = [
+        {
+          id: 1,
+          task_type: TaskType.PRUNING,
+          status: TaskStatus.PENDING,
+          tree: { id: 1, tree_code: 'TREE001', species: { species_name: 'Bàng' } },
+          assignedUser: { id: 2, full_name: 'Nguyễn Văn A', username: 'nguyenvana' },
+        },
+        {
+          id: 2,
+          task_type: TaskType.WATERING,
+          status: TaskStatus.COMPLETED,
+          tree: { id: 2, tree_code: 'TREE002', species: { species_name: 'Phượng' } },
+          assignedUser: { id: 3, full_name: 'Trần Thị B', username: 'tranthib' },
+        },
+      ];
+
+      mockTaskRepository.find.mockResolvedValue(mockTasks);
+
+      // Act
+      const result = await service.getTasksForExport();
+
+      // Assert
+      expect(result).toBeDefined();
+      expect(result.length).toBe(2);
+      expect(mockTaskRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          relations: ['tree', 'tree.species', 'assignedUser'],
+          order: { scheduled_date: 'ASC' },
+        }),
+      );
+    });
+
+    it('should filter tasks by date range when both from and to are provided', async () => {
+      // Arrange
+      const from = '2026-01-01';
+      const to = '2026-05-01';
+      const mockTasks = [
+        { id: 1, task_type: TaskType.PRUNING, scheduled_date: new Date('2026-03-15') },
+      ];
+
+      mockTaskRepository.find.mockResolvedValue(mockTasks);
+
+      // Act
+      const result = await service.getTasksForExport(from, to);
+
+      // Assert
+      expect(result).toBeDefined();
+      expect(result.length).toBe(1);
+      const callArg = mockTaskRepository.find.mock.calls[0][0];
+      expect(callArg.where.scheduled_date).toBeDefined();
+      // Between operator được dùng khi có cả from và to
+      expect(callArg.where.scheduled_date.type).toBe('between');
+    });
+
+    it('should filter tasks from a start date when only from is provided', async () => {
+      // Arrange
+      const from = '2026-03-01';
+      mockTaskRepository.find.mockResolvedValue([]);
+
+      // Act
+      await service.getTasksForExport(from, undefined);
+
+      // Assert
+      const callArg = mockTaskRepository.find.mock.calls[0][0];
+      expect(callArg.where.scheduled_date).toBeDefined();
+      // MoreThanOrEqual operator
+      expect(callArg.where.scheduled_date.type).toBe('moreThanOrEqual');
+    });
+
+    it('should filter tasks up to an end date when only to is provided', async () => {
+      // Arrange
+      const to = '2026-06-30';
+      mockTaskRepository.find.mockResolvedValue([]);
+
+      // Act
+      await service.getTasksForExport(undefined, to);
+
+      // Assert
+      const callArg = mockTaskRepository.find.mock.calls[0][0];
+      expect(callArg.where.scheduled_date).toBeDefined();
+      // LessThanOrEqual operator
+      expect(callArg.where.scheduled_date.type).toBe('lessThanOrEqual');
+    });
+
+    it('should return empty array when no tasks match the filter', async () => {
+      // Arrange
+      mockTaskRepository.find.mockResolvedValue([]);
+
+      // Act
+      const result = await service.getTasksForExport('2099-01-01', '2099-12-31');
+
+      // Assert
+      expect(result).toEqual([]);
     });
   });
 });

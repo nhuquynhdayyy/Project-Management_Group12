@@ -7,6 +7,12 @@ import LoginPage from './pages/LoginPage';
 import MapPage from './pages/MapPage';
 import DashboardPage from './pages/DashboardPage';
 import ActivityLogsPage from './pages/ActivityLogsPage';
+import TreeStatsPage from './pages/dashboard/TreeStatsPage';
+import TaskStatsPage from './pages/dashboard/TaskStatsPage';
+import TaskManagementPage from './pages/dashboard/TaskManagementPage';
+import TreeManagementPage from './pages/dashboard/TreeManagementPage';
+import StaffStatsPage from './pages/dashboard/StaffStatsPage';
+import UsersPage from './pages/dashboard/UsersPage';
 
 function DefaultRedirect() {
   const { user } = useAuth();
@@ -35,6 +41,14 @@ export default function App() {
               {/* Dashboard - Admin/Manager only */}
               <Route element={<RoleGuard allowedRoles={['Admin', 'Manager']} />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/dashboard/trees" element={<TreeStatsPage />} />
+                <Route path="/dashboard/trees/manage" element={<TreeManagementPage />} />
+                <Route path="/dashboard/tasks" element={<TaskStatsPage />} />
+                <Route path="/dashboard/tasks/manage" element={<TaskManagementPage />} />
+                <Route path="/dashboard/staff" element={<StaffStatsPage />} />
+              </Route>
+              <Route element={<RoleGuard allowedRoles={['Admin']} />}>
+                <Route path="/dashboard/users" element={<UsersPage />} />
               </Route>
 
               <Route element={<RoleGuard allowedRoles={['Admin']} />}>

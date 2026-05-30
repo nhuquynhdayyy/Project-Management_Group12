@@ -10,6 +10,7 @@ import { Role } from '../../entities/role.entity';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { AuditLogModule } from '../audit-log/auditLog.module';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 @Module({
   imports: [
@@ -26,7 +27,7 @@ import { AuditLogModule } from '../audit-log/auditLog.module';
     AuditLogModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard],
+  providers: [AuthService, JwtStrategy, JwtAuthGuard, RolesGuard],
   exports: [AuthService, JwtModule, JwtAuthGuard],
 })
 export class AuthModule {}

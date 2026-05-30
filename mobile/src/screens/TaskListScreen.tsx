@@ -30,9 +30,19 @@ export default function TaskListScreen() {
   async function loadTasks() {
     try {
       const data = await getMyTasks();
-      setTasks(data);
+      console.log('Tasks loaded:', data); // Debug log
+      // Ensure data is an array
+      if (Array.isArray(data)) {
+        setTasks(data);
+      } else {
+        console.error('Invalid data format:', data);
+        setTasks([]);
+        Alert.alert('Lỗi', 'Dữ liệu không đúng định dạng');
+      }
     } catch (error: any) {
-      Alert.alert('Lỗi', 'Không thể tải danh sách công việc');
+      console.error('Error loading tasks:', error);
+      Alert.alert('Lỗi', error.message || 'Không thể tải danh sách công việc');
+      setTasks([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -71,26 +81,35 @@ export default function TaskListScreen() {
   }
 
   function renderTask({ item }: { item: MaintenanceTask }) {
+    // Safety check for item
+    if (!item || !item.id) {
+      return null;
+    }
+
     return (
       <TouchableOpacity
         style={styles.taskCard}
         onPress={() => navigation.navigate('TaskDetail', { task: item })}
       >
         <View style={styles.taskHeader}>
-          <Text style={styles.taskType}>{item.task_type}</Text>
+          <Text style={styles.taskType}>{item.task_type || 'Không rõ'}</Text>
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
             <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
           </View>
         </View>
         
-        {item.tree && (
+        {item.tree ? (
           <Text style={styles.treeInfo}>
-            🌳 {item.tree.tree_code} - {item.tree.species.common_name}
+            🌳 {item.tree.tree_code || 'N/A'} - {item.tree.species?.common_name || 'Không rõ loài'}
+          </Text>
+        ) : (
+          <Text style={styles.treeInfo}>
+            🌳 Cây ID: {item.tree_id || 'N/A'}
           </Text>
         )}
         
         <Text style={styles.scheduledDate}>
-          📅 {new Date(item.scheduled_date).toLocaleDateString('vi-VN')}
+          📅 {item.scheduled_date ? new Date(item.scheduled_date).toLocaleDateString('vi-VN') : 'Chưa có ngày'}
         </Text>
       </TouchableOpacity>
     );
@@ -100,25 +119,38 @@ export default function TaskListScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Công việc của tôi</Text>
-        <TouchableOpacity onPress={signOut} style={styles.logoutButton}>
-          <Text style={styles.logoutText}>Đăng xuất</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('QRScanner')} 
+            style={styles.qrButton}
+          >
+            <Text style={styles.qrButtonText}>📷 Quét QR</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={signOut} style={styles.logoutButton}>
+            <Text style={styles.logoutText}>Đăng xuất</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <FlatList
-        data={tasks}
-        renderItem={renderTask}
-        keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
-              {loading ? 'Đang tải...' : 'Không có công việc nào'}
-            </Text>
-          </View>
-        }
-      />
+      {loading ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Đang tải...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={tasks}
+          renderItem={renderTask}
+          keyExtractor={(item) => item?.id?.toString() || Math.random().toString()}
+          contentContainerStyle={styles.list}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>Không có công việc nào</Text>
+              <Text style={styles.emptySubtext}>Kéo xuống để làm mới</Text>
+            </View>
+          }
+        />
+      )}
     </View>
   );
 }
@@ -142,6 +174,22 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  qrButton: {
+    backgroundColor: '#16a34a',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  qrButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   logoutButton: {
     padding: 8,
@@ -199,5 +247,10 @@ const styles = StyleSheet.create({
   emptyText: {
     color: '#64748b',
     fontSize: 16,
+  },
+  emptySubtext: {
+    color: '#475569',
+    fontSize: 14,
+    marginTop: 8,
   },
 });
