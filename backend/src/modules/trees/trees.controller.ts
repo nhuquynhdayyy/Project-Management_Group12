@@ -94,107 +94,6 @@ export class TreesController {
     return await this.treesService.findTreesWithinRadius(findNearbyDto);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get a tree by ID' })
-  @ApiResponse({ status: 200, description: 'Tree found.' })
-  @ApiResponse({ status: 404, description: 'Tree not found.' })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  async findOne(@Param('id') id: string) {
-    return await this.treesService.findById(+id);
-  }
-
-  @Get(':id/history')
-  @ApiOperation({ summary: 'Get tree change history from audit logs' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'List of tree changes (UPDATE actions only).' 
-  })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  async getTreeHistory(@Param('id') id: string) {
-    return await this.auditLogService.findAll({
-      entity_type: 'tree',
-      entity_id: +id,
-      action: AuditAction.UPDATE,
-    });
-  }
-
-  @Patch(':id')
-  @UseGuards(RolesGuard)
-  @Roles('Admin', 'Manager')
-  @ApiOperation({ summary: 'Update a tree (Admin/Manager only)' })
-  @ApiResponse({ status: 200, description: 'Tree successfully updated.' })
-  @ApiResponse({ status: 404, description: 'Tree not found.' })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
-  async update(
-    @Param('id') id: string,
-    @Body() updateTreeDto: UpdateTreeDto,
-    @Request() req,
-  ) {
-    const userId = req.user?.userId ?? req.user?.id ?? null;
-    return await this.treesService.update(+id, updateTreeDto, userId);
-  }
-
-  @Delete(':id')
-  @UseGuards(RolesGuard)
-  @Roles('Admin', 'Manager')
-  @ApiOperation({ summary: 'Delete a tree (Admin/Manager only)' })
-  @ApiResponse({ status: 200, description: 'Tree successfully deleted.' })
-  @ApiResponse({ status: 404, description: 'Tree not found.' })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
-  async delete(@Param('id') id: string, @Request() req) {
-    const userId = req.user?.userId ?? req.user?.id ?? null;
-    await this.treesService.delete(+id, userId);
-    return { success: true };
-  }
-
-  @Get(':id/qr-code')
-  @ApiOperation({ summary: 'Generate QR code for a tree' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'QR code PNG image generated successfully.',
-    content: { 'image/png': { schema: { type: 'string', format: 'binary' } } } 
-  })
-  @ApiResponse({ status: 404, description: 'Tree not found.' })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  async getQRCode(@Param('id') id: string, @Res() res: Response) {
-    const qrCodeBuffer = await this.treesService.generateQRCode(+id);
-    res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Content-Disposition', `inline; filename="tree-${id}-qrcode.png"`);
-    res.send(qrCodeBuffer);
-  }
-
-  @Get('qr/:qrCode')
-  @ApiOperation({ summary: 'Get tree by QR code string' })
-  @ApiResponse({ status: 200, description: 'Tree found by QR code.' })
-  @ApiResponse({ status: 404, description: 'Tree not found.' })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  async findByQRCode(@Param('qrCode') qrCode: string) {
-    const decodedQRCode = decodeURIComponent(qrCode);
-    const tree = await this.treesService.findByQRCode(decodedQRCode);
-    if (!tree) {
-      throw new NotFoundException('Tree not found with the provided QR code');
-    }
-    return tree;
-  }
-
-  @Patch(':id/health')
-  @UseGuards(RolesGuard)
-  @Roles('Admin', 'Manager')
-  @ApiOperation({ summary: 'Update tree health status (Admin/Manager only)' })
-  @ApiResponse({ status: 200, description: 'Health status updated.' })
-  @ApiResponse({ status: 404, description: 'Tree not found.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
-  async updateHealth(
-    @Param('id') id: string,
-    @Body('health_status') healthStatus: string,
-    @Request() req,
-  ) {
-    const userId = req.user?.userId ?? req.user?.id ?? null;
-    return await this.treesService.updateHealthStatus(+id, healthStatus, userId);
-  }
-
   @Get('check-code')
   @UseGuards(RolesGuard)
   @Roles('Admin', 'Manager')
@@ -229,5 +128,106 @@ export class TreesController {
       +lng,
       excludeId ? +excludeId : undefined,
     );
+  }
+
+  @Get('qr/:qrCode')
+  @ApiOperation({ summary: 'Get tree by QR code string' })
+  @ApiResponse({ status: 200, description: 'Tree found by QR code.' })
+  @ApiResponse({ status: 404, description: 'Tree not found.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async findByQRCode(@Param('qrCode') qrCode: string) {
+    const decodedQRCode = decodeURIComponent(qrCode);
+    const tree = await this.treesService.findByQRCode(decodedQRCode);
+    if (!tree) {
+      throw new NotFoundException('Tree not found with the provided QR code');
+    }
+    return tree;
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get a tree by ID' })
+  @ApiResponse({ status: 200, description: 'Tree found.' })
+  @ApiResponse({ status: 404, description: 'Tree not found.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async findOne(@Param('id') id: string) {
+    return await this.treesService.findById(+id);
+  }
+
+  @Get(':id/history')
+  @ApiOperation({ summary: 'Get tree change history from audit logs' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'List of tree changes (UPDATE actions only).' 
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async getTreeHistory(@Param('id') id: string) {
+    return await this.auditLogService.findAll({
+      entity_type: 'tree',
+      entity_id: +id,
+      action: AuditAction.UPDATE,
+    });
+  }
+
+  @Get(':id/qr-code')
+  @ApiOperation({ summary: 'Generate QR code for a tree' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'QR code PNG image generated successfully.',
+    content: { 'image/png': { schema: { type: 'string', format: 'binary' } } } 
+  })
+  @ApiResponse({ status: 404, description: 'Tree not found.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async getQRCode(@Param('id') id: string, @Res() res: Response) {
+    const qrCodeBuffer = await this.treesService.generateQRCode(+id);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Disposition', `inline; filename="tree-${id}-qrcode.png"`);
+    res.send(qrCodeBuffer);
+  }
+
+  @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles('Admin', 'Manager')
+  @ApiOperation({ summary: 'Update a tree (Admin/Manager only)' })
+  @ApiResponse({ status: 200, description: 'Tree successfully updated.' })
+  @ApiResponse({ status: 404, description: 'Tree not found.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
+  async update(
+    @Param('id') id: string,
+    @Body() updateTreeDto: UpdateTreeDto,
+    @Request() req,
+  ) {
+    const userId = req.user?.userId ?? req.user?.id ?? null;
+    return await this.treesService.update(+id, updateTreeDto, userId);
+  }
+
+  @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles('Admin', 'Manager')
+  @ApiOperation({ summary: 'Delete a tree (Admin/Manager only)' })
+  @ApiResponse({ status: 200, description: 'Tree successfully deleted.' })
+  @ApiResponse({ status: 404, description: 'Tree not found.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
+  async delete(@Param('id') id: string, @Request() req) {
+    const userId = req.user?.userId ?? req.user?.id ?? null;
+    await this.treesService.delete(+id, userId);
+    return { success: true };
+  }
+
+  @Patch(':id/health')
+  @UseGuards(RolesGuard)
+  @Roles('Admin', 'Manager')
+  @ApiOperation({ summary: 'Update tree health status (Admin/Manager only)' })
+  @ApiResponse({ status: 200, description: 'Health status updated.' })
+  @ApiResponse({ status: 404, description: 'Tree not found.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
+  async updateHealth(
+    @Param('id') id: string,
+    @Body('health_status') healthStatus: string,
+    @Request() req,
+  ) {
+    const userId = req.user?.userId ?? req.user?.id ?? null;
+    return await this.treesService.updateHealthStatus(+id, healthStatus, userId);
   }
 }

@@ -232,9 +232,8 @@ function TreeDetailModal({
 
   // Load QR code when QR tab is active
   useEffect(() => {
-    if (activeTab === 'qrcode' && !qrCodeBlobUrl && !loadingQRCode) {
+    if (activeTab === 'qrcode' && !qrCodeBlobUrl && !loadingQRCode && !qrCodeError) {
       setLoadingQRCode(true);
-      setQrCodeError(false);
       getTreeQRCodeBlobUrl(tree.id)
         .then((url) => {
           setQrCodeBlobUrl(url);
@@ -243,12 +242,13 @@ function TreeDetailModal({
         .catch((error) => {
           console.error('Failed to load QR code:', error);
           setQrCodeError(true);
+          setQrCodeBlobUrl(null);
         })
         .finally(() => {
           setLoadingQRCode(false);
         });
     }
-  }, [activeTab, tree.id, qrCodeBlobUrl, loadingQRCode]);
+  }, [activeTab, tree.id]);
 
   // Load history when history tab is active (only once)
   useEffect(() => {
@@ -523,14 +523,13 @@ function TreeDetailModal({
                           <svg className="w-12 h-12 text-red-500 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
-                          <p className="text-sm text-gray-600">Không thể tải QR code</p>
+                          <p className="text-sm text-gray-600 mb-2">Không thể tải QR code</p>
                           <button
                             onClick={() => {
                               setQrCodeError(false);
-                              setLoadingQRCode(false);
                               setQrCodeBlobUrl(null);
                             }}
-                            className="mt-2 text-xs text-blue-600 hover:text-blue-700"
+                            className="mt-2 px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
                           >
                             Thử lại
                           </button>

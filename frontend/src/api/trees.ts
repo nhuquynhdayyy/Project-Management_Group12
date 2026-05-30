@@ -70,7 +70,7 @@ export async function fetchTreeHistory(treeId: number): Promise<ActivityLog[]> {
  * @returns Blob of QR code image
  */
 export async function fetchTreeQRCodeBlob(treeId: number): Promise<Blob> {
-  const response = await apiClient.get(`/trees/${treeId}/qrcode`, {
+  const response = await apiClient.get(`/trees/${treeId}/qr-code`, {
     responseType: 'blob',
   });
   return new Blob([response.data], { type: 'image/png' });
