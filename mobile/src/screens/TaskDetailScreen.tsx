@@ -120,18 +120,43 @@ export default function TaskDetailScreen() {
       return;
     }
 
+    // Kiểm tra xem có ảnh bằng chứng không (tùy chọn nhưng khuyến khích)
+    if (!imageUri && !task.evidence_image_url) {
+      Alert.alert(
+        'Xác nhận',
+        'Bạn chưa chụp ảnh bằng chứng. Bạn có muốn tiếp tục không?',
+        [
+          { text: 'Hủy', style: 'cancel' },
+          { text: 'Tiếp tục', onPress: () => performComplete() },
+        ]
+      );
+      return;
+    }
+
+    performComplete();
+  }
+
+  async function performComplete() {
     setLoading(true);
     try {
+      // Yêu cầu quyền truy cập vị trí
       const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
       if (locationStatus !== 'granted') {
-        Alert.alert('Lỗi', 'Cần cấp quyền truy cập vị trí để hoàn thành công việc');
+        Alert.alert(
+          'Cần quyền truy cập vị trí',
+          'Ứng dụng cần quyền truy cập vị trí để xác minh bạn đang ở gần cây. Vui lòng cấp quyền trong cài đặt.'
+        );
+        setLoading(false);
         return;
       }
 
+      // Lấy vị trí hiện tại
+      Alert.alert('Đang lấy vị trí', 'Vui lòng đợi trong giây lát...');
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
 
+      // Gọi API hoàn thành task
       const completed = await completeTask(task.id, {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
@@ -142,12 +167,47 @@ export default function TaskDetailScreen() {
       // Update local task state with the completed task returned from API
       setTask(completed);
 
-      Alert.alert('Thành công', 'Đã hoàn thành công việc', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      Alert.alert(
+        '✅ Thành công',
+        'Đã hoàn thành công việc thành công!',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Quay lại màn hình danh sách task
+              navigation.goBack();
+            },
+          },
+        ]
+      );
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Không thể hoàn thành công việc';
-      Alert.alert('Lỗi', message);
+      console.error('Error completing task:', error);
+      
+      // Xử lý các lỗi cụ thể
+      let errorMessage = 'Không thể hoàn thành công việc';
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      // Kiểm tra lỗi geofencing
+      if (errorMessage.includes('geofence') || errorMessage.includes('bán kính') || errorMessage.includes('xa')) {
+        Alert.alert(
+          '📍 Ngoài phạm vi cho phép',
+          'Bạn đang ở quá xa cây (>10m). Vui lòng di chuyển đến gần cây hơn để hoàn thành công việc.',
+          [{ text: 'Đã hiểu' }]
+        );
+      } else if (errorMessage.includes('permission') || errorMessage.includes('quyền')) {
+        Alert.alert(
+          '⚠️ Lỗi quyền truy cập',
+          'Không thể truy cập vị trí hoặc camera. Vui lòng kiểm tra cài đặt quyền của ứng dụng.',
+          [{ text: 'Đã hiểu' }]
+        );
+      } else {
+        Alert.alert('❌ Lỗi', errorMessage, [{ text: 'Đã hiểu' }]);
+      }
     } finally {
       setLoading(false);
     }
@@ -364,13 +424,21 @@ export default function TaskDetailScreen() {
         {task.status !== 'Completed' && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>✅ Hoàn thành công việc</Text>
-            <Text style={styles.hint}>
-              ⚠️ Bạn phải ở trong bán kính 10m từ cây để hoàn thành công việc
-            </Text>
+            <View style={styles.hint}>
+              <Text style={{ color: '#fb923c', fontSize: 14, fontWeight: '600' }}>
+                ⚠️ Lưu ý quan trọng:{'\n'}
+                • Bạn phải ở trong bán kính 10m từ cây{'\n'}
+                • Nên chụp ảnh bằng chứng để xác nhận công việc{'\n'}
+                • Kiểm tra GPS đã được bật
+              </Text>
+            </View>
 
+            <Text style={{ color: '#cbd5e1', fontSize: 14, marginBottom: 8, fontWeight: '600' }}>
+              Ghi chú công việc:
+            </Text>
             <TextInput
               style={styles.textArea}
-              placeholder="Ghi chú (tùy chọn)"
+              placeholder="Nhập ghi chú về công việc đã thực hiện (tùy chọn)"
               placeholderTextColor="#64748b"
               value={notes}
               onChangeText={setNotes}
@@ -379,7 +447,9 @@ export default function TaskDetailScreen() {
             />
 
             <TouchableOpacity style={styles.cameraButton} onPress={handleTakePhoto}>
-              <Text style={styles.cameraButtonText}>📷 Chụp ảnh bằng chứng (tùy chọn)</Text>
+              <Text style={styles.cameraButtonText}>
+                📷 {imageUri ? 'Thay đổi ảnh bằng chứng' : 'Chụp ảnh bằng chứng'}
+              </Text>
             </TouchableOpacity>
 
             {imageUri && (
@@ -397,9 +467,9 @@ export default function TaskDetailScreen() {
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color="#fff" size="large" />
               ) : (
-                <Text style={styles.completeButtonText}>✓ Hoàn thành công việc</Text>
+                <Text style={styles.completeButtonText}>✓ XÁC NHẬN HOÀN THÀNH</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -543,10 +613,16 @@ const styles = StyleSheet.create({
   },
   // Complete task form
   hint: {
-    fontSize: 13,
-    color: '#f59e0b',
+    fontSize: 14,
+    color: '#fb923c',
     marginBottom: 16,
-    lineHeight: 18,
+    lineHeight: 20,
+    fontWeight: '600',
+    backgroundColor: 'rgba(251, 146, 60, 0.1)',
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#fb923c',
   },
   textArea: {
     backgroundColor: '#0f172a',
@@ -554,7 +630,7 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 14,
     color: '#fff',
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#334155',
     minHeight: 100,
     textAlignVertical: 'top',
@@ -562,58 +638,84 @@ const styles = StyleSheet.create({
   },
   cameraButton: {
     backgroundColor: '#3b82f6',
-    borderRadius: 8,
-    padding: 14,
+    borderRadius: 12,
+    padding: 16,
     alignItems: 'center',
     marginBottom: 16,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#60a5fa',
+    minHeight: 56,
+    justifyContent: 'center',
+    shadowColor: '#3b82f6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   cameraButtonText: {
     color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
   },
   imagePreviewContainer: {
     position: 'relative',
     marginBottom: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#22c55e',
   },
   imagePreview: {
     width: '100%',
     height: 200,
-    borderRadius: 8,
+    borderRadius: 10,
     backgroundColor: '#0f172a',
   },
   removeImageButton: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(239, 68, 68, 0.9)',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(239, 68, 68, 0.95)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
   removeImageText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
   },
   completeButton: {
-    backgroundColor: '#16a34a',
-    borderRadius: 8,
-    padding: 16,
+    backgroundColor: '#22c55e',
+    borderRadius: 12,
+    padding: 18,
     alignItems: 'center',
+    minHeight: 60,
+    justifyContent: 'center',
+    shadowColor: '#22c55e',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: '#4ade80',
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   completeButtonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });

@@ -64,3 +64,16 @@ export async function findTreesNearby(
   });
   return response.data;
 }
+
+/**
+ * Update tree health status
+ */
+export async function updateTreeHealth(
+  treeId: number,
+  healthStatus: 'Tốt' | 'Yếu' | 'Sâu bệnh' | 'Chết'
+): Promise<Tree> {
+  const response = await apiClient.patch<Tree>(`/trees/${treeId}/health`, {
+    health_status: healthStatus,
+  });
+  return response.data;
+}

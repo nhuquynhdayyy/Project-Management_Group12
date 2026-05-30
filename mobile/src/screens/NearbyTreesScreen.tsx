@@ -12,7 +12,9 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Location from 'expo-location';
-import { findTreesNearby, NearbyTree } from '../api/trees';
+import { findTreesNearby, NearbyTree, updateTreeHealth } from '../api/trees';
+import { createTask } from '../api/maintenance';
+import { useAuth } from '../context/AuthContext';
 import { RootStackParamList } from '../types/navigation';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'NearbyTrees'>;
@@ -30,6 +32,7 @@ interface FilterState {
 
 export default function NearbyTreesScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const { user } = useAuth();
   const [trees, setTrees] = useState<NearbyTree[]>([]);
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
@@ -171,6 +174,134 @@ export default function NearbyTreesScreen() {
     }));
   }
 
+  async function handleCreateTask(tree: NearbyTree) {
+    if (!user) {
+      Alert.alert('Lỗi', 'Bạn cần đăng nhập để tạo task');
+      return;
+    }
+
+    // Hiển thị dialog chọn loại task
+    Alert.alert(
+      'Tạo Task Bảo Trì',
+      `Chọn loại công việc cho cây ${tree.tree_code}:`,
+      [
+        {
+          text: '✂️ Cắt tỉa',
+          onPress: () => createMaintenanceTask(tree, 'Cắt tỉa'),
+        },
+        {
+          text: '🌱 Bón phân',
+          onPress: () => createMaintenanceTask(tree, 'Bón phân'),
+        },
+        {
+          text: '💧 Tưới nước',
+          onPress: () => createMaintenanceTask(tree, 'Tưới nước'),
+        },
+        {
+          text: '🔍 Kiểm tra',
+          onPress: () => createMaintenanceTask(tree, 'Kiểm tra'),
+        },
+        { text: 'Hủy', style: 'cancel' },
+      ]
+    );
+  }
+
+  async function createMaintenanceTask(
+    tree: NearbyTree,
+    taskType: 'Cắt tỉa' | 'Bón phân' | 'Tưới nước' | 'Kiểm tra'
+  ) {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+      
+      // Tạo task với ngày hôm nay
+      const today = new Date().toISOString().split('T')[0];
+      
+      await createTask({
+        tree_id: tree.id,
+        assigned_to: user.id,
+        task_type: taskType,
+        scheduled_date: today,
+        notes: `Task tạo từ mobile cho cây ${tree.tree_code}`,
+      });
+
+      Alert.alert(
+        '✅ Thành công',
+        `Đã tạo task "${taskType}" cho cây ${tree.tree_code}`,
+        [
+          {
+            text: 'Xem danh sách task',
+            onPress: () => navigation.navigate('TaskList'),
+          },
+          { text: 'OK' },
+        ]
+      );
+    } catch (error: any) {
+      console.error('Error creating task:', error);
+      const message = error.response?.data?.message || 'Không thể tạo task';
+      Alert.alert('❌ Lỗi', message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleUpdateHealth(tree: NearbyTree) {
+    // Hiển thị dialog chọn trạng thái sức khỏe
+    Alert.alert(
+      'Cập Nhật Sức Khỏe',
+      `Chọn trạng thái sức khỏe cho cây ${tree.tree_code}:`,
+      [
+        {
+          text: '✅ Tốt',
+          onPress: () => updateHealth(tree, 'Tốt'),
+        },
+        {
+          text: '⚠️ Yếu',
+          onPress: () => updateHealth(tree, 'Yếu'),
+        },
+        {
+          text: '🚨 Sâu bệnh',
+          onPress: () => updateHealth(tree, 'Sâu bệnh'),
+        },
+        {
+          text: '💀 Chết',
+          onPress: () => updateHealth(tree, 'Chết'),
+        },
+        { text: 'Hủy', style: 'cancel' },
+      ]
+    );
+  }
+
+  async function updateHealth(
+    tree: NearbyTree,
+    healthStatus: 'Tốt' | 'Yếu' | 'Sâu bệnh' | 'Chết'
+  ) {
+    try {
+      setLoading(true);
+      
+      await updateTreeHealth(tree.id, healthStatus);
+
+      // Cập nhật tree trong danh sách
+      setTrees((prevTrees) =>
+        prevTrees.map((t) =>
+          t.id === tree.id ? { ...t, health_status: healthStatus } : t
+        )
+      );
+
+      Alert.alert(
+        '✅ Thành công',
+        `Đã cập nhật sức khỏe cây ${tree.tree_code} thành "${healthStatus}"`
+      );
+    } catch (error: any) {
+      console.error('Error updating health:', error);
+      const message = error.response?.data?.message || 'Không thể cập nhật sức khỏe';
+      Alert.alert('❌ Lỗi', message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function renderTree({ item }: { item: NearbyTree }) {
     return (
       <View style={styles.treeCard}>
@@ -204,19 +335,15 @@ export default function NearbyTreesScreen() {
         <View style={styles.quickActions}>
           <TouchableOpacity
             style={[styles.actionButton, styles.actionButtonPrimary]}
-            onPress={() => {
-              // TODO: Tạo task bảo trì
-              Alert.alert('Tạo Task', `Tạo task bảo trì cho cây ${item.tree_code}`);
-            }}
+            onPress={() => handleCreateTask(item)}
+            disabled={loading}
           >
             <Text style={styles.actionButtonText}>🔧 Tạo Task</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionButton, styles.actionButtonSecondary]}
-            onPress={() => {
-              // TODO: Cập nhật sức khỏe
-              Alert.alert('Cập nhật', `Cập nhật sức khỏe cây ${item.tree_code}`);
-            }}
+            onPress={() => handleUpdateHealth(item)}
+            disabled={loading}
           >
             <Text style={styles.actionButtonText}>💚 Cập nhật</Text>
           </TouchableOpacity>

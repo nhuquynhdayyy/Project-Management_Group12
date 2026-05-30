@@ -16,6 +16,7 @@ import StaffStatsPage from './pages/dashboard/StaffStatsPage';
 import UsersPage from './pages/dashboard/UsersPage';
 import SystemSettingsPage from './pages/dashboard/SystemSettingsPage';
 import NearbyTreesPage from './pages/dashboard/NearbyTreesPage';
+import StaffTasksPage from './pages/dashboard/StaffTasksPage';
 
 function DefaultRedirect() {
   const { user } = useAuth();
@@ -44,6 +45,7 @@ export default function App() {
               {/* Nearby Trees - Staff, Manager, Admin */}
               <Route element={<RoleGuard allowedRoles={['Admin', 'Manager', 'Staff']} />}>
                 <Route path="/nearby" element={<NearbyTreesPage />} />
+                <Route path="/tasks" element={<StaffTasksPage />} />
               </Route>
               
               {/* Dashboard - Admin/Manager only */}

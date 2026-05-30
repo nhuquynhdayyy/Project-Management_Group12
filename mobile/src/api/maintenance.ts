@@ -30,6 +30,10 @@ export interface CompleteTaskRequest {
   imageUri?: string; // Local file URI
 }
 
+export interface UpdateTaskStatusRequest {
+  status: 'Pending' | 'In_Progress' | 'Completed';
+}
+
 export async function getMyTasks(): Promise<MaintenanceTask[]> {
   try {
     const response = await apiClient.get<MaintenanceTask[]>('/maintenance/tasks/my-tasks');
@@ -99,5 +103,42 @@ export async function completeTask(
     }
   );
   
+  return response.data;
+}
+
+/**
+ * Update task status (Admin/Manager only, but we can try for staff)
+ */
+export async function updateTaskStatus(
+  taskId: number,
+  status: 'Pending' | 'In_Progress' | 'Completed'
+): Promise<MaintenanceTask> {
+  const response = await apiClient.patch<MaintenanceTask>(
+    `/maintenance/tasks/${taskId}/status`,
+    { status }
+  );
+  return response.data;
+}
+
+/**
+ * Start working on a task (change status to In_Progress)
+ */
+export async function startTask(taskId: number): Promise<MaintenanceTask> {
+  return updateTaskStatus(taskId, 'In_Progress');
+}
+
+/**
+ * Create a new maintenance task
+ */
+export interface CreateTaskRequest {
+  tree_id: number;
+  assigned_to: number;
+  task_type: 'Cắt tỉa' | 'Bón phân' | 'Tưới nước' | 'Kiểm tra';
+  scheduled_date: string; // YYYY-MM-DD
+  notes?: string;
+}
+
+export async function createTask(data: CreateTaskRequest): Promise<MaintenanceTask> {
+  const response = await apiClient.post<MaintenanceTask>('/maintenance/tasks', data);
   return response.data;
 }

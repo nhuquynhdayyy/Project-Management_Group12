@@ -154,10 +154,9 @@ export class MaintenanceController {
   }
 
   @Patch('tasks/:id/status')
-  @UseGuards(RolesGuard)
-  @Roles('Admin', 'Manager')
-  @ApiOperation({ summary: 'Update task status (Admin/Manager only)' })
-  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
+  @ApiOperation({ summary: 'Update task status' })
+  @ApiResponse({ status: 200, description: 'Task status updated successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Not allowed to update this task.' })
   async updateStatus(
     @Param('id') id: string,
     @Body() updateStatusDto: UpdateTaskStatusDto,

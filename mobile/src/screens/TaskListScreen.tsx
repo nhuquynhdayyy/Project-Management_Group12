@@ -8,10 +8,11 @@ import {
   RefreshControl,
   Alert,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { getMyTasks, MaintenanceTask } from '../api/maintenance';
+import { getMyTasks, MaintenanceTask, startTask } from '../api/maintenance';
 import { useAuth } from '../context/AuthContext';
 import { RootStackParamList } from '../types/navigation';
 
@@ -32,6 +33,7 @@ export default function TaskListScreen() {
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [processingTaskId, setProcessingTaskId] = useState<number | null>(null);
   const [filters, setFilters] = useState<TaskFilterState>({
     status: 'all',
     taskType: 'all',
@@ -39,7 +41,14 @@ export default function TaskListScreen() {
 
   useEffect(() => {
     loadTasks();
-  }, []);
+    
+    // Lắng nghe sự kiện focus để refresh danh sách khi quay lại màn hình
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadTasks();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   // Lọc và sắp xếp task
   const filteredTasks = useMemo(() => {
@@ -143,6 +152,52 @@ export default function TaskListScreen() {
     }
   }
 
+  async function handleStartWork(task: MaintenanceTask) {
+    Alert.alert(
+      'Bắt đầu làm việc',
+      `Bạn có muốn bắt đầu công việc "${task.task_type}" cho cây ${task.tree?.tree_code || task.tree_id}?`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Bắt đầu',
+          onPress: async () => {
+            try {
+              setProcessingTaskId(task.id);
+              // Cập nhật status sang In_Progress
+              const updatedTask = await startTask(task.id);
+              
+              // Cập nhật task trong danh sách
+              setTasks((prevTasks) =>
+                prevTasks.map((t) => (t.id === updatedTask.id ? updatedTask : t))
+              );
+              
+              Alert.alert('Thành công', 'Đã bắt đầu công việc', [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    // Chuyển sang màn hình chi tiết để thực hiện công việc
+                    navigation.navigate('TaskDetail', { task: updatedTask });
+                  },
+                },
+              ]);
+            } catch (error: any) {
+              console.error('Error starting task:', error);
+              const message = error.response?.data?.message || 'Không thể bắt đầu công việc';
+              Alert.alert('Lỗi', message);
+            } finally {
+              setProcessingTaskId(null);
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  function handleCompleteTask(task: MaintenanceTask) {
+    // Chuyển sang màn hình chi tiết để hoàn thành
+    navigation.navigate('TaskDetail', { task });
+  }
+
   function renderTask({ item }: { item: MaintenanceTask }) {
     // Safety check for item
     if (!item || !item.id) {
@@ -185,18 +240,20 @@ export default function TaskListScreen() {
             {item.status === 'Pending' && (
               <TouchableOpacity
                 style={[styles.actionButton, styles.actionButtonStart]}
-                onPress={() => {
-                  // TODO: Bắt đầu làm việc
-                  Alert.alert('Bắt đầu', `Bắt đầu làm việc: ${item.task_type}`);
-                }}
+                onPress={() => handleStartWork(item)}
+                disabled={processingTaskId === item.id}
               >
-                <Text style={styles.actionButtonText}>▶️ Bắt đầu làm việc</Text>
+                {processingTaskId === item.id ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.actionButtonText}>▶️ Bắt đầu làm việc</Text>
+                )}
               </TouchableOpacity>
             )}
             {item.status === 'In_Progress' && (
               <TouchableOpacity
                 style={[styles.actionButton, styles.actionButtonComplete]}
-                onPress={() => navigation.navigate('TaskDetail', { task: item })}
+                onPress={() => handleCompleteTask(item)}
               >
                 <Text style={styles.actionButtonText}>✅ Hoàn thành</Text>
               </TouchableOpacity>
