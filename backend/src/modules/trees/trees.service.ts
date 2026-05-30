@@ -4,8 +4,11 @@ import { Repository } from 'typeorm';
 import { Tree } from '../../entities/tree.entity';
 import { TreeSpecies } from '../../entities/tree-species.entity';
 import { AdministrativeArea } from '../../entities/administrative-area.entity';
+import { TreePhysicalLog } from '../../entities/tree-physical-log.entity';
 import { CreateTreeDto } from './dto/create-tree.dto';
 import { FindTreesNearbyDto } from './dto/find-trees-nearby.dto';
+import { UpdatePhysicalDto } from './dto/update-physical.dto';
+import { PhysicalHistoryQueryDto } from './dto/physical-history-query.dto';
 
 @Injectable()
 export class TreesService {
@@ -16,6 +19,8 @@ export class TreesService {
     private readonly speciesRepository: Repository<TreeSpecies>,
     @InjectRepository(AdministrativeArea)
     private readonly areaRepository: Repository<AdministrativeArea>,
+    @InjectRepository(TreePhysicalLog)
+    private readonly physicalLogRepository: Repository<TreePhysicalLog>,
   ) {}
 
   async create(createTreeDto: CreateTreeDto): Promise<Tree> {
@@ -135,5 +140,91 @@ export class TreesService {
     if (!tree) throw new NotFoundException('Tree not found');
     tree.health_status = healthStatus as any;
     return await this.treeRepository.save(tree);
+  }
+
+  async updatePhysical(
+    id: number,
+    userId: number,
+    updatePhysicalDto: UpdatePhysicalDto,
+  ): Promise<{ tree: Tree; log: TreePhysicalLog }> {
+    const tree = await this.treeRepository.findOne({ where: { id } });
+    if (!tree) {
+      throw new NotFoundException('Tree not found');
+    }
+
+    // Store old values
+    const oldValues = {
+      height_m: tree.height_m,
+      trunk_diameter_cm: tree.trunk_diameter_cm,
+      canopy_diameter_m: tree.canopy_diameter_m,
+      tilt_degree: tree.tilt_degree,
+    };
+
+    // Update tree with new values
+    const newValues: any = {};
+    if (updatePhysicalDto.height_m !== undefined) {
+      tree.height_m = updatePhysicalDto.height_m;
+      newValues.height_m = updatePhysicalDto.height_m;
+    }
+    if (updatePhysicalDto.trunk_diameter_cm !== undefined) {
+      tree.trunk_diameter_cm = updatePhysicalDto.trunk_diameter_cm;
+      newValues.trunk_diameter_cm = updatePhysicalDto.trunk_diameter_cm;
+    }
+    if (updatePhysicalDto.canopy_diameter_m !== undefined) {
+      tree.canopy_diameter_m = updatePhysicalDto.canopy_diameter_m;
+      newValues.canopy_diameter_m = updatePhysicalDto.canopy_diameter_m;
+    }
+    if (updatePhysicalDto.tilt_degree !== undefined) {
+      tree.tilt_degree = updatePhysicalDto.tilt_degree;
+      newValues.tilt_degree = updatePhysicalDto.tilt_degree;
+    }
+
+    // Save updated tree
+    const updatedTree = await this.treeRepository.save(tree);
+
+    // Create physical log
+    const log = this.physicalLogRepository.create({
+      tree_id: id,
+      user_id: userId,
+      height_m: updatePhysicalDto.height_m,
+      trunk_diameter_cm: updatePhysicalDto.trunk_diameter_cm,
+      canopy_diameter_m: updatePhysicalDto.canopy_diameter_m,
+      tilt_degree: updatePhysicalDto.tilt_degree,
+      old_values: oldValues,
+      new_values: newValues,
+      notes: updatePhysicalDto.notes,
+    });
+
+    const savedLog = await this.physicalLogRepository.save(log);
+
+    return { tree: updatedTree, log: savedLog };
+  }
+
+  async getPhysicalHistory(
+    id: number,
+    query: PhysicalHistoryQueryDto,
+  ): Promise<{ data: TreePhysicalLog[]; total: number; page: number; limit: number }> {
+    const tree = await this.treeRepository.findOne({ where: { id } });
+    if (!tree) {
+      throw new NotFoundException('Tree not found');
+    }
+
+    const page = query.page || 1;
+    const limit = query.limit || 10;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await this.physicalLogRepository.findAndCount({
+      where: { tree_id: id },
+      order: { measured_at: 'DESC' },
+      skip,
+      take: limit,
+    });
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+    };
   }
 }

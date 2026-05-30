@@ -16,7 +16,7 @@ import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { completeTask, getTaskById } from '../api/maintenance';
 import type { MaintenanceTask } from '../api/maintenance';
-import { getTreeById } from '../api/trees';
+import { getTreeById, updatePhysicalMeasurements } from '../api/trees';
 import type { Tree } from '../api/trees';
 import { RootStackParamList } from '../types/navigation';
 
@@ -34,6 +34,14 @@ export default function TaskDetailScreen() {
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
+
+  // Physical measurements state
+  const [heightM, setHeightM] = useState('');
+  const [trunkDiameterCm, setTrunkDiameterCm] = useState('');
+  const [canopyDiameterM, setCanopyDiameterM] = useState('');
+  const [tiltDegree, setTiltDegree] = useState('');
+  const [physicalNotes, setPhysicalNotes] = useState('');
+  const [savingPhysical, setSavingPhysical] = useState(false);
 
   // Fetch fresh task data on mount to get latest evidence_image_url
   useEffect(() => {
@@ -150,6 +158,72 @@ export default function TaskDetailScreen() {
       Alert.alert('Lỗi', message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleSavePhysical() {
+    if (!treeDetails) {
+      Alert.alert('Lỗi', 'Không tìm thấy thông tin cây');
+      return;
+    }
+
+    // Validate at least one field is filled
+    if (!heightM && !trunkDiameterCm && !canopyDiameterM && !tiltDegree) {
+      Alert.alert('Lỗi', 'Vui lòng nhập ít nhất một chỉ số');
+      return;
+    }
+
+    // Validate numeric values
+    const height = heightM ? parseFloat(heightM) : undefined;
+    const trunkDiameter = trunkDiameterCm ? parseFloat(trunkDiameterCm) : undefined;
+    const canopyDiameter = canopyDiameterM ? parseFloat(canopyDiameterM) : undefined;
+    const tilt = tiltDegree ? parseInt(tiltDegree) : undefined;
+
+    if (height !== undefined && (isNaN(height) || height <= 0)) {
+      Alert.alert('Lỗi', 'Chiều cao phải là số dương');
+      return;
+    }
+    if (trunkDiameter !== undefined && (isNaN(trunkDiameter) || trunkDiameter <= 0)) {
+      Alert.alert('Lỗi', 'Đường kính thân phải là số dương');
+      return;
+    }
+    if (canopyDiameter !== undefined && (isNaN(canopyDiameter) || canopyDiameter < 0)) {
+      Alert.alert('Lỗi', 'Đường kính tán phải là số không âm');
+      return;
+    }
+    if (tilt !== undefined && (isNaN(tilt) || tilt < 0 || tilt > 90)) {
+      Alert.alert('Lỗi', 'Độ nghiêng phải từ 0 đến 90 độ');
+      return;
+    }
+
+    setSavingPhysical(true);
+    try {
+      const payload: any = {};
+      if (height !== undefined) payload.height_m = height;
+      if (trunkDiameter !== undefined) payload.trunk_diameter_cm = trunkDiameter;
+      if (canopyDiameter !== undefined) payload.canopy_diameter_m = canopyDiameter;
+      if (tilt !== undefined) payload.tilt_degree = tilt;
+      if (physicalNotes.trim()) payload.notes = physicalNotes.trim();
+
+      await updatePhysicalMeasurements(treeDetails.id, payload);
+
+      // Refresh tree details
+      const updatedTree = await getTreeById(treeDetails.id);
+      setTreeDetails(updatedTree);
+
+      // Clear form
+      setHeightM('');
+      setTrunkDiameterCm('');
+      setCanopyDiameterM('');
+      setTiltDegree('');
+      setPhysicalNotes('');
+
+      Alert.alert('Thành công', '💾 Đã lưu chỉ số vật lý');
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Không thể lưu chỉ số vật lý';
+      Alert.alert('Lỗi', message);
+    } finally {
+      setSavingPhysical(false);
     }
   }
 
@@ -318,6 +392,93 @@ export default function TaskDetailScreen() {
               })}
             >
               <Text style={styles.historyButtonText}>📋 Xem lịch sử bảo trì cây này</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Physical measurements update card */}
+        {treeDetails && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>📏 Cập nhật chỉ số vật lý</Text>
+            <Text style={styles.hint}>
+              Nhập các chỉ số đo đạc mới (chỉ cần nhập những chỉ số thay đổi)
+            </Text>
+
+            <View style={styles.physicalInputsContainer}>
+              <View style={styles.inputRow}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Chiều cao (m)</Text>
+                  <TextInput
+                    style={styles.physicalInput}
+                    placeholder={treeDetails.height_m?.toString() || '—'}
+                    placeholderTextColor="#64748b"
+                    value={heightM}
+                    onChangeText={setHeightM}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Đ.kính thân (cm)</Text>
+                  <TextInput
+                    style={styles.physicalInput}
+                    placeholder={treeDetails.trunk_diameter_cm?.toString() || '—'}
+                    placeholderTextColor="#64748b"
+                    value={trunkDiameterCm}
+                    onChangeText={setTrunkDiameterCm}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputRow}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Đ.kính tán (m)</Text>
+                  <TextInput
+                    style={styles.physicalInput}
+                    placeholder="—"
+                    placeholderTextColor="#64748b"
+                    value={canopyDiameterM}
+                    onChangeText={setCanopyDiameterM}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Độ nghiêng (°)</Text>
+                  <TextInput
+                    style={styles.physicalInput}
+                    placeholder="0-90"
+                    placeholderTextColor="#64748b"
+                    value={tiltDegree}
+                    onChangeText={setTiltDegree}
+                    keyboardType="number-pad"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.fullWidthInputGroup}>
+                <Text style={styles.inputLabel}>Ghi chú (tùy chọn)</Text>
+                <TextInput
+                  style={styles.textArea}
+                  placeholder="Ghi chú về đo đạc..."
+                  placeholderTextColor="#64748b"
+                  value={physicalNotes}
+                  onChangeText={setPhysicalNotes}
+                  multiline
+                  numberOfLines={2}
+                />
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.savePhysicalButton, savingPhysical && styles.buttonDisabled]}
+              onPress={handleSavePhysical}
+              disabled={savingPhysical}
+            >
+              {savingPhysical ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.savePhysicalButtonText}>💾 Lưu chỉ số</Text>
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -612,6 +773,46 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   completeButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Physical measurements styles
+  physicalInputsContainer: {
+    marginBottom: 16,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  inputGroup: {
+    flex: 1,
+  },
+  fullWidthInputGroup: {
+    marginBottom: 12,
+  },
+  inputLabel: {
+    fontSize: 13,
+    color: '#94a3b8',
+    marginBottom: 6,
+  },
+  physicalInput: {
+    backgroundColor: '#0f172a',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    color: '#fff',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  savePhysicalButton: {
+    backgroundColor: '#16a34a',
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+  },
+  savePhysicalButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',

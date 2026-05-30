@@ -38,3 +38,19 @@ export async function getTreeByCode(treeCode: string): Promise<Tree> {
   const response = await apiClient.get<Tree>(`/trees/code/${treeCode}`);
   return response.data;
 }
+
+export interface UpdatePhysicalPayload {
+  height_m?: number;
+  trunk_diameter_cm?: number;
+  canopy_diameter_m?: number;
+  tilt_degree?: number;
+  notes?: string;
+}
+
+export async function updatePhysicalMeasurements(
+  treeId: number,
+  payload: UpdatePhysicalPayload
+): Promise<{ tree: Tree; log: any }> {
+  const response = await apiClient.patch(`/trees/${treeId}/physical`, payload);
+  return response.data;
+}

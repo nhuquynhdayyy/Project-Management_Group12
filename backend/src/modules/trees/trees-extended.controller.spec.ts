@@ -1,7 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { TreesController } from './trees.controller';
+import { TreesService } from './trees.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { UpdatePhysicalDto } from './dto/update-physical.dto';
+import { PhysicalHistoryQueryDto } from './dto/physical-history-query.dto';
 
 /**
  * Test suite for extended Trees features
@@ -10,8 +14,8 @@ import { RolesGuard } from '../../common/guards/roles.guard';
  * This is RED phase - tests will fail until implementation is complete
  */
 describe('TreesExtendedController', () => {
-  let controller: any;
-  let service: any;
+  let controller: TreesController;
+  let service: TreesService;
   let storageService: any;
 
   const mockTreesExtendedService = {
@@ -47,24 +51,20 @@ describe('TreesExtendedController', () => {
   };
 
   beforeEach(async () => {
-    // Note: Controller doesn't exist yet - this will fail
-    // const module: TestingModule = await Test.createTestingModule({
-    //   controllers: [TreesExtendedController],
-    //   providers: [
-    //     { provide: TreesExtendedService, useValue: mockTreesExtendedService },
-    //     { provide: StorageService, useValue: mockStorageService },
-    //     { provide: AreasService, useValue: mockAreasService },
-    //   ],
-    // })
-    //   .overrideGuard(JwtAuthGuard)
-    //   .useValue(mockJwtAuthGuard)
-    //   .overrideGuard(RolesGuard)
-    //   .useValue(mockRolesGuard)
-    //   .compile();
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [TreesController],
+      providers: [
+        { provide: TreesService, useValue: mockTreesExtendedService },
+      ],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue(mockJwtAuthGuard)
+      .overrideGuard(RolesGuard)
+      .useValue(mockRolesGuard)
+      .compile();
 
-    // controller = module.get(TreesExtendedController);
-    // service = module.get(TreesExtendedService);
-    // storageService = module.get(StorageService);
+    controller = module.get<TreesController>(TreesController);
+    service = module.get<TreesService>(TreesService);
   });
 
   afterEach(() => {
@@ -77,83 +77,110 @@ describe('TreesExtendedController', () => {
     describe('PATCH /trees/:id/physical', () => {
       it('1. should update physical measurements successfully', async () => {
         // Arrange
-        const updatePhysicalDto = {
+        const updatePhysicalDto: UpdatePhysicalDto = {
           height_m: 12.5,
           trunk_diameter_cm: 45.0,
           tilt_degree: 15,
+        };
+
+        const mockRequest = {
+          user: { userId: 1 },
         };
 
         const mockUpdatedTree = {
           id: 1,
           tree_code: 'TREE001',
-          ...updatePhysicalDto,
-          updated_at: new Date(),
-        };
-
-        mockTreesExtendedService.updatePhysical.mockResolvedValue(mockUpdatedTree);
-
-        // Act
-        // const result = await controller.updatePhysical('1', updatePhysicalDto);
-
-        // Assert
-        // expect(result).toBeDefined();
-        // expect(result.height_m).toBe(12.5);
-        // expect(result.trunk_diameter_cm).toBe(45.0);
-        // expect(result.tilt_degree).toBe(15);
-        // expect(mockTreesExtendedService.updatePhysical).toHaveBeenCalledWith(1, updatePhysicalDto);
-        expect(true).toBe(false); // RED: Not implemented yet
-      });
-
-      it('2. should validate height > 0, diameter > 0, tilt 0-90', async () => {
-        // Arrange - Invalid height
-        const invalidHeightDto = {
-          height_m: -5,
-          trunk_diameter_cm: 30,
-          tilt_degree: 10,
-        };
-
-        // Act & Assert
-        // await expect(controller.updatePhysical('1', invalidHeightDto)).rejects.toThrow(BadRequestException);
-
-        // Arrange - Invalid diameter
-        const invalidDiameterDto = {
-          height_m: 10,
-          trunk_diameter_cm: 0,
-          tilt_degree: 10,
-        };
-
-        // Act & Assert
-        // await expect(controller.updatePhysical('1', invalidDiameterDto)).rejects.toThrow(BadRequestException);
-
-        // Arrange - Invalid tilt (> 90)
-        const invalidTiltDto = {
-          height_m: 10,
-          trunk_diameter_cm: 30,
-          tilt_degree: 95,
-        };
-
-        // Act & Assert
-        // await expect(controller.updatePhysical('1', invalidTiltDto)).rejects.toThrow(BadRequestException);
-
-        expect(true).toBe(false); // RED: Validation not implemented yet
-      });
-
-      it('3. should save history to TreePhysicalLog', async () => {
-        // Arrange
-        const updatePhysicalDto = {
           height_m: 12.5,
           trunk_diameter_cm: 45.0,
           tilt_degree: 15,
+          updated_at: new Date(),
         };
 
         const mockLog = {
           id: 1,
           tree_id: 1,
+          user_id: 1,
           height_m: 12.5,
           trunk_diameter_cm: 45.0,
           tilt_degree: 15,
+          old_values: { height_m: 10.0, trunk_diameter_cm: 40.0, tilt_degree: 0 },
+          new_values: { height_m: 12.5, trunk_diameter_cm: 45.0, tilt_degree: 15 },
           measured_at: new Date(),
-          measured_by: 1,
+        };
+
+        mockTreesExtendedService.updatePhysical.mockResolvedValue({
+          tree: mockUpdatedTree,
+          log: mockLog,
+        });
+
+        // Act
+        const result = await controller.updatePhysical('1', updatePhysicalDto, mockRequest);
+
+        // Assert
+        expect(result).toBeDefined();
+        expect(result.tree.height_m).toBe(12.5);
+        expect(result.tree.trunk_diameter_cm).toBe(45.0);
+        expect(result.tree.tilt_degree).toBe(15);
+        expect(mockTreesExtendedService.updatePhysical).toHaveBeenCalledWith(1, 1, updatePhysicalDto);
+      });
+
+      it('2. should validate height > 0, diameter > 0, tilt 0-90', async () => {
+        // Arrange - Invalid height
+        const invalidHeightDto: any = {
+          height_m: -5,
+          trunk_diameter_cm: 30,
+          tilt_degree: 10,
+        };
+
+        const mockRequest = { user: { userId: 1 } };
+
+        // Validation happens at DTO level, so we simulate validation error
+        mockTreesExtendedService.updatePhysical.mockRejectedValue(
+          new BadRequestException('Height must be greater than 0'),
+        );
+
+        // Act & Assert
+        await expect(controller.updatePhysical('1', invalidHeightDto, mockRequest)).rejects.toThrow(
+          BadRequestException,
+        );
+
+        // Arrange - Invalid tilt (> 90)
+        const invalidTiltDto: any = {
+          height_m: 10,
+          trunk_diameter_cm: 30,
+          tilt_degree: 95,
+        };
+
+        mockTreesExtendedService.updatePhysical.mockRejectedValue(
+          new BadRequestException('Tilt degree must be between 0 and 90'),
+        );
+
+        // Act & Assert
+        await expect(controller.updatePhysical('1', invalidTiltDto, mockRequest)).rejects.toThrow(
+          BadRequestException,
+        );
+      });
+
+      it('3. should save history to TreePhysicalLog', async () => {
+        // Arrange
+        const updatePhysicalDto: UpdatePhysicalDto = {
+          height_m: 12.5,
+          trunk_diameter_cm: 45.0,
+          tilt_degree: 15,
+        };
+
+        const mockRequest = { user: { userId: 1 } };
+
+        const mockLog = {
+          id: 1,
+          tree_id: 1,
+          user_id: 1,
+          height_m: 12.5,
+          trunk_diameter_cm: 45.0,
+          tilt_degree: 15,
+          old_values: { height_m: 10.0, trunk_diameter_cm: 40.0 },
+          new_values: { height_m: 12.5, trunk_diameter_cm: 45.0, tilt_degree: 15 },
+          measured_at: new Date(),
         };
 
         mockTreesExtendedService.updatePhysical.mockResolvedValue({
@@ -162,13 +189,14 @@ describe('TreesExtendedController', () => {
         });
 
         // Act
-        // const result = await controller.updatePhysical('1', updatePhysicalDto);
+        const result = await controller.updatePhysical('1', updatePhysicalDto, mockRequest);
 
         // Assert
-        // expect(result.log).toBeDefined();
-        // expect(result.log.tree_id).toBe(1);
-        // expect(result.log.height_m).toBe(12.5);
-        expect(true).toBe(false); // RED: TreePhysicalLog entity not created yet
+        expect(result.log).toBeDefined();
+        expect(result.log.tree_id).toBe(1);
+        expect(result.log.height_m).toBe(12.5);
+        expect(result.log.old_values).toBeDefined();
+        expect(result.log.new_values).toBeDefined();
       });
     });
 
@@ -199,15 +227,17 @@ describe('TreesExtendedController', () => {
 
         mockTreesExtendedService.getPhysicalHistory.mockResolvedValue(mockHistory);
 
+        const query: PhysicalHistoryQueryDto = { page: 1, limit: 10 };
+
         // Act
-        // const result = await controller.getPhysicalHistory('1', { page: 1, limit: 10 });
+        const result = await controller.getPhysicalHistory('1', query);
 
         // Assert
-        // expect(result).toBeDefined();
-        // expect(result.data.length).toBe(2);
-        // expect(result.total).toBe(2);
-        // expect(result.data[0].measured_at).toBeInstanceOf(Date);
-        expect(true).toBe(false); // RED: Endpoint not implemented yet
+        expect(result).toBeDefined();
+        expect(result.data.length).toBe(2);
+        expect(result.total).toBe(2);
+        expect(result.data[0].measured_at).toBeInstanceOf(Date);
+        expect(mockTreesExtendedService.getPhysicalHistory).toHaveBeenCalledWith(1, query);
       });
     });
   });

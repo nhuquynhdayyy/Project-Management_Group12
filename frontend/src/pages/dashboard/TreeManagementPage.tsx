@@ -6,6 +6,8 @@ import {
   fetchTrees,
   updateTreeHealth,
   fetchTasksByTreeId,
+  fetchPhysicalHistory,
+  updatePhysicalMeasurements,
   type CreateTreePayload,
 } from '../../api/trees';
 import { createTask, type CreateTaskPayload } from '../../api/maintenance';
@@ -79,7 +81,7 @@ function TreeDetailModal({
   onClose: () => void;
   onTaskCreated: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<'info' | 'tasks'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'tasks' | 'physical'>('info');
   const [healthValue, setHealthValue] = useState<HealthStatus>(tree.health_status);
   const [savingHealth, setSavingHealth] = useState(false);
   const [healthMsg, setHealthMsg] = useState('');
@@ -90,6 +92,111 @@ function TreeDetailModal({
   const [savingTask, setSavingTask] = useState(false);
   const [taskMsg, setTaskMsg] = useState('');
   const [taskMsgType, setTaskMsgType] = useState<'success' | 'error'>('error');
+  
+  // Physical history state
+  const [physicalHistory, setPhysicalHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
+
+  // Physical update form state
+  const [heightM, setHeightM] = useState('');
+  const [trunkDiameterCm, setTrunkDiameterCm] = useState('');
+  const [canopyDiameterM, setCanopyDiameterM] = useState('');
+  const [tiltDegree, setTiltDegree] = useState('');
+  const [physicalNotes, setPhysicalNotes] = useState('');
+  const [savingPhysical, setSavingPhysical] = useState(false);
+  const [physicalMsg, setPhysicalMsg] = useState('');
+  const [physicalMsgType, setPhysicalMsgType] = useState<'success' | 'error'>('error');
+
+  // Load physical history when tab is active
+  useEffect(() => {
+    if (activeTab === 'physical') {
+      setLoadingHistory(true);
+      fetchPhysicalHistory(tree.id, historyPage, 10)
+        .then((response) => {
+          setPhysicalHistory(response.data);
+          setHistoryTotal(response.total);
+        })
+        .catch((error) => {
+          console.error('Failed to fetch physical history:', error);
+        })
+        .finally(() => {
+          setLoadingHistory(false);
+        });
+    }
+  }, [activeTab, tree.id, historyPage]);
+
+  async function handlePhysicalUpdate() {
+    setPhysicalMsg('');
+    
+    // Validate at least one field
+    if (!heightM && !trunkDiameterCm && !canopyDiameterM && !tiltDegree) {
+      setPhysicalMsg('Vui lòng nhập ít nhất một chỉ số');
+      setPhysicalMsgType('error');
+      return;
+    }
+
+    // Validate numeric values
+    const height = heightM ? parseFloat(heightM) : undefined;
+    const trunkDiameter = trunkDiameterCm ? parseFloat(trunkDiameterCm) : undefined;
+    const canopyDiameter = canopyDiameterM ? parseFloat(canopyDiameterM) : undefined;
+    const tilt = tiltDegree ? parseInt(tiltDegree) : undefined;
+
+    if (height !== undefined && (isNaN(height) || height <= 0)) {
+      setPhysicalMsg('Chiều cao phải là số dương');
+      setPhysicalMsgType('error');
+      return;
+    }
+    if (trunkDiameter !== undefined && (isNaN(trunkDiameter) || trunkDiameter <= 0)) {
+      setPhysicalMsg('Đường kính thân phải là số dương');
+      setPhysicalMsgType('error');
+      return;
+    }
+    if (canopyDiameter !== undefined && (isNaN(canopyDiameter) || canopyDiameter < 0)) {
+      setPhysicalMsg('Đường kính tán phải là số không âm');
+      setPhysicalMsgType('error');
+      return;
+    }
+    if (tilt !== undefined && (isNaN(tilt) || tilt < 0 || tilt > 90)) {
+      setPhysicalMsg('Độ nghiêng phải từ 0 đến 90 độ');
+      setPhysicalMsgType('error');
+      return;
+    }
+
+    setSavingPhysical(true);
+    try {
+      const payload: any = {};
+      if (height !== undefined) payload.height_m = height;
+      if (trunkDiameter !== undefined) payload.trunk_diameter_cm = trunkDiameter;
+      if (canopyDiameter !== undefined) payload.canopy_diameter_m = canopyDiameter;
+      if (tilt !== undefined) payload.tilt_degree = tilt;
+      if (physicalNotes.trim()) payload.notes = physicalNotes.trim();
+
+      await updatePhysicalMeasurements(tree.id, payload);
+
+      setPhysicalMsg('Đã cập nhật chỉ số vật lý!');
+      setPhysicalMsgType('success');
+
+      // Clear form
+      setHeightM('');
+      setTrunkDiameterCm('');
+      setCanopyDiameterM('');
+      setTiltDegree('');
+      setPhysicalNotes('');
+
+      // Reload history
+      const response = await fetchPhysicalHistory(tree.id, historyPage, 10);
+      setPhysicalHistory(response.data);
+      setHistoryTotal(response.total);
+    } catch (error: any) {
+      const msg = error?.response?.data?.message ?? 'Cập nhật thất bại.';
+      setPhysicalMsg(Array.isArray(msg) ? msg.join(', ') : msg);
+      setPhysicalMsgType('error');
+    } finally {
+      setSavingPhysical(false);
+    }
+  }
 
   async function handleHealthUpdate() {
     setSavingHealth(true);
@@ -175,6 +282,12 @@ function TreeDetailModal({
             className={`px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'tasks' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}
           >
             Lịch sử task ({tasks.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('physical')}
+            className={`px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'physical' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            📏 Lịch sử đo đạc
           </button>
         </div>
 
@@ -289,6 +402,178 @@ function TreeDetailModal({
                     </tbody>
                   </table>
                 </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'physical' && (
+            <div className="px-5 py-4">
+              {/* Form cập nhật chỉ số - Chỉ cho Admin/Manager */}
+              <div className="bg-gray-900 rounded-lg p-4 mb-4">
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                  ✏️ Cập nhật chỉ số vật lý
+                </h4>
+                <p className="text-xs text-gray-500 mb-3">
+                  Nhập các chỉ số đo đạc mới (chỉ cần nhập những chỉ số thay đổi)
+                </p>
+                
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="mb-1 block text-xs text-gray-500">
+                      Chiều cao (m)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={heightM}
+                      onChange={(e) => setHeightM(e.target.value)}
+                      placeholder={tree.height_m?.toString() || '—'}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-gray-500">
+                      Đường kính thân (cm)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={trunkDiameterCm}
+                      onChange={(e) => setTrunkDiameterCm(e.target.value)}
+                      placeholder={tree.trunk_diameter_cm?.toString() || '—'}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-gray-500">
+                      Đường kính tán (m)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={canopyDiameterM}
+                      onChange={(e) => setCanopyDiameterM(e.target.value)}
+                      placeholder="—"
+                      className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-gray-500">
+                      Độ nghiêng (0-90°)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="90"
+                      value={tiltDegree}
+                      onChange={(e) => setTiltDegree(e.target.value)}
+                      placeholder="0-90"
+                      className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <label className="mb-1 block text-xs text-gray-500">Ghi chú</label>
+                  <textarea
+                    value={physicalNotes}
+                    onChange={(e) => setPhysicalNotes(e.target.value)}
+                    rows={2}
+                    placeholder="Ghi chú về đo đạc..."
+                    className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500 resize-none"
+                  />
+                </div>
+
+                {physicalMsg && (
+                  <p className={`text-xs mb-3 ${physicalMsgType === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                    {physicalMsg}
+                  </p>
+                )}
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={handlePhysicalUpdate}
+                    disabled={savingPhysical}
+                    className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50 transition-colors"
+                  >
+                    {savingPhysical ? 'Đang lưu...' : '💾 Lưu chỉ số'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Bảng lịch sử */}
+              {loadingHistory ? (
+                <p className="text-sm text-gray-500 italic text-center py-8">Đang tải...</p>
+              ) : physicalHistory.length === 0 ? (
+                <p className="text-sm text-gray-500 italic text-center py-8">Chưa có lịch sử đo đạc</p>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-gray-300">
+                      <thead className="border-b border-gray-700 text-xs uppercase text-gray-400">
+                        <tr>
+                          <th className="py-2 pr-3">Ngày đo</th>
+                          <th className="py-2 pr-3">Chiều cao (m)</th>
+                          <th className="py-2 pr-3">Đ.kính thân (cm)</th>
+                          <th className="py-2 pr-3">Đ.kính tán (m)</th>
+                          <th className="py-2 pr-3">Độ nghiêng (°)</th>
+                          <th className="py-2">Ghi chú</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {physicalHistory.map((log, index) => (
+                          <tr 
+                            key={log.id} 
+                            className={`border-b border-gray-800 ${index === 0 ? 'bg-green-900/20' : ''}`}
+                          >
+                            <td className="py-2.5 pr-3 text-xs">
+                              {new Date(log.measured_at).toLocaleString('vi-VN')}
+                            </td>
+                            <td className="py-2.5 pr-3 text-xs">
+                              {log.height_m ?? '—'}
+                            </td>
+                            <td className="py-2.5 pr-3 text-xs">
+                              {log.trunk_diameter_cm ?? '—'}
+                            </td>
+                            <td className="py-2.5 pr-3 text-xs">
+                              {log.canopy_diameter_m ?? '—'}
+                            </td>
+                            <td className="py-2.5 pr-3 text-xs">
+                              {log.tilt_degree ?? '—'}
+                            </td>
+                            <td className="py-2.5 text-xs text-gray-400">
+                              {log.notes || '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  {historyTotal > 10 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-700">
+                      <p className="text-xs text-gray-500">
+                        Trang {historyPage} / {Math.ceil(historyTotal / 10)}
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
+                          disabled={historyPage === 1}
+                          className="px-3 py-1 text-xs rounded bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          ← Trước
+                        </button>
+                        <button
+                          onClick={() => setHistoryPage(p => Math.min(Math.ceil(historyTotal / 10), p + 1))}
+                          disabled={historyPage >= Math.ceil(historyTotal / 10)}
+                          className="px-3 py-1 text-xs rounded bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Sau →
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

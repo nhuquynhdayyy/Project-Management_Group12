@@ -5,14 +5,18 @@ import { TreesService } from './trees.service';
 import { Tree, HealthStatus } from '../../entities/tree.entity';
 import { TreeSpecies } from '../../entities/tree-species.entity';
 import { AdministrativeArea } from '../../entities/administrative-area.entity';
+import { TreePhysicalLog } from '../../entities/tree-physical-log.entity';
 import { CreateTreeDto } from './dto/create-tree.dto';
 import { FindTreesNearbyDto } from './dto/find-trees-nearby.dto';
+import { UpdatePhysicalDto } from './dto/update-physical.dto';
+import { PhysicalHistoryQueryDto } from './dto/physical-history-query.dto';
 
 describe('TreesService', () => {
   let service: TreesService;
   let treeRepository: Repository<Tree>;
   let speciesRepository: Repository<TreeSpecies>;
   let areaRepository: Repository<AdministrativeArea>;
+  let physicalLogRepository: Repository<TreePhysicalLog>;
 
   const mockTreeRepository = {
     create: jest.fn(),
@@ -28,6 +32,12 @@ describe('TreesService', () => {
 
   const mockAreaRepository = {
     findOne: jest.fn(),
+  };
+
+  const mockPhysicalLogRepository = {
+    create: jest.fn(),
+    save: jest.fn(),
+    findAndCount: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -46,6 +56,10 @@ describe('TreesService', () => {
           provide: getRepositoryToken(AdministrativeArea),
           useValue: mockAreaRepository,
         },
+        {
+          provide: getRepositoryToken(TreePhysicalLog),
+          useValue: mockPhysicalLogRepository,
+        },
       ],
     }).compile();
 
@@ -53,6 +67,7 @@ describe('TreesService', () => {
     treeRepository = module.get<Repository<Tree>>(getRepositoryToken(Tree));
     speciesRepository = module.get<Repository<TreeSpecies>>(getRepositoryToken(TreeSpecies));
     areaRepository = module.get<Repository<AdministrativeArea>>(getRepositoryToken(AdministrativeArea));
+    physicalLogRepository = module.get<Repository<TreePhysicalLog>>(getRepositoryToken(TreePhysicalLog));
   });
 
   afterEach(() => {
@@ -324,3 +339,282 @@ describe('TreesService', () => {
     });
   });
 });
+
+  describe('updatePhysical', () => {
+    it('should update physical measurements and create log', async () => {
+      // Arrange
+      const treeId = 1;
+      const userId = 1;
+      const updatePhysicalDto: UpdatePhysicalDto = {
+        height_m: 6.5,
+        trunk_diameter_cm: 35.0,
+        canopy_diameter_m: 4.5,
+        tilt_degree: 5,
+        notes: 'Regular measurement',
+      };
+
+      const mockTree = {
+        id: treeId,
+        tree_code: 'TREE001',
+        height_m: 5.5,
+        trunk_diameter_cm: 30.0,
+        canopy_diameter_m: 4.0,
+        tilt_degree: 0,
+      };
+
+      const mockUpdatedTree = {
+        ...mockTree,
+        height_m: 6.5,
+        trunk_diameter_cm: 35.0,
+        canopy_diameter_m: 4.5,
+        tilt_degree: 5,
+      };
+
+      const mockLog = {
+        id: 1,
+        tree_id: treeId,
+        user_id: userId,
+        height_m: 6.5,
+        trunk_diameter_cm: 35.0,
+        canopy_diameter_m: 4.5,
+        tilt_degree: 5,
+        old_values: {
+          height_m: 5.5,
+          trunk_diameter_cm: 30.0,
+          canopy_diameter_m: 4.0,
+          tilt_degree: 0,
+        },
+        new_values: {
+          height_m: 6.5,
+          trunk_diameter_cm: 35.0,
+          canopy_diameter_m: 4.5,
+          tilt_degree: 5,
+        },
+        notes: 'Regular measurement',
+        measured_at: new Date(),
+      };
+
+      mockTreeRepository.findOne.mockResolvedValue(mockTree);
+      mockTreeRepository.save.mockResolvedValue(mockUpdatedTree);
+      mockPhysicalLogRepository.create.mockReturnValue(mockLog);
+      mockPhysicalLogRepository.save.mockResolvedValue(mockLog);
+
+      // Act
+      const result = await service.updatePhysical(treeId, userId, updatePhysicalDto);
+
+      // Assert
+      expect(result).toBeDefined();
+      expect(result.tree).toBeDefined();
+      expect(result.log).toBeDefined();
+      expect(result.tree.height_m).toBe(6.5);
+      expect(result.log.old_values.height_m).toBe(5.5);
+      expect(result.log.new_values.height_m).toBe(6.5);
+      expect(mockTreeRepository.findOne).toHaveBeenCalledWith({ where: { id: treeId } });
+      expect(mockTreeRepository.save).toHaveBeenCalled();
+      expect(mockPhysicalLogRepository.save).toHaveBeenCalled();
+    });
+
+    it('should update only specified fields', async () => {
+      // Arrange
+      const treeId = 1;
+      const userId = 1;
+      const updatePhysicalDto: UpdatePhysicalDto = {
+        height_m: 7.0,
+        notes: 'Height only update',
+      };
+
+      const mockTree = {
+        id: treeId,
+        tree_code: 'TREE001',
+        height_m: 6.5,
+        trunk_diameter_cm: 35.0,
+        canopy_diameter_m: 4.5,
+        tilt_degree: 5,
+      };
+
+      const mockUpdatedTree = {
+        ...mockTree,
+        height_m: 7.0,
+      };
+
+      const mockLog = {
+        id: 1,
+        tree_id: treeId,
+        user_id: userId,
+        height_m: 7.0,
+        old_values: {
+          height_m: 6.5,
+          trunk_diameter_cm: 35.0,
+          canopy_diameter_m: 4.5,
+          tilt_degree: 5,
+        },
+        new_values: {
+          height_m: 7.0,
+        },
+        notes: 'Height only update',
+        measured_at: new Date(),
+      };
+
+      mockTreeRepository.findOne.mockResolvedValue(mockTree);
+      mockTreeRepository.save.mockResolvedValue(mockUpdatedTree);
+      mockPhysicalLogRepository.create.mockReturnValue(mockLog);
+      mockPhysicalLogRepository.save.mockResolvedValue(mockLog);
+
+      // Act
+      const result = await service.updatePhysical(treeId, userId, updatePhysicalDto);
+
+      // Assert
+      expect(result).toBeDefined();
+      expect(result.tree.height_m).toBe(7.0);
+      expect(result.tree.trunk_diameter_cm).toBe(35.0); // unchanged
+      expect(result.log.new_values.height_m).toBe(7.0);
+      expect(result.log.new_values.trunk_diameter_cm).toBeUndefined();
+    });
+
+    it('should throw NotFoundException when tree not found', async () => {
+      // Arrange
+      const treeId = 999;
+      const userId = 1;
+      const updatePhysicalDto: UpdatePhysicalDto = {
+        height_m: 6.5,
+      };
+
+      mockTreeRepository.findOne.mockResolvedValue(null);
+
+      // Act & Assert
+      await expect(service.updatePhysical(treeId, userId, updatePhysicalDto)).rejects.toThrow(
+        'Tree not found',
+      );
+    });
+  });
+
+  describe('getPhysicalHistory', () => {
+    it('should return paginated physical history', async () => {
+      // Arrange
+      const treeId = 1;
+      const query: PhysicalHistoryQueryDto = {
+        page: 1,
+        limit: 10,
+      };
+
+      const mockTree = {
+        id: treeId,
+        tree_code: 'TREE001',
+      };
+
+      const mockLogs = [
+        {
+          id: 2,
+          tree_id: treeId,
+          user_id: 1,
+          height_m: 7.0,
+          measured_at: new Date('2024-02-01'),
+        },
+        {
+          id: 1,
+          tree_id: treeId,
+          user_id: 1,
+          height_m: 6.5,
+          measured_at: new Date('2024-01-01'),
+        },
+      ];
+
+      mockTreeRepository.findOne.mockResolvedValue(mockTree);
+      mockPhysicalLogRepository.findAndCount.mockResolvedValue([mockLogs, 2]);
+
+      // Act
+      const result = await service.getPhysicalHistory(treeId, query);
+
+      // Assert
+      expect(result).toBeDefined();
+      expect(result.data).toHaveLength(2);
+      expect(result.total).toBe(2);
+      expect(result.page).toBe(1);
+      expect(result.limit).toBe(10);
+      expect(mockPhysicalLogRepository.findAndCount).toHaveBeenCalledWith({
+        where: { tree_id: treeId },
+        order: { measured_at: 'DESC' },
+        skip: 0,
+        take: 10,
+      });
+    });
+
+    it('should handle pagination correctly', async () => {
+      // Arrange
+      const treeId = 1;
+      const query: PhysicalHistoryQueryDto = {
+        page: 2,
+        limit: 5,
+      };
+
+      const mockTree = {
+        id: treeId,
+        tree_code: 'TREE001',
+      };
+
+      const mockLogs = [
+        {
+          id: 5,
+          tree_id: treeId,
+          user_id: 1,
+          height_m: 7.5,
+          measured_at: new Date('2024-01-05'),
+        },
+      ];
+
+      mockTreeRepository.findOne.mockResolvedValue(mockTree);
+      mockPhysicalLogRepository.findAndCount.mockResolvedValue([mockLogs, 10]);
+
+      // Act
+      const result = await service.getPhysicalHistory(treeId, query);
+
+      // Assert
+      expect(result).toBeDefined();
+      expect(result.page).toBe(2);
+      expect(result.limit).toBe(5);
+      expect(mockPhysicalLogRepository.findAndCount).toHaveBeenCalledWith({
+        where: { tree_id: treeId },
+        order: { measured_at: 'DESC' },
+        skip: 5,
+        take: 5,
+      });
+    });
+
+    it('should use default pagination values', async () => {
+      // Arrange
+      const treeId = 1;
+      const query: PhysicalHistoryQueryDto = {};
+
+      const mockTree = {
+        id: treeId,
+        tree_code: 'TREE001',
+      };
+
+      mockTreeRepository.findOne.mockResolvedValue(mockTree);
+      mockPhysicalLogRepository.findAndCount.mockResolvedValue([[], 0]);
+
+      // Act
+      const result = await service.getPhysicalHistory(treeId, query);
+
+      // Assert
+      expect(result.page).toBe(1);
+      expect(result.limit).toBe(10);
+      expect(mockPhysicalLogRepository.findAndCount).toHaveBeenCalledWith({
+        where: { tree_id: treeId },
+        order: { measured_at: 'DESC' },
+        skip: 0,
+        take: 10,
+      });
+    });
+
+    it('should throw NotFoundException when tree not found', async () => {
+      // Arrange
+      const treeId = 999;
+      const query: PhysicalHistoryQueryDto = {};
+
+      mockTreeRepository.findOne.mockResolvedValue(null);
+
+      // Act & Assert
+      await expect(service.getPhysicalHistory(treeId, query)).rejects.toThrow('Tree not found');
+    });
+  });

@@ -2,7 +2,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Backend URL — update this if your local IP changes
-const API_BASE_URL = 'http://192.168.1.72:3000';
+// Expo đang chạy trên: 192.168.1.183
+const API_BASE_URL = 'http://192.168.1.183:3000';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
