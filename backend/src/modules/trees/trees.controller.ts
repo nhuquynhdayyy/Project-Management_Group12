@@ -41,6 +41,25 @@ export class TreesController {
     return await this.treesService.findAll();
   }
 
+  @Get('locations')
+  @UseGuards(RolesGuard)
+  @Roles('Admin', 'Manager')
+  @ApiOperation({ summary: 'Get tree locations for heatmap (Admin/Manager only)' })
+  @ApiQuery({ name: 'area_id', required: false, type: Number, description: 'Filter by area ID' })
+  @ApiQuery({ name: 'species_id', required: false, type: Number, description: 'Filter by species ID' })
+  @ApiResponse({ status: 200, description: 'List of tree locations (ID and coordinates only).' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
+  async getLocations(
+    @Query('area_id') areaId?: string,
+    @Query('species_id') speciesId?: string,
+  ) {
+    return await this.treesService.findLocations(
+      areaId ? +areaId : undefined,
+      speciesId ? +speciesId : undefined,
+    );
+  }
+
   @Get('species')
   @ApiOperation({ summary: 'Get all tree species' })
   @ApiResponse({ status: 200, description: 'List of all tree species.' })

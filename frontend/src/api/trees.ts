@@ -172,3 +172,29 @@ export async function findTreesNearby(
   });
   return data;
 }
+
+export interface TreeLocation {
+  id: number;
+  latitude: number;
+  longitude: number;
+}
+
+/**
+ * Lấy danh sách tọa độ cây (tối ưu cho heatmap)
+ * @param areaId Lọc theo khu vực (tùy chọn)
+ * @param speciesId Lọc theo loài cây (tùy chọn)
+ * @returns Danh sách ID và tọa độ
+ */
+export async function fetchTreeLocations(
+  areaId?: number,
+  speciesId?: number,
+): Promise<TreeLocation[]> {
+  const params = new URLSearchParams();
+  if (areaId) params.append('area_id', areaId.toString());
+  if (speciesId) params.append('species_id', speciesId.toString());
+  
+  const { data } = await apiClient.get<TreeLocation[]>(
+    `/trees/locations${params.toString() ? `?${params.toString()}` : ''}`,
+  );
+  return data;
+}

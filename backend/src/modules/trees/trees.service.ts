@@ -153,6 +153,39 @@ export class TreesService {
     return await this.treeRepository.find();
   }
 
+  /**
+   * Lấy danh sách tọa độ cây (tối ưu cho heatmap)
+   * @param areaId Lọc theo khu vực (tùy chọn)
+   * @param speciesId Lọc theo loài cây (tùy chọn)
+   * @returns Danh sách ID và tọa độ
+   */
+  async findLocations(
+    areaId?: number,
+    speciesId?: number,
+  ): Promise<Array<{ id: number; latitude: number; longitude: number }>> {
+    const query = this.treeRepository
+      .createQueryBuilder('tree')
+      .select(['tree.id'])
+      .addSelect('ST_Y(tree.location::geometry)', 'latitude')
+      .addSelect('ST_X(tree.location::geometry)', 'longitude');
+
+    if (areaId) {
+      query.andWhere('tree.area_id = :areaId', { areaId });
+    }
+
+    if (speciesId) {
+      query.andWhere('tree.species_id = :speciesId', { speciesId });
+    }
+
+    const results = await query.getRawMany();
+    
+    return results.map((row) => ({
+      id: row.tree_id,
+      latitude: parseFloat(row.latitude),
+      longitude: parseFloat(row.longitude),
+    }));
+  }
+
   async update(
     id: number,
     updateTreeDto: UpdateTreeDto,
