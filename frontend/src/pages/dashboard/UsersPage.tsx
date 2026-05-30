@@ -32,6 +32,12 @@ export default function UsersPage() {
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState<UserRole>('Staff');
 
+  // Lock/Unlock modal state
+  const [isLockModalOpen, setIsLockModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<DashboardUser | null>(null);
+  const [lockReason, setLockReason] = useState('');
+  const [lockAction, setLockAction] = useState<'lock' | 'unlock'>('lock');
+
   function loadUsers() {
     setLoading(true);
     setError('');
@@ -109,14 +115,27 @@ if (password.length < 6) {
     }
 
     const nextStatus = !dashboardUser.is_active;
-    const action = nextStatus ? 'mo khoa' : 'khoa';
-    if (!window.confirm(`Xac nhan ${action} tai khoan ${dashboardUser.username}?`)) return;
+    setSelectedUser(dashboardUser);
+    setLockAction(nextStatus ? 'unlock' : 'lock');
+    setLockReason('');
+    setIsLockModalOpen(true);
+  }
 
+  async function confirmToggleStatus() {
+    if (!selectedUser) return;
+
+    const nextStatus = lockAction === 'unlock';
+    setSaving(true);
     try {
-      await updateUserStatus(dashboardUser.id, nextStatus);
+      await updateUserStatus(selectedUser.id, nextStatus, lockReason.trim() || undefined);
+      setIsLockModalOpen(false);
+      setSelectedUser(null);
+      setLockReason('');
       loadUsers();
     } catch {
       setError('Cap nhat trang thai that bai. Vui long thu lai.');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -217,14 +236,18 @@ onClick={() => setIsModalOpen(true)}
                         <button
                           onClick={() => handleToggleStatus(dashboardUser)}
                           disabled={dashboardUser.id === user?.id && dashboardUser.is_active}
-                          className="rounded-md bg-gray-900 px-3 py-1.5 text-xs text-gray-200 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                          className={`rounded-md px-3 py-1.5 text-xs font-medium ${
+                            dashboardUser.is_active
+                              ? 'bg-red-600/20 text-red-300 hover:bg-red-600/30'
+                              : 'bg-green-600/20 text-green-300 hover:bg-green-600/30'
+                          } disabled:cursor-not-allowed disabled:opacity-40`}
                         >
-                          {dashboardUser.is_active ? 'Khoa' : 'Mo khoa'}
+                          {dashboardUser.is_active ? '🔒 Khoa' : '🔓 Mo khoa'}
                         </button>
                         <select
                           value={primaryRole}
                           onChange={(event) => handleRoleChange(dashboardUser, event.target.value as UserRole)}
-className="rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-xs text-gray-200 outline-none focus:border-green-500"
+                          className="rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-xs text-gray-200 outline-none focus:border-green-500"
                         >
                           {ROLES.map((roleOption) => (
                             <option key={roleOption} value={roleOption}>
@@ -329,6 +352,82 @@ className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-s
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {isLockModalOpen && selectedUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-xl border border-gray-700 bg-gray-800 p-5 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-300">
+                {lockAction === 'lock' ? '🔒 Khoa tai khoan' : '🔓 Mo khoa tai khoan'}
+              </h3>
+              <button
+                onClick={() => {
+                  setIsLockModalOpen(false);
+                  setSelectedUser(null);
+                  setLockReason('');
+                }}
+                className="rounded-md px-2 py-1 text-gray-400 hover:bg-gray-700 hover:text-white"
+              >
+                X
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-sm text-gray-300">
+                {lockAction === 'lock' ? (
+                  <>
+                    Ban co chac chan muon <span className="font-semibold text-red-400">khoa</span> tai khoan{' '}
+                    <span className="font-semibold text-white">{selectedUser.username}</span>?
+                  </>
+                ) : (
+                  <>
+                    Ban co chac chan muon <span className="font-semibold text-green-400">mo khoa</span> tai khoan{' '}
+                    <span className="font-semibold text-white">{selectedUser.username}</span>?
+                  </>
+                )}
+              </p>
+            </div>
+
+            {lockAction === 'lock' && (
+              <div className="mb-4">
+                <label className="mb-1 block text-xs text-gray-400">Ly do khoa (tuy chon)</label>
+                <textarea
+                  value={lockReason}
+                  onChange={(event) => setLockReason(event.target.value)}
+                  placeholder="Vi du: Nhan vien nghi viec"
+                  rows={3}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500"
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLockModalOpen(false);
+                  setSelectedUser(null);
+                  setLockReason('');
+                }}
+                className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700"
+              >
+                Huy
+              </button>
+              <button
+                onClick={confirmToggleStatus}
+                disabled={saving}
+                className={`rounded-lg px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 ${
+                  lockAction === 'lock'
+                    ? 'bg-red-600 hover:bg-red-500'
+                    : 'bg-green-600 hover:bg-green-500'
+                }`}
+              >
+                {saving ? 'Dang xu ly...' : lockAction === 'lock' ? 'Xac nhan khoa' : 'Xac nhan mo khoa'}
+              </button>
+            </div>
           </div>
         </div>
       )}

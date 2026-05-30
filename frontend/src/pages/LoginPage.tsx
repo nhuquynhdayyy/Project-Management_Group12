@@ -12,11 +12,13 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [isUnverified, setIsUnverified] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
     setIsUnverified(false);
+    setIsLocked(false);
     setLoading(true);
     try {
       const data = await login(username, password);
@@ -32,6 +34,11 @@ export default function LoginPage() {
       // Check if error is about unverified email
       if (errorMsg.includes('chưa được xác minh') || errorMsg.includes('not verified')) {
         setIsUnverified(true);
+      }
+      
+      // Check if error is about locked account
+      if (errorMsg.includes('bị khóa') || errorMsg.includes('locked')) {
+        setIsLocked(true);
       }
     } finally {
       setLoading(false);
@@ -93,16 +100,34 @@ export default function LoginPage() {
           <h2 className="text-xl font-semibold text-gray-800 mb-6">Đăng nhập</h2>
 
           {error && (
-            <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-              {error}
-              {isUnverified && (
-                <button
-                  onClick={handleResendVerification}
-                  className="block mt-2 text-blue-600 hover:text-blue-700 font-semibold underline"
-                >
-                  Gửi lại email xác minh →
-                </button>
-              )}
+            <div className={`mb-4 px-4 py-3 rounded-lg border text-sm ${
+              isLocked 
+                ? 'bg-orange-50 border-orange-200 text-orange-800' 
+                : 'bg-red-50 border-red-200 text-red-700'
+            }`}>
+              <div className="flex items-start gap-2">
+                {isLocked && (
+                  <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                  </svg>
+                )}
+                <div className="flex-1">
+                  <p className="font-semibold">{error}</p>
+                  {isLocked && (
+                    <p className="mt-2 text-xs">
+                      Vui lòng liên hệ quản trị viên để được hỗ trợ mở khóa tài khoản.
+                    </p>
+                  )}
+                  {isUnverified && (
+                    <button
+                      onClick={handleResendVerification}
+                      className="block mt-2 text-blue-600 hover:text-blue-700 font-semibold underline"
+                    >
+                      Gửi lại email xác minh →
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 

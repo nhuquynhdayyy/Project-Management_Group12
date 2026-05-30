@@ -222,6 +222,214 @@ export class MailService {
   }
 
   /**
+   * Gửi email thông báo tài khoản bị khóa
+   */
+  async sendAccountLockedEmail(
+    to: string,
+    username: string,
+    reason?: string,
+  ): Promise<void> {
+    try {
+      await this.mailerService.sendMail({
+        to,
+        subject: 'Tài khoản của bạn đã bị tạm khóa - Cây Xanh Đà Nẵng',
+        html: `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <style>
+                body {
+                  font-family: Arial, sans-serif;
+                  line-height: 1.6;
+                  color: #333;
+                  max-width: 600px;
+                  margin: 0 auto;
+                  padding: 20px;
+                }
+                .header {
+                  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+                  color: white;
+                  padding: 30px;
+                  text-align: center;
+                  border-radius: 10px 10px 0 0;
+                }
+                .header h1 {
+                  margin: 0;
+                  font-size: 28px;
+                }
+                .content {
+                  background: #f9f9f9;
+                  padding: 30px;
+                  border-radius: 0 0 10px 10px;
+                }
+                .warning {
+                  background: #ffebee;
+                  border-left: 4px solid #f44336;
+                  padding: 15px;
+                  margin: 20px 0;
+                  border-radius: 4px;
+                }
+                .info-box {
+                  background: #e7f3ff;
+                  border-left: 4px solid #2196F3;
+                  padding: 15px;
+                  margin: 20px 0;
+                  border-radius: 4px;
+                }
+                .footer {
+                  text-align: center;
+                  margin-top: 30px;
+                  color: #666;
+                  font-size: 14px;
+                }
+              </style>
+            </head>
+            <body>
+              <div class="header">
+                <h1>🔒 Tài khoản bị tạm khóa</h1>
+              </div>
+              <div class="content">
+                <p>Xin chào <strong>${username}</strong>,</p>
+                
+                <div class="warning">
+                  <strong>⚠️ Tài khoản của bạn đã bị tạm khóa</strong>
+                  <p style="margin: 10px 0 0 0;">Bạn sẽ không thể đăng nhập vào hệ thống cho đến khi tài khoản được mở khóa.</p>
+                </div>
+                
+                ${reason ? `
+                <div class="info-box">
+                  <strong>📋 Lý do khóa:</strong>
+                  <p style="margin: 10px 0 0 0;">${reason}</p>
+                </div>
+                ` : ''}
+                
+                <p><strong>Để được hỗ trợ:</strong></p>
+                <ul>
+                  <li>Liên hệ với quản trị viên hệ thống</li>
+                  <li>Email: admin@cayxanh-danang.vn</li>
+                  <li>Hotline: 0236.xxx.xxxx</li>
+                </ul>
+                
+                <p style="margin-top: 30px;">Chúng tôi xin lỗi vì sự bất tiện này.</p>
+              </div>
+              <div class="footer">
+                <p>© 2026 Hệ thống Quản lý Cây Xanh Đà Nẵng</p>
+                <p>Email này được gửi tự động, vui lòng không trả lời.</p>
+              </div>
+            </body>
+          </html>
+        `,
+      });
+
+      this.logger.log(`Account locked email sent to ${to}`);
+    } catch (error) {
+      this.logger.error(`Failed to send account locked email to ${to}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Gửi email thông báo tài khoản được mở khóa
+   */
+  async sendAccountUnlockedEmail(to: string, username: string): Promise<void> {
+    try {
+      await this.mailerService.sendMail({
+        to,
+        subject: 'Tài khoản của bạn đã được mở khóa - Cây Xanh Đà Nẵng',
+        html: `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <style>
+                body {
+                  font-family: Arial, sans-serif;
+                  line-height: 1.6;
+                  color: #333;
+                  max-width: 600px;
+                  margin: 0 auto;
+                  padding: 20px;
+                }
+                .header {
+                  background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+                  color: white;
+                  padding: 30px;
+                  text-align: center;
+                  border-radius: 10px 10px 0 0;
+                }
+                .header h1 {
+                  margin: 0;
+                  font-size: 28px;
+                }
+                .content {
+                  background: #f9f9f9;
+                  padding: 30px;
+                  border-radius: 0 0 10px 10px;
+                }
+                .success-box {
+                  background: #d4edda;
+                  border-left: 4px solid #28a745;
+                  padding: 15px;
+                  margin: 20px 0;
+                  border-radius: 4px;
+                }
+                .info-box {
+                  background: #e7f3ff;
+                  border-left: 4px solid #2196F3;
+                  padding: 15px;
+                  margin: 20px 0;
+                  border-radius: 4px;
+                }
+                .footer {
+                  text-align: center;
+                  margin-top: 30px;
+                  color: #666;
+                  font-size: 14px;
+                }
+              </style>
+            </head>
+            <body>
+              <div class="header">
+                <h1>🔓 Tài khoản đã được mở khóa</h1>
+              </div>
+              <div class="content">
+                <p>Xin chào <strong>${username}</strong>,</p>
+                
+                <div class="success-box">
+                  <strong>✅ Tài khoản của bạn đã được mở khóa thành công!</strong>
+                  <p style="margin: 10px 0 0 0;">Bạn có thể đăng nhập và sử dụng hệ thống bình thường.</p>
+                </div>
+                
+                <div class="info-box">
+                  <strong>📋 Hướng dẫn đăng nhập:</strong>
+                  <ol style="margin: 10px 0 0 0; padding-left: 20px;">
+                    <li>Truy cập trang đăng nhập: <a href="http://localhost:5173/login">http://localhost:5173/login</a></li>
+                    <li>Nhập tên đăng nhập hoặc email của bạn</li>
+                    <li>Nhập mật khẩu</li>
+                    <li>Bấm "Đăng nhập"</li>
+                  </ol>
+                </div>
+                
+                <p style="margin-top: 30px;">Chúc bạn có trải nghiệm tốt với hệ thống!</p>
+              </div>
+              <div class="footer">
+                <p>© 2026 Hệ thống Quản lý Cây Xanh Đà Nẵng</p>
+                <p>Email này được gửi tự động, vui lòng không trả lời.</p>
+              </div>
+            </body>
+          </html>
+        `,
+      });
+
+      this.logger.log(`Account unlocked email sent to ${to}`);
+    } catch (error) {
+      this.logger.error(`Failed to send account unlocked email to ${to}`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Gửi email đặt lại mật khẩu
    */
   async sendPasswordResetEmail(to: string, resetLink: string): Promise<void> {

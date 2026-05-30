@@ -19,9 +19,10 @@ export async function registerUser(payload: RegisterUserPayload): Promise<Dashbo
   return data;
 }
 
-export async function updateUserStatus(id: number, isActive: boolean): Promise<DashboardUser> {
+export async function updateUserStatus(id: number, isActive: boolean, reason?: string): Promise<DashboardUser> {
   const { data } = await apiClient.patch<DashboardUser>(`/auth/users/${id}/status`, {
     is_active: isActive,
+    reason,
   });
   return data;
 }

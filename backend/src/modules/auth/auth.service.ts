@@ -109,7 +109,7 @@ export class AuthService {
 
     // Check if user is active
     if (!user.is_active) {
-      throw new UnauthorizedException('Your account has been locked. Please contact administrator.');
+      throw new UnauthorizedException('Tài khoản của bạn đã bị khóa. Vui lòng liên hệ Admin để được hỗ trợ.');
     }
 
     // Check if email is verified
@@ -204,6 +204,7 @@ relations: ['roles'],
     userId: number,
     isActive: boolean,
     currentUserId: number,
+    reason?: string,
   ): Promise<Omit<User, 'password'>> {
     if (userId === currentUserId && !isActive) {
       throw new ForbiddenException('Cannot lock the current signed-in account');
@@ -218,8 +219,21 @@ relations: ['roles'],
       throw new NotFoundException('User not found');
     }
 
+    const previousStatus = user.is_active;
     user.is_active = isActive;
     const saved = await this.usersRepository.save(user);
+
+    // Send email notification if status changed and user has email
+    if (previousStatus !== isActive && user.email) {
+      if (!isActive) {
+        // Account locked
+        await this.mailService.sendAccountLockedEmail(user.email, user.username, reason);
+      } else {
+        // Account unlocked
+        await this.mailService.sendAccountUnlockedEmail(user.email, user.username);
+      }
+    }
+
     const { password, ...result } = saved;
     return result;
   }

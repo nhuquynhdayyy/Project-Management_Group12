@@ -86,15 +86,25 @@ export class AuthController {
   @Roles('Admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Lock or unlock user account (Admin only)' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        is_active: { type: 'boolean', example: false },
+        reason: { type: 'string', example: 'Nhân viên nghỉ việc', required: false },
+      },
+    },
+  })
   @ApiResponse({ status: 200, description: 'User status updated. Password excluded.' })
   @ApiResponse({ status: 403, description: 'Forbidden. Admin only or cannot lock self.' })
   async updateUserStatus(
     @Param('id') id: string,
     @Body('is_active') isActive: boolean,
+    @Body('reason') reason: string | undefined,
     @Request() req: { user: { userId?: number; sub?: number; id?: number } },
   ): Promise<Omit<User, 'password'>> {
     const currentUserId = req.user.userId ?? req.user.sub ?? req.user.id ?? 0;
-    return this.authService.updateUserStatus(Number(id), isActive, currentUserId);
+    return this.authService.updateUserStatus(Number(id), isActive, currentUserId, reason);
   }
 
   @Get('verify-email')
