@@ -54,3 +54,10 @@ export async function updatePhysicalMeasurements(
   const response = await apiClient.patch(`/trees/${treeId}/physical`, payload);
   return response.data;
 }
+
+export async function updateHealthStatus(treeId: number, healthStatus: Tree['health_status']): Promise<Tree> {
+  const response = await apiClient.patch<Tree>(`/trees/${treeId}/health`, {
+    health_status: healthStatus,
+  });
+  return response.data;
+}

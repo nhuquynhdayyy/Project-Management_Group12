@@ -6,6 +6,7 @@ import { Tree, HealthStatus } from '../../entities/tree.entity';
 import { TreeSpecies } from '../../entities/tree-species.entity';
 import { AdministrativeArea } from '../../entities/administrative-area.entity';
 import { TreePhysicalLog } from '../../entities/tree-physical-log.entity';
+import { MaintenanceTask } from '../../entities/maintenance-task.entity';
 import { CreateTreeDto } from './dto/create-tree.dto';
 import { FindTreesNearbyDto } from './dto/find-trees-nearby.dto';
 import { UpdatePhysicalDto } from './dto/update-physical.dto';
@@ -17,6 +18,7 @@ describe('TreesService', () => {
   let speciesRepository: Repository<TreeSpecies>;
   let areaRepository: Repository<AdministrativeArea>;
   let physicalLogRepository: Repository<TreePhysicalLog>;
+  let taskRepository: Repository<MaintenanceTask>;
 
   const mockTreeRepository = {
     create: jest.fn(),
@@ -40,6 +42,11 @@ describe('TreesService', () => {
     findAndCount: jest.fn(),
   };
 
+  const mockTaskRepository = {
+    findOne: jest.fn(),
+    save: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -60,6 +67,10 @@ describe('TreesService', () => {
           provide: getRepositoryToken(TreePhysicalLog),
           useValue: mockPhysicalLogRepository,
         },
+        {
+          provide: getRepositoryToken(MaintenanceTask),
+          useValue: mockTaskRepository,
+        },
       ],
     }).compile();
 
@@ -68,6 +79,7 @@ describe('TreesService', () => {
     speciesRepository = module.get<Repository<TreeSpecies>>(getRepositoryToken(TreeSpecies));
     areaRepository = module.get<Repository<AdministrativeArea>>(getRepositoryToken(AdministrativeArea));
     physicalLogRepository = module.get<Repository<TreePhysicalLog>>(getRepositoryToken(TreePhysicalLog));
+    taskRepository = module.get<Repository<MaintenanceTask>>(getRepositoryToken(MaintenanceTask));
   });
 
   afterEach(() => {
@@ -75,7 +87,7 @@ describe('TreesService', () => {
   });
 
   describe('create', () => {
-    it('should create a tree with valid data', async () => {
+it('should create a tree with valid data', async () => {
       // Arrange
       const createTreeDto: CreateTreeDto = {
         tree_code: 'TREE001',
@@ -178,7 +190,7 @@ describe('TreesService', () => {
   });
 
   describe('findTreesWithinRadius', () => {
-    it('should find trees within radius', async () => {
+it('should find trees within radius', async () => {
       // Arrange
       const findNearbyDto: FindTreesNearbyDto = {
         latitude: 21.0285,
@@ -274,8 +286,7 @@ describe('TreesService', () => {
       };
 
       mockTreeRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-
-      // Act
+// Act
       const result = await service.findTreesWithinRadius(findNearbyDto);
 
       // Assert
@@ -338,8 +349,6 @@ describe('TreesService', () => {
       expect(mockTreeRepository.find).toHaveBeenCalled();
     });
   });
-});
-
   describe('updatePhysical', () => {
     it('should update physical measurements and create log', async () => {
       // Arrange
@@ -391,7 +400,7 @@ describe('TreesService', () => {
           tilt_degree: 5,
         },
         notes: 'Regular measurement',
-        measured_at: new Date(),
+measured_at: new Date(),
       };
 
       mockTreeRepository.findOne.mockResolvedValue(mockTree);
@@ -489,7 +498,7 @@ describe('TreesService', () => {
   });
 
   describe('getPhysicalHistory', () => {
-    it('should return paginated physical history', async () => {
+it('should return paginated physical history', async () => {
       // Arrange
       const treeId = 1;
       const query: PhysicalHistoryQueryDto = {
@@ -602,7 +611,7 @@ describe('TreesService', () => {
       expect(mockPhysicalLogRepository.findAndCount).toHaveBeenCalledWith({
         where: { tree_id: treeId },
         order: { measured_at: 'DESC' },
-        skip: 0,
+skip: 0,
         take: 10,
       });
     });
@@ -618,3 +627,126 @@ describe('TreesService', () => {
       await expect(service.getPhysicalHistory(treeId, query)).rejects.toThrow('Tree not found');
     });
   });
+
+  describe('syncOfflineActions', () => {
+    it('should skip actions older than the current tree update', async () => {
+      const currentUpdatedAt = new Date('2026-01-02T00:00:00.000Z');
+      mockTreeRepository.findOne.mockResolvedValue({
+        id: 1,
+        updated_at: currentUpdatedAt,
+      });
+
+      const result = await service.syncOfflineActions(
+        [
+          {
+            id: 'offline-1',
+            type: 'health_update',
+            treeId: 1,
+            data: { health_status: HealthStatus.WEAK },
+            offlineTimestamp: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        1,
+      );
+
+      expect(result.synced).toHaveLength(0);
+      expect(result.skipped).toEqual([
+        { id: 'offline-1', type: 'health_update', treeId: 1, taskId: undefined },
+      ]);
+      expect(mockTreeRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('should apply actions newer than the current tree update', async () => {
+      const tree = {
+        id: 1,
+        health_status: HealthStatus.GOOD,
+        updated_at: new Date('2026-01-01T00:00:00.000Z'),
+      };
+      mockTreeRepository.findOne.mockResolvedValue(tree);
+      mockTreeRepository.save.mockResolvedValue({
+        ...tree,
+        health_status: HealthStatus.WEAK,
+      });
+
+      const result = await service.syncOfflineActions(
+        [
+          {
+            id: 'offline-2',
+            type: 'health_update',
+            treeId: 1,
+            data: { health_status: HealthStatus.WEAK },
+            offlineTimestamp: '2026-01-02T00:00:00.000Z',
+          },
+        ],
+        1,
+      );
+
+      expect(result.synced).toEqual([
+        { id: 'offline-2', type: 'health_update', treeId: 1, taskId: undefined },
+      ]);
+      expect(mockTreeRepository.save).toHaveBeenCalledWith({
+        ...tree,
+        health_status: HealthStatus.WEAK,
+      });
+    });
+
+    it('should apply multiple newer actions for the same tree in one sync batch', async () => {
+      const tree = {
+        id: 1,
+        health_status: HealthStatus.GOOD,
+        height_m: 5,
+        trunk_diameter_cm: 20,
+        canopy_diameter_m: 3,
+        tilt_degree: 0,
+        updated_at: new Date('2026-01-01T00:00:00.000Z'),
+      };
+      const physicalLog = {
+        id: 1,
+        tree_id: 1,
+        user_id: 1,
+        height_m: 6,
+        old_values: {
+          height_m: 5,
+          trunk_diameter_cm: 20,
+          canopy_diameter_m: 3,
+          tilt_degree: 0,
+        },
+        new_values: { height_m: 6 },
+      };
+
+      mockTreeRepository.findOne
+        .mockResolvedValueOnce(tree)
+.mockResolvedValueOnce({ ...tree })
+        .mockResolvedValueOnce({ ...tree, health_status: HealthStatus.WEAK });
+      mockTreeRepository.save.mockImplementation(async (savedTree) => savedTree);
+      mockPhysicalLogRepository.create.mockReturnValue(physicalLog);
+      mockPhysicalLogRepository.save.mockResolvedValue(physicalLog);
+
+      const result = await service.syncOfflineActions(
+        [
+          {
+            id: 'offline-1',
+            type: 'health_update',
+            treeId: 1,
+            data: { health_status: HealthStatus.WEAK },
+            offlineTimestamp: '2026-01-02T00:00:00.000Z',
+          },
+          {
+            id: 'offline-2',
+            type: 'physical_update',
+            treeId: 1,
+            data: { height_m: 6 },
+            offlineTimestamp: '2026-01-02T00:05:00.000Z',
+          },
+        ],
+        1,
+      );
+
+      expect(result.synced).toHaveLength(2);
+      expect(result.skipped).toHaveLength(0);
+      expect(result.errors).toHaveLength(0);
+      expect(mockTreeRepository.save).toHaveBeenCalledTimes(2);
+      expect(mockPhysicalLogRepository.save).toHaveBeenCalledTimes(1);
+    });
+  });
+});

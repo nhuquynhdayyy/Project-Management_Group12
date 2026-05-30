@@ -16,8 +16,18 @@ import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { completeTask, getTaskById } from '../api/maintenance';
 import type { MaintenanceTask } from '../api/maintenance';
-import { getTreeById, updatePhysicalMeasurements } from '../api/trees';
+import { getTreeById, updateHealthStatus, updatePhysicalMeasurements } from '../api/trees';
 import type { Tree } from '../api/trees';
+import NetworkStatusIndicator from '../components/NetworkStatusIndicator';
+import OfflineBanner from '../components/OfflineBanner';
+import { useOffline } from '../context/OfflineContext';
+import {
+  getCachedTaskDetails,
+  getCachedTreeDetails,
+  saveCachedTaskDetails,
+  saveCachedTreeDetails,
+  saveOfflineAction,
+} from '../services/offlineStorage';
 import { RootStackParamList } from '../types/navigation';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'TaskDetail'>;
@@ -26,6 +36,7 @@ type TaskDetailRouteProp = RouteProp<RootStackParamList, 'TaskDetail'>;
 export default function TaskDetailScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<TaskDetailRouteProp>();
+  const { isOnline, refreshPending } = useOffline();
 
   const [task, setTask] = useState<MaintenanceTask>(route.params.task);
   const [treeDetails, setTreeDetails] = useState<Tree | null>(null);
@@ -42,30 +53,85 @@ export default function TaskDetailScreen() {
   const [tiltDegree, setTiltDegree] = useState('');
   const [physicalNotes, setPhysicalNotes] = useState('');
   const [savingPhysical, setSavingPhysical] = useState(false);
+  const [savingHealth, setSavingHealth] = useState(false);
+  const healthOptions: Tree['health_status'][] = ['Tốt', 'Yếu', 'Sâu bệnh', 'Chết'];
 
-  // Fetch fresh task data on mount to get latest evidence_image_url
   useEffect(() => {
-    getTaskById(route.params.task.id)
-      .then(setTask)
-      .catch(() => {
-        // Fall back to route params if fetch fails
-      })
-      .finally(() => setFetchingTask(false));
-  }, [route.params.task.id]);
+    let cancelled = false;
 
-  // Fetch tree details
-  useEffect(() => {
-    if (task.tree_id) {
-      getTreeById(task.tree_id)
-        .then(setTreeDetails)
-        .catch((error) => {
-          console.error('Failed to fetch tree details:', error);
-        })
-        .finally(() => setFetchingTree(false));
-    } else {
-      setFetchingTree(false);
+    async function loadTask() {
+      setFetchingTask(true);
+      try {
+        const cachedTask = await getCachedTaskDetails(route.params.task.id);
+        if (!cancelled && cachedTask) {
+          setTask(cachedTask);
+        }
+
+        if (!isOnline) {
+          return;
+        }
+
+        const freshTask = await getTaskById(route.params.task.id);
+        if (!cancelled) {
+          setTask(freshTask);
+          await saveCachedTaskDetails(freshTask);
+        }
+      } catch {
+// Keep route params or cached data when network is unavailable.
+      } finally {
+        if (!cancelled) {
+          setFetchingTask(false);
+        }
+      }
     }
-  }, [task.tree_id]);
+
+    void loadTask();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOnline, route.params.task.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTreeDetails() {
+      if (!task.tree_id) {
+        setFetchingTree(false);
+        return;
+      }
+
+      setFetchingTree(true);
+      try {
+        const cachedTree = await getCachedTreeDetails(task.tree_id);
+        if (!cancelled && cachedTree) {
+          setTreeDetails(cachedTree);
+        }
+
+        if (!isOnline) {
+          return;
+        }
+
+        const freshTree = await getTreeById(task.tree_id);
+        if (!cancelled) {
+          setTreeDetails(freshTree);
+          await saveCachedTreeDetails(freshTree);
+        }
+      } catch {
+        // Offline detail view can still use cached tree or route task fallback.
+      } finally {
+        if (!cancelled) {
+          setFetchingTree(false);
+        }
+      }
+    }
+
+    void loadTreeDetails();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOnline, task.tree_id]);
 
   async function handleTakePhoto() {
     try {
@@ -124,7 +190,7 @@ export default function TaskDetailScreen() {
 
   async function handleComplete() {
     if (task.status === 'Completed') {
-      Alert.alert('Thông báo', 'Công việc này đã hoàn thành');
+Alert.alert('Thông báo', 'Công việc này đã hoàn thành');
       return;
     }
 
@@ -140,6 +206,33 @@ export default function TaskDetailScreen() {
         accuracy: Location.Accuracy.High,
       });
 
+      if (!isOnline) {
+        await saveOfflineAction({
+          type: 'task_complete',
+          treeId: task.tree_id,
+          taskId: task.id,
+          data: {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            notes: notes || undefined,
+            imageUri: imageUri || undefined,
+          },
+        });
+        await refreshPending();
+        const offlineTask: MaintenanceTask = {
+          ...task,
+          status: 'Completed',
+          completed_at: new Date().toISOString(),
+          notes: notes ? `${task.notes ? `${task.notes}\n\n` : ''}Completion notes: ${notes}` : task.notes,
+        };
+        setTask(offlineTask);
+        await saveCachedTaskDetails(offlineTask);
+        Alert.alert('Đã lưu ngoại tuyến', 'Công việc sẽ đồng bộ khi có mạng', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+        return;
+      }
+
       const completed = await completeTask(task.id, {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
@@ -149,6 +242,7 @@ export default function TaskDetailScreen() {
 
       // Update local task state with the completed task returned from API
       setTask(completed);
+      await saveCachedTaskDetails(completed);
 
       Alert.alert('Thành công', 'Đã hoàn thành công việc', [
         { text: 'OK', onPress: () => navigation.goBack() },
@@ -183,7 +277,7 @@ export default function TaskDetailScreen() {
       Alert.alert('Lỗi', 'Chiều cao phải là số dương');
       return;
     }
-    if (trunkDiameter !== undefined && (isNaN(trunkDiameter) || trunkDiameter <= 0)) {
+if (trunkDiameter !== undefined && (isNaN(trunkDiameter) || trunkDiameter <= 0)) {
       Alert.alert('Lỗi', 'Đường kính thân phải là số dương');
       return;
     }
@@ -205,11 +299,31 @@ export default function TaskDetailScreen() {
       if (tilt !== undefined) payload.tilt_degree = tilt;
       if (physicalNotes.trim()) payload.notes = physicalNotes.trim();
 
+      if (!isOnline) {
+        await saveOfflineAction({
+          type: 'physical_update',
+          treeId: treeDetails.id,
+          data: payload,
+        });
+        await refreshPending();
+        const offlineTree = { ...treeDetails, ...payload };
+        setTreeDetails(offlineTree);
+        await saveCachedTreeDetails(offlineTree);
+        setHeightM('');
+        setTrunkDiameterCm('');
+        setCanopyDiameterM('');
+        setTiltDegree('');
+        setPhysicalNotes('');
+        Alert.alert('Đã lưu ngoại tuyến', 'Chỉ số sẽ đồng bộ khi có mạng');
+        return;
+      }
+
       await updatePhysicalMeasurements(treeDetails.id, payload);
 
       // Refresh tree details
       const updatedTree = await getTreeById(treeDetails.id);
       setTreeDetails(updatedTree);
+      await saveCachedTreeDetails(updatedTree);
 
       // Clear form
       setHeightM('');
@@ -224,6 +338,39 @@ export default function TaskDetailScreen() {
       Alert.alert('Lỗi', message);
     } finally {
       setSavingPhysical(false);
+    }
+  }
+
+  async function handleUpdateHealth(healthStatus: Tree['health_status']) {
+    if (!treeDetails || treeDetails.health_status === healthStatus) {
+      return;
+    }
+
+    setSavingHealth(true);
+    try {
+      if (!isOnline) {
+        await saveOfflineAction({
+          type: 'health_update',
+          treeId: treeDetails.id,
+          data: { health_status: healthStatus },
+        });
+        await refreshPending();
+        const offlineTree = { ...treeDetails, health_status: healthStatus };
+        setTreeDetails(offlineTree);
+        await saveCachedTreeDetails(offlineTree);
+        Alert.alert('Đã lưu ngoại tuyến', 'Tình trạng cây sẽ đồng bộ khi có mạng');
+        return;
+      }
+
+      const updatedTree = await updateHealthStatus(treeDetails.id, healthStatus);
+setTreeDetails(updatedTree);
+      await saveCachedTreeDetails(updatedTree);
+      Alert.alert('Thành công', 'Đã cập nhật tình trạng cây');
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Không thể cập nhật tình trạng cây';
+      Alert.alert('Lỗi', message);
+    } finally {
+      setSavingHealth(false);
     }
   }
 
@@ -269,8 +416,12 @@ export default function TaskDetailScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Text style={styles.backText}>← Quay lại</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Chi tiết công việc</Text>
+        <View style={styles.headerTitleRow}>
+          <Text style={styles.headerTitle}>Chi tiết công việc</Text>
+          <NetworkStatusIndicator />
+        </View>
       </View>
+      <OfflineBanner />
 
       <ScrollView style={styles.content}>
         {/* Task info card */}
@@ -302,7 +453,7 @@ export default function TaskDetailScreen() {
               <Text style={styles.value}>
                 {new Date(task.completed_at).toLocaleString('vi-VN')}
               </Text>
-            </View>
+</View>
           )}
 
           {task.notes && (
@@ -347,6 +498,25 @@ export default function TaskDetailScreen() {
               </View>
             </View>
 
+            <View style={styles.healthActions}>
+              {healthOptions.map((status) => (
+                <TouchableOpacity
+                  key={status}
+                  style={[
+                    styles.healthButton,
+                    treeDetails.health_status === status && {
+                      backgroundColor: getHealthStatusColor(status),
+                      borderColor: getHealthStatusColor(status),
+                    },
+                  ]}
+                  onPress={() => handleUpdateHealth(status)}
+                  disabled={savingHealth}
+                >
+                  <Text style={styles.healthButtonText}>{status}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             {treeDetails.height_m && (
               <View style={styles.row}>
                 <Text style={styles.label}>Chiều cao:</Text>
@@ -362,7 +532,7 @@ export default function TaskDetailScreen() {
             )}
 
             {treeDetails.planting_year && (
-              <View style={styles.row}>
+<View style={styles.row}>
                 <Text style={styles.label}>Năm trồng:</Text>
                 <Text style={styles.value}>{treeDetails.planting_year}</Text>
               </View>
@@ -434,7 +604,7 @@ export default function TaskDetailScreen() {
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>Đ.kính tán (m)</Text>
                   <TextInput
-                    style={styles.physicalInput}
+style={styles.physicalInput}
                     placeholder="—"
                     placeholderTextColor="#64748b"
                     value={canopyDiameterM}
@@ -511,7 +681,7 @@ export default function TaskDetailScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>📷 Ảnh bằng chứng</Text>
           {task.evidence_image_url ? (
-            <Image
+<Image
               source={{ uri: task.evidence_image_url }}
               style={styles.evidenceImage}
               resizeMode="cover"
@@ -600,6 +770,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
   },
+  headerTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
   content: {
     flex: 1,
     padding: 16,
@@ -614,7 +789,7 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
   },
@@ -635,6 +810,25 @@ const styles = StyleSheet.create({
   statusText: {
     color: '#fff',
     fontSize: 12,
+    fontWeight: '600',
+  },
+  healthActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  healthButton: {
+    backgroundColor: '#0f172a',
+    borderColor: '#334155',
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  healthButtonText: {
+    color: '#fff',
+    fontSize: 13,
     fontWeight: '600',
   },
   cardTitle: {
@@ -754,7 +948,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(239, 68, 68, 0.9)',
     width: 32,
     height: 32,
-    borderRadius: 16,
+borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },

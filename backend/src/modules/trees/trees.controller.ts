@@ -1,18 +1,50 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Request,
+  UseInterceptors,
+  UploadedFile,
+  Res,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiQuery,
+  ApiConsumes,
+  ApiBody,
+} from '@nestjs/swagger';
+import type { Response } from 'express';
 import { TreesService } from './trees.service';
+import { ImportService } from './import.service';
 import { CreateTreeDto } from './dto/create-tree.dto';
 import { FindTreesNearbyDto } from './dto/find-trees-nearby.dto';
 import { UpdatePhysicalDto } from './dto/update-physical.dto';
 import { PhysicalHistoryQueryDto } from './dto/physical-history-query.dto';
+import { SyncTreesDto } from './dto/sync-trees.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+
+const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 @ApiTags('trees')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('trees')
 export class TreesController {
-  constructor(private readonly treesService: TreesService) {}
+  constructor(
+    private readonly treesService: TreesService,
+    private readonly importService: ImportService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new tree' })
@@ -42,6 +74,67 @@ export class TreesController {
   @ApiResponse({ status: 200, description: 'List of all administrative areas.' })
   async findAllAreas() {
     return await this.treesService.findAllAreas();
+  }
+
+  @Get('import/template')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: 'Download Excel template for tree import' })
+  @ApiResponse({ status: 200, description: 'Excel template file.' })
+  async downloadImportTemplate(@Res() res: Response): Promise<void> {
+    const buffer = await this.importService.createTemplate();
+    res.setHeader('Content-Type', XLSX_CONTENT_TYPE);
+    res.setHeader('Content-Disposition', 'attachment; filename="tree-import-template.xlsx"');
+    res.end(buffer);
+  }
+
+  @Post('import/preview')
+  @UseGuards(RolesGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Preview first rows from tree Excel import file' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  async previewImport(@UploadedFile() file: Express.Multer.File) {
+    this.assertXlsxFile(file);
+    const rows = await this.importService.parseExcel(file.buffer);
+    return await this.importService.previewRows(rows);
+  }
+
+  @Post('import')
+  @UseGuards(RolesGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Import trees from Excel file' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Import result with imported, skipped and errors.' })
+  async importTrees(@UploadedFile() file: Express.Multer.File) {
+    this.assertXlsxFile(file);
+    const rows = await this.importService.parseExcel(file.buffer);
+    return await this.importService.importTrees(rows);
+  }
+
+  @Post('sync')
+  @ApiOperation({ summary: 'Sync offline tree and maintenance actions' })
+  @ApiResponse({ status: 201, description: 'Sync result with synced, skipped and errors.' })
+  async syncOfflineActions(@Body() syncDto: SyncTreesDto | any[], @Request() req: any) {
+    const actions = Array.isArray(syncDto) ? syncDto : syncDto.actions;
+    const userId = req.user?.userId || 1;
+    return await this.treesService.syncOfflineActions(actions || [], userId);
   }
 
   @Get('nearby')
@@ -99,5 +192,14 @@ export class TreesController {
     @Query() query: PhysicalHistoryQueryDto,
   ) {
     return await this.treesService.getPhysicalHistory(+id, query);
+  }
+
+  private assertXlsxFile(file: Express.Multer.File | undefined): void {
+    if (!file) {
+      throw new BadRequestException('Excel file is required');
+    }
+    if (!file.originalname.toLowerCase().endsWith('.xlsx')) {
+      throw new BadRequestException('Only .xlsx files are supported');
+    }
   }
 }

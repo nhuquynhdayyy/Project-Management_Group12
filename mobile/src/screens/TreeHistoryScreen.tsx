@@ -12,6 +12,8 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getTasksByTreeId } from '../api/maintenance';
 import type { MaintenanceTask } from '../api/maintenance';
+import NetworkStatusIndicator from '../components/NetworkStatusIndicator';
+import OfflineBanner from '../components/OfflineBanner';
 import { RootStackParamList } from '../types/navigation';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'TreeHistory'>;
@@ -101,9 +103,13 @@ export default function TreeHistoryScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Text style={styles.backText}>← Quay lại</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Lịch sử bảo trì</Text>
+        <View style={styles.headerTitleRow}>
+          <Text style={styles.headerTitle}>Lịch sử bảo trì</Text>
+          <NetworkStatusIndicator />
+        </View>
         <Text style={styles.headerSubtitle}>Cây: {treeCode}</Text>
       </View>
+      <OfflineBanner />
 
       <ScrollView
         style={styles.content}
@@ -229,6 +235,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 4,
+  },
+  headerTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   headerSubtitle: {
     fontSize: 14,

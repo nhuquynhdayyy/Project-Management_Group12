@@ -11,7 +11,10 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getMyTasks, MaintenanceTask } from '../api/maintenance';
+import NetworkStatusIndicator from '../components/NetworkStatusIndicator';
+import OfflineBanner from '../components/OfflineBanner';
 import { useAuth } from '../context/AuthContext';
+import { saveCachedTaskDetails } from '../services/offlineStorage';
 import { RootStackParamList } from '../types/navigation';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'TaskList'>;
@@ -31,6 +34,7 @@ export default function TaskListScreen() {
     try {
       const data = await getMyTasks();
       setTasks(data);
+      await Promise.all(data.map(saveCachedTaskDetails));
     } catch (error: any) {
       Alert.alert('Lỗi', 'Không thể tải danh sách công việc');
     } finally {
@@ -97,13 +101,17 @@ export default function TaskListScreen() {
   }
 
   return (
-    <View style={styles.container}>
+<View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Công việc của tôi</Text>
+        <View>
+          <Text style={styles.headerTitle}>Công việc của tôi</Text>
+          <NetworkStatusIndicator />
+        </View>
         <TouchableOpacity onPress={signOut} style={styles.logoutButton}>
           <Text style={styles.logoutText}>Đăng xuất</Text>
         </TouchableOpacity>
       </View>
+      <OfflineBanner />
 
       <FlatList
         data={tasks}
