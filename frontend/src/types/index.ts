@@ -56,7 +56,22 @@ export interface MaintenanceTask {
   updated_at: string;
 }
 
-export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | 'COMPLETE';
+export type AuditAction =
+  | 'CREATE'
+  | 'UPDATE'
+  | 'DELETE'
+  | 'LOGIN'
+  | 'LOGOUT'
+  | 'LOGIN_FAILED'
+  | 'CREATE_TASK'
+  | 'UPDATE_TASK'
+  | 'CHANGE_STATUS'
+  | 'COMPLETE'
+  | 'COMPLETE_TASK'
+  | 'CREATE_USER'
+  | 'UPDATE_USER'
+  | 'DELETE_USER'
+  | 'CHANGE_ROLE';
 
 export interface AuditUser {
   id: number;

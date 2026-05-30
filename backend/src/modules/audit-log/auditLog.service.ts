@@ -10,6 +10,7 @@ export interface AuditLogFilter {
   entity_type?: string;
   entity_id?: number;
   search?: string;
+  quick_filter?: string;
   from?: Date;
   to?: Date;
 }
@@ -147,6 +148,63 @@ export class AuditLogService {
       query.andWhere('log.entity_id = :entityId', {
         entityId: filter.entity_id,
       });
+    }
+
+    switch (filter.quick_filter) {
+      case 'auth':
+        query.andWhere(
+          `(
+            log.action IN (:...authActions) OR
+            (log.action = :legacyCreateAction AND log.entity_type = :authEntity AND LOWER(CAST(log.new_value AS TEXT)) LIKE :legacyLoginFailed)
+          )`,
+          {
+            authActions: [
+              AuditAction.LOGIN,
+              AuditAction.LOGOUT,
+              AuditAction.LOGIN_FAILED,
+            ],
+            legacyCreateAction: AuditAction.CREATE,
+            authEntity: 'auth',
+            legacyLoginFailed: '%login_failed%',
+          },
+        );
+        break;
+      case 'tree_changes':
+        query.andWhere('log.entity_type = :treeEntity', { treeEntity: 'tree' });
+        query.andWhere('log.action IN (:...treeActions)', {
+          treeActions: [
+            AuditAction.CREATE,
+            AuditAction.UPDATE,
+            AuditAction.DELETE,
+          ],
+        });
+        break;
+      case 'tree_maintenance':
+        query.andWhere('log.entity_type IN (:...taskEntities)', {
+          taskEntities: ['task', 'maintenance', 'maintenance_task'],
+        });
+        query.andWhere('log.action IN (:...taskActions)', {
+          taskActions: [
+            AuditAction.CREATE,
+            AuditAction.UPDATE,
+            AuditAction.COMPLETE,
+            AuditAction.CREATE_TASK,
+            AuditAction.UPDATE_TASK,
+            AuditAction.CHANGE_STATUS,
+            AuditAction.COMPLETE_TASK,
+          ],
+        });
+        break;
+      case 'user_management':
+        query.andWhere('log.action IN (:...userActions)', {
+          userActions: [
+            AuditAction.CREATE_USER,
+            AuditAction.UPDATE_USER,
+            AuditAction.DELETE_USER,
+            AuditAction.CHANGE_ROLE,
+          ],
+        });
+        break;
     }
 
     if (filter.from) {

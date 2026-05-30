@@ -1,59 +1,61 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import ActivityLogsPage from './ActivityLogsPage';
 import { fetchActivityLogs } from '../api/activityLogs';
+import ActivityLogsPage from './ActivityLogsPage';
 
 vi.mock('../api/activityLogs', () => ({
   fetchActivityLogs: vi.fn(),
 }));
 
+const emptyResponse = {
+  data: [],
+  meta: { total: 0, page: 1, limit: 10, totalPages: 0 },
+};
+
 describe('ActivityLogsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(fetchActivityLogs).mockResolvedValue({
-      data: [
-        {
-          id: 1,
-          created_at: '2026-05-30T01:00:00.000Z',
-          user_id: 1,
-          user: { id: 1, username: 'admin' },
-          action: 'UPDATE',
-          entity_type: 'tree',
-          entity_id: 10,
-          old_value: { health_status: 'Tốt' },
-          new_value: { health_status: 'Yếu' },
-        },
-      ],
-      meta: { total: 1, page: 1, limit: 10, totalPages: 1 },
-    });
+    vi.mocked(fetchActivityLogs).mockResolvedValue(emptyResponse);
   });
 
-  it('should render activity logs in a table', async () => {
+  it('should show entity type category tabs', async () => {
     render(<ActivityLogsPage />);
 
-    expect(await screen.findByRole('heading', { name: /Nhật ký hoạt động/i })).toBeVisible();
-    expect(await screen.findByText('admin')).toBeVisible();
-    expect(await screen.findByText(/08:00:00/)).toBeVisible();
-    expect(screen.getAllByText('UPDATE').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('tree').length).toBeGreaterThan(0);
+    expect(screen.getByRole('tab', { name: 'Tất cả' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Cây xanh' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Công việc' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Người dùng' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Đăng nhập' })).toBeInTheDocument();
+
+    expect(screen.queryByRole('tab', { name: 'Đăng nhập hệ thống' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Thay đổi cây' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Bảo trì cây' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Quản lý người dùng' })).not.toBeInTheDocument();
+
+    await waitFor(() => expect(fetchActivityLogs).toHaveBeenCalled());
   });
 
-  it('should search and filter logs', async () => {
+  it('should filter tabs by entityType instead of quickFilter', async () => {
+    const user = userEvent.setup();
     render(<ActivityLogsPage />);
 
-    await userEvent.type(screen.getByLabelText(/Tìm kiếm/i), 'TREE-001');
-    await userEvent.selectOptions(screen.getByLabelText(/Action/i), 'UPDATE');
-    await userEvent.selectOptions(screen.getByLabelText(/Entity Type/i), 'tree');
+    await waitFor(() =>
+      expect(fetchActivityLogs).toHaveBeenCalledWith(
+        expect.objectContaining({ entityType: '', page: 1 }),
+      ),
+    );
 
-    await waitFor(() => {
+    await user.click(screen.getByRole('tab', { name: 'Công việc' }));
+
+    await waitFor(() =>
       expect(fetchActivityLogs).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          search: 'TREE-001',
-          action: 'UPDATE',
-          entityType: 'tree',
-        }),
-      );
-    });
+        expect.not.objectContaining({ quickFilter: expect.any(String) }),
+      ),
+    );
+    expect(fetchActivityLogs).toHaveBeenLastCalledWith(
+      expect.objectContaining({ entityType: 'task', page: 1 }),
+    );
+    expect(screen.getByRole('tab', { name: 'Công việc' })).toHaveAttribute('aria-selected', 'true');
   });
 });

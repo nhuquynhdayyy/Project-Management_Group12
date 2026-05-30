@@ -76,6 +76,7 @@ export class AuditLogController {
   @ApiQuery({ name: 'user_id', required: false, type: Number })
   @ApiQuery({ name: 'action', required: false, enum: AuditAction })
   @ApiQuery({ name: 'entity_type', required: false, type: String })
+  @ApiQuery({ name: 'quick_filter', required: false, type: String })
   @ApiQuery({
     name: 'from',
     required: false,
@@ -100,6 +101,7 @@ export class AuditLogController {
     @Query('user_id') userId?: string,
     @Query('action') action?: AuditAction,
     @Query('entity_type') entityType?: string,
+    @Query('quick_filter') quickFilter?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
@@ -115,6 +117,7 @@ export class AuditLogController {
       user_id: userId ? parseInt(userId, 10) : undefined,
       action,
       entity_type: entityType,
+      quick_filter: quickFilter,
       from: from ? new Date(from) : undefined,
       to: to ? new Date(to) : undefined,
     });

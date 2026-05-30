@@ -70,8 +70,7 @@ export class AuthService {
 
     if (!user) {
       this.auditLogService
-        .log(null, AuditAction.CREATE, 'auth', null, null, {
-          action: 'login_failed',
+        .log(null, AuditAction.LOGIN_FAILED, 'auth', null, null, {
           reason: 'user_not_found',
           username,
         })
@@ -81,8 +80,7 @@ export class AuthService {
 
     if (!user.is_active) {
       this.auditLogService
-        .log(user.id, AuditAction.CREATE, 'auth', null, null, {
-          action: 'login_failed',
+        .log(user.id, AuditAction.LOGIN_FAILED, 'auth', null, null, {
           reason: 'account_inactive',
           username,
         })
@@ -93,8 +91,7 @@ export class AuthService {
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       this.auditLogService
-        .log(user.id, AuditAction.CREATE, 'auth', null, null, {
-          action: 'login_failed',
+        .log(user.id, AuditAction.LOGIN_FAILED, 'auth', null, null, {
           reason: 'invalid_password',
           username,
         })
