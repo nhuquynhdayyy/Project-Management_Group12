@@ -288,6 +288,8 @@ export class TreesService {
     return typeof location === 'string'
       ? Number(location.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/)?.[2])
       : location.coordinates[1];
+  }
+  
   async findAllSpecies(): Promise<TreeSpecies[]> {
     return await this.speciesRepository.find({ order: { common_name: 'ASC' } });
   }

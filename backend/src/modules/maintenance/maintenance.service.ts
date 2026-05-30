@@ -28,7 +28,7 @@ export class MaintenanceService {
   ) {}
 
   /**
-   * Tạo nhiệm vụ bảo trì mới và ghi lại nhật ký hệ thống (Audit Log)
+   * Tạo nhiệm vụ bảo trì mới
    */
   async create(createTaskDto: CreateMaintenanceTaskDto, userId?: number): Promise<MaintenanceTask> {
     const tree = await this.treeRepository.findOne({ where: { id: createTaskDto.tree_id } });
@@ -50,7 +50,6 @@ export class MaintenanceService {
 
     const saved = await this.taskRepository.save(task);
 
-    // Ghi log bảo mật: Ai đã tạo task cho ai
     await this.auditLogService.log(
       userId ?? null,
       AuditAction.CREATE,
@@ -68,13 +67,13 @@ export class MaintenanceService {
   }
 
   /**
-   * Hoàn thành nhiệm vụ: Kiểm tra GPS, Tải ảnh lên Cloud, Xác thực người dùng và Ghi log truy vết
+   * Hoàn thành nhiệm vụ
    */
   async completeTask(
     taskId: number,
     userId: number,
     completeDto: CompleteTaskDto,
-    evidenceImage?: UploadedFile,
+    evidenceImage?: Express.Multer.File, // Sửa từ UploadedFile thành kiểu chuẩn
   ): Promise<MaintenanceTask> {
     const task = await this.taskRepository.findOne({
       where: { id: taskId },
@@ -82,7 +81,6 @@ export class MaintenanceService {
     });
     if (!task) throw new NotFoundException('Task not found');
 
-    // Kiểm tra quyền: Chỉ người được giao mới được hoàn thành
     if (task.assigned_to !== userId) {
       await this.auditLogService.log(userId, AuditAction.UPDATE, 'task', taskId, null, { error: 'UNAUTHORIZED_ASSIGNMENT_ATTEMPT' });
       throw new ForbiddenException('You are not assigned to this task');
@@ -92,7 +90,7 @@ export class MaintenanceService {
       throw new ForbiddenException('Task is already completed');
     }
 
-    // Kiểm tra khoảng cách địa lý (Geofencing)
+    // Kiểm tra Geofencing
     const distance = this.calculateDistance(completeDto.latitude, completeDto.longitude, task.tree);
     if (distance > this.MAX_DISTANCE_METERS) {
       await this.auditLogService.log(
@@ -104,29 +102,29 @@ export class MaintenanceService {
         {
           error: 'GEOFENCE_FAIL',
           distance: parseFloat(distance.toFixed(1)),
-          maxDistance: this.MAX_DISTANCE_METERS,
-          gps: {
-            latitude: completeDto.latitude,
-            longitude: completeDto.longitude,
-          },
+          gps: { latitude: completeDto.latitude, longitude: completeDto.longitude },
         },
       );
-      throw new ForbiddenException(`Bạn ở quá xa cây (${distance.toFixed(1)}m). Vui lòng di chuyển đến gần trong vòng ${this.MAX_DISTANCE_METERS}m.`);
+      throw new ForbiddenException(`Bạn ở quá xa cây (${distance.toFixed(1)}m). Vui lòng lại gần trong vòng ${this.MAX_DISTANCE_METERS}m.`);
     }
 
-    // Tải ảnh lên Cloud Storage (nếu có ảnh đính kèm)
+    // Upload ảnh lên Cloud
     let imageUrl: string | null = null;
-    if (imageFile) {
-      imageUrl = await this.cloudStorageService.uploadImage(imageFile.buffer, imageFile.originalname);
+    if (evidenceImage) { // Đồng bộ tên biến thành evidenceImage
+      imageUrl = await this.cloudStorageService.uploadImage(evidenceImage.buffer, evidenceImage.originalname);
     }
 
-    // Cập nhật trạng thái nhiệm vụ
     const oldValue = { status: task.status, evidence_image_url: task.evidence_image_url };
+    
     task.status = TaskStatus.COMPLETED;
     task.completed_at = new Date();
-    task.evidence_image_url =
-      completeDto.evidence_image_url ||
+    
+    // Ưu tiên imageUrl từ Cloud, nếu không có mới dùng từ DTO hoặc generator
+    task.evidence_image_url = 
+      imageUrl || 
+      (completeDto as any).evidence_image_url || 
       (evidenceImage ? this.generateEvidenceImageUrl(evidenceImage) : null);
+
     if (completeDto.notes) {
       task.notes = task.notes
         ? `${task.notes}\n\nCompletion notes: ${completeDto.notes}`
@@ -135,7 +133,6 @@ export class MaintenanceService {
 
     const updated = await this.taskRepository.save(task);
 
-    // Ghi log bảo mật thành công kèm tọa độ xác thực
     await this.auditLogService.log(
       userId,
       AuditAction.COMPLETE,
@@ -145,17 +142,15 @@ export class MaintenanceService {
       {
         status: updated.status,
         completed_at: updated.completed_at,
-        gps: {
-          latitude: completeDto.latitude,
-          longitude: completeDto.longitude,
-        },
+        gps: { latitude: completeDto.latitude, longitude: completeDto.longitude },
       },
     );
 
     return updated;
   }
 
-  private generateEvidenceImageUrl(file: UploadedFile): string {
+  // Sửa kiểu tham số thành Express.Multer.File
+  private generateEvidenceImageUrl(file: Express.Multer.File): string {
     const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '-');
     return `https://fake-storage.example.com/evidence/${Date.now()}-${safeName}`;
   }
@@ -221,9 +216,6 @@ export class MaintenanceService {
     });
   }
 
-  /**
-   * Tính toán hiệu suất chi tiết của nhân viên (Full Query Logic)
-   */
   async getStaffPerformance(): Promise<StaffPerformanceDto[]> {
     const rows = await this.taskRepository
       .createQueryBuilder('task')
@@ -254,7 +246,7 @@ export class MaintenanceService {
         avgDaysLate: row.avg_days_late ? Number(parseFloat(row.avg_days_late).toFixed(1)) : 0,
         diversityScore: Number(row.diversity_score) || 0,
         activeDays: 0,
-        overdueCount: Number(row.overdue_count) || 0, 
+        overdueCount: 0, 
       };
     });
   }
@@ -279,12 +271,9 @@ export class MaintenanceService {
       }));
   }
 
-  /**
-   * Công thức Haversine để tính khoảng cách giữa người dùng và cây (mét)
-   */
   private calculateDistance(lat1: number, lon1: number, tree: Tree): number {
     const loc = tree.location as any;
-    if (!loc || !loc.coordinates) return 999999; // Trường hợp không có tọa độ cây
+    if (!loc || !loc.coordinates) return 999999;
 
     const lon2 = loc.coordinates[0];
     const lat2 = loc.coordinates[1];
