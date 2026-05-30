@@ -12,6 +12,7 @@ import { Tree } from '../../entities/tree.entity';
 import { User } from '../auth/user.entity';
 import { AuthModule } from '../auth/auth.module';
 import { AuditLogModule } from '../audit-log/auditLog.module';
+import { SettingsModule } from '../settings/settings.module';
 import { CloudStorageService } from '../../services/cloud-storage.service';
 
 @Module({
@@ -19,6 +20,7 @@ import { CloudStorageService } from '../../services/cloud-storage.service';
     TypeOrmModule.forFeature([MaintenanceTask, Tree, User]),
     AuthModule,
     AuditLogModule,
+    SettingsModule,
   ],
   controllers: [MaintenanceController, MaintenanceExportController, TestExportController],
   providers: [MaintenanceService, MaintenanceExportService, ExportService, RolesGuard, CloudStorageService],

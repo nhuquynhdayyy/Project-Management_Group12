@@ -11,11 +11,10 @@ import { StaffPerformanceDto } from './dto/staff-performance.dto';
 import { AuditLogService } from '../audit-log/auditLog.service';
 import { AuditAction } from '../../entities/auditLog.entity';
 import { CloudStorageService } from '../../services/cloud-storage.service';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class MaintenanceService {
-  private readonly MAX_DISTANCE_METERS = 10;
-
   constructor(
     @InjectRepository(MaintenanceTask)
     private readonly taskRepository: Repository<MaintenanceTask>,
@@ -25,6 +24,7 @@ export class MaintenanceService {
     private readonly userRepository: Repository<User>,
     private readonly auditLogService: AuditLogService,
     private readonly cloudStorageService: CloudStorageService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   /**
@@ -90,9 +90,12 @@ export class MaintenanceService {
       throw new ForbiddenException('Task is already completed');
     }
 
+    // Lấy bán kính Geofencing từ Database
+    const maxDistanceMeters = await this.settingsService.getSettingAsNumber('geofencing_radius_meters', 10);
+
     // Kiểm tra Geofencing
     const distance = this.calculateDistance(completeDto.latitude, completeDto.longitude, task.tree);
-    if (distance > this.MAX_DISTANCE_METERS) {
+    if (distance > maxDistanceMeters) {
       await this.auditLogService.log(
         userId,
         AuditAction.UPDATE,
@@ -105,7 +108,7 @@ export class MaintenanceService {
           gps: { latitude: completeDto.latitude, longitude: completeDto.longitude },
         },
       );
-      throw new ForbiddenException(`Bạn ở quá xa cây (${distance.toFixed(1)}m). Vui lòng lại gần trong vòng ${this.MAX_DISTANCE_METERS}m.`);
+      throw new ForbiddenException(`Bạn ở quá xa cây (${distance.toFixed(1)}m). Vui lòng lại gần trong vòng ${maxDistanceMeters}m.`);
     }
 
     // Upload ảnh lên Cloud

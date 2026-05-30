@@ -8,6 +8,7 @@ import { SeederModule } from './database/seeder/seeder.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { AuditLogModule } from './modules/audit-log/auditLog.module';
 import { CloudStorageService } from './services/cloud-storage.service';
+import { SettingsModule } from './modules/settings/settings.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { CloudStorageService } from './services/cloud-storage.service';
     SeederModule,
     MaintenanceModule,
     AuditLogModule,
+    SettingsModule,
   ],
   controllers: [AppController],
   providers: [CloudStorageService],
