@@ -12,8 +12,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { fetchTrees } from '../../api/trees';
-import type { HealthStatus, Tree } from '../../types';
+import { fetchTrees, fetchAreas } from '../../api/trees';
+import type { HealthStatus, Tree, AdministrativeArea } from '../../types';
 import {
   BAR_COLOR,
   ChartTooltip,
@@ -29,30 +29,40 @@ import {
 
 export default function TreeStatsPage() {
   const [trees, setTrees] = useState<Tree[]>([]);
+  const [areas, setAreas] = useState<AdministrativeArea[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
+  const [selectedAreaId, setSelectedAreaId] = useState<number | null>(null);
   const timeRange = useTimeRange();
 
   useEffect(() => {
-    fetchTrees()
-      .then(setTrees)
+    Promise.all([fetchTrees(), fetchAreas()])
+      .then(([treesData, areasData]) => {
+        setTrees(treesData);
+        setAreas(areasData);
+      })
       .catch(() => setError('Khong the tai du lieu cay. Vui long thu lai.'))
       .finally(() => setLoading(false));
   }, []);
+
+  const filteredTrees = useMemo(() => {
+    if (!selectedAreaId) return trees;
+    return trees.filter((tree) => tree.area_id === selectedAreaId);
+  }, [trees, selectedAreaId]);
 
   const healthData = useMemo(
     () =>
       (['Tốt', 'Yếu', 'Sâu bệnh', 'Chết'] as HealthStatus[]).map((status) => ({
         name: status,
-        value: trees.filter((tree) => tree.health_status === status).length,
+        value: filteredTrees.filter((tree) => tree.health_status === status).length,
       })),
-    [trees],
+    [filteredTrees],
   );
 
   const speciesData = useMemo(() => {
     const speciesMap = new Map<string, number>();
-    for (const tree of trees) {
+    for (const tree of filteredTrees) {
       const name = tree.species?.common_name ?? 'Khong ro';
       speciesMap.set(name, (speciesMap.get(name) ?? 0) + 1);
     }
@@ -60,11 +70,11 @@ export default function TreeStatsPage() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(([name, count]) => ({ name, count }));
-  }, [trees]);
+  }, [filteredTrees]);
 
   const areaData = useMemo(() => {
     const areaMap = new Map<string, number>();
-    for (const tree of trees) {
+    for (const tree of filteredTrees) {
       const name = tree.area?.area_name ?? 'Khong ro';
       areaMap.set(name, (areaMap.get(name) ?? 0) + 1);
     }
@@ -72,9 +82,9 @@ export default function TreeStatsPage() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(([name, count]) => ({ name, count }));
-  }, [trees]);
+  }, [filteredTrees]);
 
-  const dangerTrees = useMemo(() => trees.filter(isDangerTree), [trees]);
+  const dangerTrees = useMemo(() => filteredTrees.filter(isDangerTree), [filteredTrees]);
   const totalPages = Math.max(1, Math.ceil(dangerTrees.length / PAGE_SIZE));
   const visibleTrees = dangerTrees.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -86,6 +96,23 @@ export default function TreeStatsPage() {
       error={error}
     >
       <TimeFilterControls {...timeRange} />
+
+      {/* Area Filter */}
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-300 mb-2">Lọc theo khu vực</label>
+        <select
+          value={selectedAreaId || ''}
+          onChange={(e) => setSelectedAreaId(e.target.value ? +e.target.value : null)}
+          className="px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-green-600"
+        >
+          <option value="">Tất cả khu vực</option>
+          {areas.map((area) => (
+            <option key={area.id} value={area.id}>
+              {area.area_name}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <Section title="Phan bo tinh trang suc khoe">

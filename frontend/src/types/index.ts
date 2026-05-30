@@ -60,6 +60,9 @@ export interface TreeSpecies {
 export interface AdministrativeArea {
   id: number;
   area_name: string;
+  parent_id?: number | null;
+  children?: AdministrativeArea[];
+  trees?: Tree[];
 }
 
 export type HealthStatus = 'Tốt' | 'Yếu' | 'Sâu bệnh' | 'Chết';

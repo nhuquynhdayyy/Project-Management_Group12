@@ -17,6 +17,7 @@ import TaskManagementPage from './pages/dashboard/TaskManagementPage';
 import TreeManagementPage from './pages/dashboard/TreeManagementPage';
 import StaffStatsPage from './pages/dashboard/StaffStatsPage';
 import UsersPage from './pages/dashboard/UsersPage';
+import AreasPage from './pages/dashboard/AreasPage';
 
 function DefaultRedirect() {
   const { user } = useAuth();
@@ -55,6 +56,7 @@ export default function App() {
                 <Route path="/dashboard/tasks" element={<TaskStatsPage />} />
                 <Route path="/dashboard/tasks/manage" element={<TaskManagementPage />} />
                 <Route path="/dashboard/staff" element={<StaffStatsPage />} />
+                <Route path="/dashboard/areas" element={<AreasPage />} />
               </Route>
               <Route element={<RoleGuard allowedRoles={['Admin']} />}>
                 <Route path="/dashboard/users" element={<UsersPage />} />
