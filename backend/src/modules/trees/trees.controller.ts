@@ -7,6 +7,8 @@ import { FindTreesNearbyDto } from './dto/find-trees-nearby.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AuditLogService } from '../audit-log/auditLog.service';
+import { AuditAction } from '../../entities/auditLog.entity';
 import type { Response } from 'express';
 
 @ApiTags('trees')
@@ -14,7 +16,10 @@ import type { Response } from 'express';
 @UseGuards(JwtAuthGuard)
 @Controller('trees')
 export class TreesController {
-  constructor(private readonly treesService: TreesService) {}
+  constructor(
+    private readonly treesService: TreesService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
   @Post()
   @UseGuards(RolesGuard)
@@ -74,6 +79,21 @@ export class TreesController {
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async findOne(@Param('id') id: string) {
     return await this.treesService.findById(+id);
+  }
+
+  @Get(':id/history')
+  @ApiOperation({ summary: 'Get tree change history from audit logs' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'List of tree changes (UPDATE actions only).' 
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async getTreeHistory(@Param('id') id: string) {
+    return await this.auditLogService.findAll({
+      entity_type: 'tree',
+      entity_id: +id,
+      action: AuditAction.UPDATE,
+    });
   }
 
   @Patch(':id')
@@ -147,8 +167,10 @@ export class TreesController {
   async updateHealth(
     @Param('id') id: string,
     @Body('health_status') healthStatus: string,
+    @Request() req,
   ) {
-    return await this.treesService.updateHealthStatus(+id, healthStatus);
+    const userId = req.user?.userId ?? req.user?.id ?? null;
+    return await this.treesService.updateHealthStatus(+id, healthStatus, userId);
   }
 
   @Get('check-code')

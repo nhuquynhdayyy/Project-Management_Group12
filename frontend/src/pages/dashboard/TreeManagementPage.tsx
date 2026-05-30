@@ -6,6 +6,7 @@ import {
   fetchTrees,
   updateTreeHealth,
   fetchTasksByTreeId,
+  fetchTreeHistory,
   getTreeQRCodeBlobUrl,
   downloadTreeQRCode,
   checkTreeCodeExists,
@@ -15,6 +16,7 @@ import {
 import { createTask, type CreateTaskPayload } from '../../api/maintenance';
 import { fetchStaffUsers } from '../../api/auth';
 import type {
+  ActivityLog,
   AdministrativeArea,
   DashboardUser,
   HealthStatus,
@@ -66,6 +68,55 @@ function Row({ label, value, accent }: { label: string; value: string; accent?: 
   );
 }
 
+// ─── Utility: Translate tree changes to Vietnamese ────────────────────────────────────────
+
+function translateTreeChanges(oldValue: Record<string, any> | null, newValue: Record<string, any> | null): string[] {
+  if (!oldValue || !newValue) return [];
+  
+  const changes: string[] = [];
+  
+  const fieldLabels: Record<string, string> = {
+    health_status: 'Sức khỏe',
+    height_m: 'Chiều cao',
+    trunk_diameter_cm: 'Đường kính thân',
+    planting_year: 'Năm trồng',
+    area_id: 'Khu vực',
+    species_id: 'Loài cây',
+    tree_code: 'Mã cây',
+  };
+  
+  const healthLabels: Record<string, string> = {
+    'Tốt': 'Tốt',
+    'Yếu': 'Yếu',
+    'Sâu bệnh': 'Sâu bệnh',
+    'Chết': 'Chết',
+  };
+  
+  for (const key in newValue) {
+    if (oldValue[key] !== newValue[key] && oldValue[key] !== undefined) {
+      const label = fieldLabels[key] || key;
+      const oldVal = oldValue[key];
+      const newVal = newValue[key];
+      
+      if (key === 'health_status') {
+        const oldHealth = healthLabels[oldVal] || oldVal;
+        const newHealth = healthLabels[newVal] || newVal;
+        changes.push(`${label} thay đổi từ "${oldHealth}" sang "${newHealth}"`);
+      } else if (key === 'height_m') {
+        changes.push(`${label} thay đổi từ ${oldVal}m sang ${newVal}m`);
+      } else if (key === 'trunk_diameter_cm') {
+        changes.push(`${label} thay đổi từ ${oldVal}cm sang ${newVal}cm`);
+      } else if (key === 'planting_year') {
+        changes.push(`${label} thay đổi từ năm ${oldVal} sang năm ${newVal}`);
+      } else {
+        changes.push(`${label} thay đổi từ "${oldVal}" sang "${newVal}"`);
+      }
+    }
+  }
+  
+  return changes;
+}
+
 // ─── TreeDetailModal ────────────────────────────────────────────────────────────────────────────
 
 function TreeDetailModal({
@@ -75,6 +126,7 @@ function TreeDetailModal({
   staffUsers,
   onClose,
   onTaskCreated,
+  onHealthUpdated,
 }: {
   tree: Tree;
   tasks: MaintenanceTask[];
@@ -82,8 +134,9 @@ function TreeDetailModal({
   staffUsers: DashboardUser[];
   onClose: () => void;
   onTaskCreated: () => void;
+  onHealthUpdated?: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<'info' | 'tasks' | 'qrcode'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'tasks' | 'history' | 'qrcode'>('info');
   const [healthValue, setHealthValue] = useState<HealthStatus>(tree.health_status);
   const [savingHealth, setSavingHealth] = useState(false);
   const [healthMsg, setHealthMsg] = useState('');
@@ -99,6 +152,11 @@ function TreeDetailModal({
   const [qrCodeBlobUrl, setQrCodeBlobUrl] = useState<string | null>(null);
   const [loadingQRCode, setLoadingQRCode] = useState(false);
   const [qrCodeError, setQrCodeError] = useState(false);
+  
+  // History tab states
+  const [historyLogs, setHistoryLogs] = useState<ActivityLog[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
 
   async function handleHealthUpdate() {
     setSavingHealth(true);
@@ -106,6 +164,18 @@ function TreeDetailModal({
     try {
       await updateTreeHealth(tree.id, healthValue);
       setHealthMsg('Đã cập nhật!');
+      
+      // Gọi callback để refresh data trong component cha
+      if (onHealthUpdated) {
+        onHealthUpdated();
+      }
+      
+      // Cập nhật giá trị tree.health_status ngay lập tức
+      tree.health_status = healthValue;
+      
+      // Reset history để reload khi user mở lại tab history
+      setHasLoadedHistory(false);
+      setHistoryLogs([]);
     } catch {
       setHealthMsg('Cập nhật thất bại.');
     } finally {
@@ -180,6 +250,25 @@ function TreeDetailModal({
     }
   }, [activeTab, tree.id, qrCodeBlobUrl, loadingQRCode]);
 
+  // Load history when history tab is active (only once)
+  useEffect(() => {
+    if (activeTab === 'history' && !hasLoadedHistory) {
+      setLoadingHistory(true);
+      setHasLoadedHistory(true);
+      fetchTreeHistory(tree.id)
+        .then((logs) => {
+          setHistoryLogs(logs);
+        })
+        .catch((error) => {
+          console.error('Failed to load tree history:', error);
+          setHistoryLogs([]);
+        })
+        .finally(() => {
+          setLoadingHistory(false);
+        });
+    }
+  }, [activeTab, tree.id, hasLoadedHistory]);
+
   // Cleanup blob URL when modal closes
   useEffect(() => {
     return () => {
@@ -227,6 +316,12 @@ function TreeDetailModal({
             className={`px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'tasks' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}
           >
             Lịch sử task ({tasks.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'history' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            Lịch sử biến động ({historyLogs.length})
           </button>
           <button
             onClick={() => setActiveTab('qrcode')}
@@ -346,6 +441,57 @@ function TreeDetailModal({
                       })}
                     </tbody>
                   </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'history' && (
+            <div className="px-5 py-4">
+              {loadingHistory ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-center">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mb-2"></div>
+                    <p className="text-sm text-gray-400">Đang tải lịch sử...</p>
+                  </div>
+                </div>
+              ) : historyLogs.length === 0 ? (
+                <p className="text-sm text-gray-500 italic text-center py-8">
+                  Chưa có thay đổi nào được ghi nhận
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {historyLogs.map((log) => {
+                    const changes = translateTreeChanges(log.old_value, log.new_value);
+                    if (changes.length === 0) return null;
+                    
+                    return (
+                      <div key={log.id} className="bg-gray-900 rounded-lg p-4 border-l-4 border-blue-500">
+                        <div className="flex items-start justify-between mb-2">
+                          <span className="text-xs text-gray-400">
+                            {new Date(log.created_at).toLocaleString('vi-VN', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                          <span className="text-xs text-green-400 font-medium">
+                            {log.user?.username || 'Hệ thống'}
+                          </span>
+                        </div>
+                        <ul className="space-y-1.5">
+                          {changes.map((change, idx) => (
+                            <li key={idx} className="text-sm text-gray-300 flex items-start gap-2">
+                              <span className="text-blue-400 mt-1">•</span>
+                              <span>{change}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -936,6 +1082,9 @@ export default function TreeManagementPage() {
           onClose={() => setSelectedTree(null)}
           onTaskCreated={() => {
             fetchTasksByTreeId(selectedTree.id).then(setSelectedTreeTasks).catch(() => {});
+          }}
+          onHealthUpdated={() => {
+            loadData();
           }}
         />
       )}

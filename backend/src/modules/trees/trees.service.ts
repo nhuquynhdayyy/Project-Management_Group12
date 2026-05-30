@@ -243,11 +243,25 @@ export class TreesService {
     return await this.areaRepository.find({ order: { area_name: 'ASC' } });
   }
 
-  async updateHealthStatus(id: number, healthStatus: string): Promise<Tree> {
+  async updateHealthStatus(id: number, healthStatus: string, userId?: number): Promise<Tree> {
     const tree = await this.treeRepository.findOne({ where: { id } });
     if (!tree) throw new NotFoundException('Tree not found');
+    
+    const oldValue = this.toAuditValue(tree);
     tree.health_status = healthStatus as any;
-    return await this.treeRepository.save(tree);
+    const updated = await this.treeRepository.save(tree);
+    
+    // Ghi audit log để lưu lịch sử thay đổi
+    await this.auditLogService.log(
+      userId ?? null,
+      AuditAction.UPDATE,
+      'tree',
+      id,
+      oldValue,
+      this.toAuditValue(updated),
+    );
+    
+    return updated;
   }
 
   /**

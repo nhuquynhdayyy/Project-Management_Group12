@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { AdministrativeArea, Tree, TreeSpecies, MaintenanceTask } from '../types';
+import type { AdministrativeArea, Tree, TreeSpecies, MaintenanceTask, ActivityLog } from '../types';
 
 export interface CreateTreePayload {
   tree_code: string;
@@ -51,6 +51,16 @@ export async function updateTreeHealth(id: number, healthStatus: string): Promis
 
 export async function fetchTasksByTreeId(treeId: number): Promise<MaintenanceTask[]> {
   const { data } = await apiClient.get<MaintenanceTask[]>(`/maintenance/tasks?tree_id=${treeId}`);
+  return data;
+}
+
+/**
+ * Fetch tree change history from audit logs
+ * @param treeId Tree ID
+ * @returns List of audit log entries for tree updates
+ */
+export async function fetchTreeHistory(treeId: number): Promise<ActivityLog[]> {
+  const { data } = await apiClient.get<ActivityLog[]>(`/trees/${treeId}/history`);
   return data;
 }
 
