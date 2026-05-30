@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,42 +7,39 @@ import {
   StyleSheet,
   RefreshControl,
   Alert,
-  ScrollView,
   ActivityIndicator,
+  Linking,
+  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { getMyTasks, MaintenanceTask, startTask } from '../api/maintenance';
+import { getMyTasks, MaintenanceTask } from '../api/maintenance';
 import { useAuth } from '../context/AuthContext';
 import { RootStackParamList } from '../types/navigation';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'TaskList'>;
 
-// Bộ lọc thông minh cho Task
 type StatusFilter = 'all' | 'Pending' | 'In_Progress' | 'Completed';
-type TaskTypeFilter = 'all' | 'Cắt tỉa' | 'Bón phân' | 'Tưới nước' | 'Kiểm tra';
+type PriorityLevel = 'high' | 'medium' | 'low';
 
-interface TaskFilterState {
-  status: StatusFilter;
-  taskType: TaskTypeFilter;
+interface TaskWithPriority extends MaintenanceTask {
+  priority: PriorityLevel;
+  isOverdue: boolean;
 }
 
 export default function TaskListScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { signOut } = useAuth();
-  const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
+  
+  const [tasks, setTasks] = useState<TaskWithPriority[]>([]);
+  const [filteredTasks, setFilteredTasks] = useState<TaskWithPriority[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [processingTaskId, setProcessingTaskId] = useState<number | null>(null);
-  const [filters, setFilters] = useState<TaskFilterState>({
-    status: 'all',
-    taskType: 'all',
-  });
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   useEffect(() => {
     loadTasks();
     
-    // Lắng nghe sự kiện focus để refresh danh sách khi quay lại màn hình
     const unsubscribe = navigation.addListener('focus', () => {
       loadTasks();
     });
@@ -50,393 +47,374 @@ export default function TaskListScreen() {
     return unsubscribe;
   }, [navigation]);
 
-  // Lọc và sắp xếp task
-  const filteredTasks = useMemo(() => {
-    let result = [...tasks];
+  useEffect(() => {
+    applyFilters();
+  }, [tasks, statusFilter]);
 
-    // Lọc theo trạng thái
-    if (filters.status !== 'all') {
-      result = result.filter((task) => task.status === filters.status);
-    }
+  const calculatePriority = (task: MaintenanceTask): PriorityLevel => {
+    const scheduledDate = new Date(task.scheduled_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    scheduledDate.setHours(0, 0, 0, 0);
+    
+    const daysUntilDue = Math.ceil((scheduledDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (task.status === 'Completed') return 'low';
+    if (daysUntilDue < 0) return 'high'; // Quá hạn
+    if (daysUntilDue <= 2) return 'high'; // Trong 2 ngày tới
+    if (daysUntilDue <= 5) return 'medium'; // Trong 5 ngày tới
+    return 'low';
+  };
 
-    // Lọc theo loại công việc
-    if (filters.taskType !== 'all') {
-      result = result.filter((task) => task.task_type === filters.taskType);
-    }
+  const isTaskOverdue = (task: MaintenanceTask): boolean => {
+    if (task.status === 'Completed') return false;
+    const scheduledDate = new Date(task.scheduled_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    scheduledDate.setHours(0, 0, 0, 0);
+    return scheduledDate < today;
+  };
 
-    // Sắp xếp: Ưu tiên Pending và In_Progress lên đầu
-    result.sort((a, b) => {
-      const priorityOrder = { 'Pending': 0, 'In_Progress': 1, 'Completed': 2 };
-      const aPriority = priorityOrder[a.status] ?? 3;
-      const bPriority = priorityOrder[b.status] ?? 3;
-      
-      if (aPriority !== bPriority) {
-        return aPriority - bPriority;
-      }
-      
-      // Nếu cùng trạng thái, sắp xếp theo ngày
-      return new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime();
-    });
-
-    return result;
-  }, [tasks, filters]);
-
-  function clearFilters() {
-    setFilters({ status: 'all', taskType: 'all' });
-  }
-
-  function toggleStatusFilter(status: StatusFilter) {
-    setFilters((prev) => ({
-      ...prev,
-      status: prev.status === status ? 'all' : status,
-    }));
-  }
-
-  function toggleTaskTypeFilter(taskType: TaskTypeFilter) {
-    setFilters((prev) => ({
-      ...prev,
-      taskType: prev.taskType === taskType ? 'all' : taskType,
-    }));
-  }
-
-  async function loadTasks() {
+  const loadTasks = async () => {
     try {
+      setLoading(true);
       const data = await getMyTasks();
-      console.log('Tasks loaded:', data); // Debug log
-      // Ensure data is an array
+      
       if (Array.isArray(data)) {
-        setTasks(data);
+        const tasksWithPriority: TaskWithPriority[] = data.map(task => ({
+          ...task,
+          priority: calculatePriority(task),
+          isOverdue: isTaskOverdue(task),
+        }));
+        
+        // Sắp xếp: Quá hạn > Ưu tiên cao > Đang thực hiện > Chờ xử lý > Hoàn thành
+        tasksWithPriority.sort((a, b) => {
+          if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
+          
+          const priorityOrder = { high: 0, medium: 1, low: 2 };
+          if (a.priority !== b.priority) {
+            return priorityOrder[a.priority] - priorityOrder[b.priority];
+          }
+          
+          const statusOrder = { In_Progress: 0, Pending: 1, Completed: 2 };
+          if (a.status !== b.status) {
+            return statusOrder[a.status] - statusOrder[b.status];
+          }
+          
+          return new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime();
+        });
+        
+        setTasks(tasksWithPriority);
       } else {
-        console.error('Invalid data format:', data);
         setTasks([]);
         Alert.alert('Lỗi', 'Dữ liệu không đúng định dạng');
       }
     } catch (error: any) {
       console.error('Error loading tasks:', error);
-      Alert.alert('Lỗi', error.message || 'Không thể tải danh sách công việc');
+      Alert.alert('Lỗi kết nối', error.message || 'Không thể tải danh sách công việc. Vui lòng thử lại.');
       setTasks([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }
+  };
 
-  function onRefresh() {
+  const applyFilters = () => {
+    let result = [...tasks];
+    
+    if (statusFilter !== 'all') {
+      result = result.filter(task => task.status === statusFilter);
+    }
+    
+    setFilteredTasks(result);
+  };
+
+  const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadTasks();
-  }
+  }, []);
 
-  function getStatusColor(status: string) {
-    switch (status) {
-      case 'Pending':
-        return '#fb923c'; // Tăng độ tương phản
-      case 'In_Progress':
-        return '#3b82f6';
-      case 'Completed':
-        return '#22c55e'; // Tăng độ tương phản
-      default:
-        return '#6b7280';
+  const openMapLocation = (task: TaskWithPriority) => {
+    if (!task.tree?.location?.coordinates) {
+      Alert.alert('Lỗi', 'Không có thông tin vị trí cây');
+      return;
     }
-  }
-
-  function getStatusText(status: string) {
-    switch (status) {
-      case 'Pending':
-        return 'Chờ xử lý';
-      case 'In_Progress':
-        return 'Đang thực hiện';
-      case 'Completed':
-        return 'Hoàn thành';
-      default:
-        return status;
+    
+    const [longitude, latitude] = task.tree.location.coordinates;
+    const label = encodeURIComponent(`Cây ${task.tree.tree_code}`);
+    
+    const scheme = Platform.select({
+      ios: `maps:0,0?q=${label}@${latitude},${longitude}`,
+      android: `geo:0,0?q=${latitude},${longitude}(${label})`,
+    });
+    
+    if (scheme) {
+      Linking.openURL(scheme).catch(() => {
+        Alert.alert('Lỗi', 'Không thể mở ứng dụng bản đồ');
+      });
     }
-  }
+  };
 
-  async function handleStartWork(task: MaintenanceTask) {
-    Alert.alert(
-      'Bắt đầu làm việc',
-      `Bạn có muốn bắt đầu công việc "${task.task_type}" cho cây ${task.tree?.tree_code || task.tree_id}?`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Bắt đầu',
-          onPress: async () => {
-            try {
-              setProcessingTaskId(task.id);
-              // Cập nhật status sang In_Progress
-              const updatedTask = await startTask(task.id);
-              
-              // Cập nhật task trong danh sách
-              setTasks((prevTasks) =>
-                prevTasks.map((t) => (t.id === updatedTask.id ? updatedTask : t))
-              );
-              
-              Alert.alert('Thành công', 'Đã bắt đầu công việc', [
-                {
-                  text: 'OK',
-                  onPress: () => {
-                    // Chuyển sang màn hình chi tiết để thực hiện công việc
-                    navigation.navigate('TaskDetail', { task: updatedTask });
-                  },
-                },
-              ]);
-            } catch (error: any) {
-              console.error('Error starting task:', error);
-              const message = error.response?.data?.message || 'Không thể bắt đầu công việc';
-              Alert.alert('Lỗi', message);
-            } finally {
-              setProcessingTaskId(null);
-            }
-          },
-        },
-      ]
-    );
-  }
-
-  function handleCompleteTask(task: MaintenanceTask) {
-    // Chuyển sang màn hình chi tiết để hoàn thành
+  const handleUpdateTask = (task: TaskWithPriority) => {
     navigation.navigate('TaskDetail', { task });
-  }
+  };
 
-  function renderTask({ item }: { item: MaintenanceTask }) {
-    // Safety check for item
-    if (!item || !item.id) {
-      return null;
+  const getStatusColor = (status: string): string => {
+    switch (status) {
+      case 'Pending': return '#f59e0b';
+      case 'In_Progress': return '#3b82f6';
+      case 'Completed': return '#10b981';
+      default: return '#6b7280';
     }
+  };
+
+  const getStatusText = (status: string): string => {
+    switch (status) {
+      case 'Pending': return 'Chờ xử lý';
+      case 'In_Progress': return 'Đang thực hiện';
+      case 'Completed': return 'Hoàn thành';
+      default: return status;
+    }
+  };
+
+  const getPriorityColor = (priority: PriorityLevel): string => {
+    switch (priority) {
+      case 'high': return '#ef4444';
+      case 'medium': return '#f59e0b';
+      case 'low': return '#10b981';
+    }
+  };
+
+  const getPriorityText = (priority: PriorityLevel): string => {
+    switch (priority) {
+      case 'high': return 'Cao';
+      case 'medium': return 'Trung bình';
+      case 'low': return 'Thấp';
+    }
+  };
+
+  const formatDate = (dateString: string): string => {
+    const date = new Date(dateString);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    date.setHours(0, 0, 0, 0);
+    
+    const diffDays = Math.ceil((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Hôm nay';
+    if (diffDays === 1) return 'Ngày mai';
+    if (diffDays === -1) return 'Hôm qua';
+    if (diffDays < -1) return `Quá hạn ${Math.abs(diffDays)} ngày`;
+    
+    return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  const renderTaskCard = ({ item }: { item: TaskWithPriority }) => {
+    if (!item || !item.id) return null;
+
+    const statusColor = getStatusColor(item.status);
+    const borderColor = item.isOverdue ? '#ef4444' : statusColor;
 
     return (
-      <View style={styles.taskCard}>
-        {/* Thông tin chính - Compact */}
-        <TouchableOpacity
-          style={styles.taskMainInfo}
-          onPress={() => navigation.navigate('TaskDetail', { task: item })}
-          activeOpacity={0.7}
-        >
-          <View style={styles.taskHeader}>
-            <Text style={styles.taskType}>{item.task_type || 'Không rõ'}</Text>
-            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-              <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
-            </View>
+      <View style={[styles.taskCard, { borderLeftColor: borderColor }]}>
+        {/* Header */}
+        <View style={styles.cardHeader}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.taskType}>{item.task_type}</Text>
+            {item.isOverdue && (
+              <View style={styles.overdueTag}>
+                <Text style={styles.overdueText}>⚠️ QUÁ HẠN</Text>
+              </View>
+            )}
+          </View>
+          <View style={[styles.priorityChip, { backgroundColor: getPriorityColor(item.priority) }]}>
+            <Text style={styles.priorityText}>{getPriorityText(item.priority)}</Text>
+          </View>
+        </View>
+
+        {/* Tree Info */}
+        <View style={styles.cardBody}>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>🌳 Mã cây:</Text>
+            <Text style={styles.infoValue}>{item.tree?.tree_code || 'N/A'}</Text>
           </View>
           
-          {item.tree ? (
-            <Text style={styles.treeInfo} numberOfLines={1}>
-              🌳 {item.tree.tree_code || 'N/A'} - {item.tree.species?.common_name || 'Không rõ loài'}
-            </Text>
-          ) : (
-            <Text style={styles.treeInfo}>
-              🌳 Cây ID: {item.tree_id || 'N/A'}
-            </Text>
+          {item.tree?.species?.common_name && (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>🌿 Loài:</Text>
+              <Text style={styles.infoValue}>{item.tree.species.common_name}</Text>
+            </View>
           )}
           
-          <Text style={styles.scheduledDate}>
-            📅 {item.scheduled_date ? new Date(item.scheduled_date).toLocaleDateString('vi-VN') : 'Chưa có ngày'}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Nút hành động nhanh - Chỉ hiện cho task chưa hoàn thành */}
-        {item.status !== 'Completed' && (
-          <View style={styles.quickActions}>
-            {item.status === 'Pending' && (
-              <TouchableOpacity
-                style={[styles.actionButton, styles.actionButtonStart]}
-                onPress={() => handleStartWork(item)}
-                disabled={processingTaskId === item.id}
-              >
-                {processingTaskId === item.id ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={styles.actionButtonText}>▶️ Bắt đầu làm việc</Text>
-                )}
-              </TouchableOpacity>
-            )}
-            {item.status === 'In_Progress' && (
-              <TouchableOpacity
-                style={[styles.actionButton, styles.actionButtonComplete]}
-                onPress={() => handleCompleteTask(item)}
-              >
-                <Text style={styles.actionButtonText}>✅ Hoàn thành</Text>
-              </TouchableOpacity>
-            )}
+          {item.tree?.area && (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>📍 Khu vực:</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>
+                {(item.tree.area as any).name || 'Không rõ'}
+              </Text>
+            </View>
+          )}
+          
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>📅 Thời hạn:</Text>
+            <Text style={[styles.infoValue, item.isOverdue && styles.overdueDate]}>
+              {formatDate(item.scheduled_date)}
+            </Text>
           </View>
-        )}
+        </View>
+
+        {/* Status Badge */}
+        <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
+          <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.cardActions}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.mapButton]}
+            onPress={() => openMapLocation(item)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.actionButtonText}>🗺️ Xem bản đồ</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.actionButton, styles.updateButton]}
+            onPress={() => handleUpdateTask(item)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.actionButtonText}>
+              {item.status === 'Completed' ? '👁️ Chi tiết' : '✏️ Cập nhật'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
-  }
+  };
+
+  const renderEmptyState = () => (
+    <View style={styles.emptyContainer}>
+      <Text style={styles.emptyIcon}>📋</Text>
+      <Text style={styles.emptyTitle}>
+        {statusFilter === 'all' ? 'Không có công việc nào' : 'Không tìm thấy công việc'}
+      </Text>
+      <Text style={styles.emptySubtitle}>
+        {statusFilter === 'all' 
+          ? 'Kéo xuống để làm mới danh sách' 
+          : 'Thử thay đổi bộ lọc để xem công việc khác'}
+      </Text>
+    </View>
+  );
+
+  const renderLoadingState = () => (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color="#3b82f6" />
+      <Text style={styles.loadingText}>Đang tải công việc...</Text>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Công việc của tôi</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={signOut} style={styles.logoutButton}>
-            <Text style={styles.logoutText}>Đăng xuất</Text>
-          </TouchableOpacity>
+        <View>
+          <Text style={styles.headerTitle}>Danh sách công việc</Text>
+          <Text style={styles.headerSubtitle}>
+            {tasks.length} công việc • {filteredTasks.filter(t => t.status !== 'Completed').length} chưa hoàn thành
+          </Text>
         </View>
-      </View>
-
-      {/* Bộ lọc thông minh */}
-      <View style={styles.filtersSection}>
-        <View style={styles.filterRow}>
-          <Text style={styles.filterLabel}>Trạng thái:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-            <TouchableOpacity
-              onPress={() => toggleStatusFilter('Pending')}
-              style={[
-                styles.filterChip,
-                filters.status === 'Pending' && styles.filterChipActive,
-                filters.status === 'Pending' && { backgroundColor: '#fb923c' },
-              ]}
-            >
-              <Text style={[styles.filterChipText, filters.status === 'Pending' && styles.filterChipTextActive]}>
-                ⏳ Cần bảo trì
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => toggleStatusFilter('In_Progress')}
-              style={[
-                styles.filterChip,
-                filters.status === 'In_Progress' && styles.filterChipActive,
-                filters.status === 'In_Progress' && { backgroundColor: '#3b82f6' },
-              ]}
-            >
-              <Text style={[styles.filterChipText, filters.status === 'In_Progress' && styles.filterChipTextActive]}>
-                🔄 Đang thực hiện
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => toggleStatusFilter('Completed')}
-              style={[
-                styles.filterChip,
-                filters.status === 'Completed' && styles.filterChipActive,
-                filters.status === 'Completed' && { backgroundColor: '#22c55e' },
-              ]}
-            >
-              <Text style={[styles.filterChipText, filters.status === 'Completed' && styles.filterChipTextActive]}>
-                ✅ Đã xong
-              </Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
-
-        <View style={styles.filterRow}>
-          <Text style={styles.filterLabel}>Loại công việc:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-            <TouchableOpacity
-              onPress={() => toggleTaskTypeFilter('Cắt tỉa')}
-              style={[styles.filterChip, filters.taskType === 'Cắt tỉa' && styles.filterChipActive]}
-            >
-              <Text style={[styles.filterChipText, filters.taskType === 'Cắt tỉa' && styles.filterChipTextActive]}>
-                ✂️ Cắt tỉa
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => toggleTaskTypeFilter('Bón phân')}
-              style={[styles.filterChip, filters.taskType === 'Bón phân' && styles.filterChipActive]}
-            >
-              <Text style={[styles.filterChipText, filters.taskType === 'Bón phân' && styles.filterChipTextActive]}>
-                🌱 Bón phân
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => toggleTaskTypeFilter('Tưới nước')}
-              style={[styles.filterChip, filters.taskType === 'Tưới nước' && styles.filterChipActive]}
-            >
-              <Text style={[styles.filterChipText, filters.taskType === 'Tưới nước' && styles.filterChipTextActive]}>
-                💧 Tưới nước
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => toggleTaskTypeFilter('Kiểm tra')}
-              style={[styles.filterChip, filters.taskType === 'Kiểm tra' && styles.filterChipActive]}
-            >
-              <Text style={[styles.filterChipText, filters.taskType === 'Kiểm tra' && styles.filterChipTextActive]}>
-                🔍 Kiểm tra
-              </Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
-
-        {(filters.status !== 'all' || filters.taskType !== 'all') && (
-          <TouchableOpacity onPress={clearFilters} style={styles.clearFiltersButton}>
-            <Text style={styles.clearFiltersText}>✖️ Xóa bộ lọc</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Nút hành động nhanh - Ở trên danh sách */}
-      <View style={styles.topActions}>
-        <TouchableOpacity 
-          onPress={() => navigation.navigate('RegisterTree')} 
-          style={[styles.topActionButton, styles.topActionButtonPrimary]}
-        >
-          <Text style={styles.topActionButtonText}>🌳 Đăng ký cây mới</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          onPress={() => navigation.navigate('NearbyTrees')} 
-          style={[styles.topActionButton, styles.topActionButtonSecondary]}
-        >
-          <Text style={styles.topActionButtonText}>📍 Tìm cây gần đây</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          onPress={() => navigation.navigate('QRScanner')} 
-          style={[styles.topActionButton, styles.topActionButtonSecondary]}
-        >
-          <Text style={styles.topActionButtonText}>📷 Quét QR</Text>
+        <TouchableOpacity onPress={signOut} style={styles.logoutButton}>
+          <Text style={styles.logoutText}>Đăng xuất</Text>
         </TouchableOpacity>
       </View>
 
+      {/* Filter Tabs */}
+      <View style={styles.filterContainer}>
+        <TouchableOpacity
+          style={[styles.filterTab, statusFilter === 'all' && styles.filterTabActive]}
+          onPress={() => setStatusFilter('all')}
+        >
+          <Text style={[styles.filterTabText, statusFilter === 'all' && styles.filterTabTextActive]}>
+            Tất cả ({tasks.length})
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.filterTab, statusFilter === 'Pending' && styles.filterTabActive]}
+          onPress={() => setStatusFilter('Pending')}
+        >
+          <Text style={[styles.filterTabText, statusFilter === 'Pending' && styles.filterTabTextActive]}>
+            Chưa làm ({tasks.filter(t => t.status === 'Pending').length})
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.filterTab, statusFilter === 'In_Progress' && styles.filterTabActive]}
+          onPress={() => setStatusFilter('In_Progress')}
+        >
+          <Text style={[styles.filterTabText, statusFilter === 'In_Progress' && styles.filterTabTextActive]}>
+            Đang làm ({tasks.filter(t => t.status === 'In_Progress').length})
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.filterTab, statusFilter === 'Completed' && styles.filterTabActive]}
+          onPress={() => setStatusFilter('Completed')}
+        >
+          <Text style={[styles.filterTabText, statusFilter === 'Completed' && styles.filterTabTextActive]}>
+            Hoàn thành ({tasks.filter(t => t.status === 'Completed').length})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Task List */}
       {loading ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Đang tải...</Text>
-        </View>
+        renderLoadingState()
       ) : (
-        <>
-          {tasks.length > 0 && (
-            <View style={styles.resultsHeader}>
-              <Text style={styles.resultsCount}>
-                {filteredTasks.length === tasks.length
-                  ? `${tasks.length} công việc`
-                  : `Hiển thị ${filteredTasks.length}/${tasks.length} công việc`}
-              </Text>
-            </View>
-          )}
-          <FlatList
-            data={filteredTasks}
-            renderItem={renderTask}
-            keyExtractor={(item) => item?.id?.toString() || Math.random().toString()}
-            contentContainerStyle={styles.list}
-            refreshControl={
-              <RefreshControl 
-                refreshing={refreshing} 
-                onRefresh={onRefresh}
-                tintColor="#22c55e"
-                colors={['#22c55e']}
-              />
-            }
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyIcon}>📋</Text>
-                <Text style={styles.emptyText}>
-                  {tasks.length === 0
-                    ? 'Không có công việc nào'
-                    : 'Không có công việc nào phù hợp với bộ lọc'}
-                </Text>
-                <Text style={styles.emptySubtext}>
-                  {tasks.length === 0
-                    ? 'Kéo xuống để làm mới'
-                    : 'Thử điều chỉnh bộ lọc hoặc xóa bộ lọc'}
-                </Text>
-                {tasks.length > 0 && (
-                  <TouchableOpacity onPress={clearFilters} style={styles.emptyActionButton}>
-                    <Text style={styles.emptyActionButtonText}>Xóa bộ lọc</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            }
-          />
-        </>
+        <FlatList
+          data={filteredTasks}
+          renderItem={renderTaskCard}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#3b82f6"
+              colors={['#3b82f6']}
+            />
+          }
+          ListEmptyComponent={renderEmptyState}
+          showsVerticalScrollIndicator={false}
+        />
       )}
+
+      {/* Quick Actions */}
+      <View style={styles.quickActionsContainer}>
+        <TouchableOpacity
+          style={styles.quickActionButton}
+          onPress={() => navigation.navigate('QRScanner')}
+        >
+          <Text style={styles.quickActionIcon}>📷</Text>
+          <Text style={styles.quickActionText}>Quét QR</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={styles.quickActionButton}
+          onPress={() => navigation.navigate('NearbyTrees')}
+        >
+          <Text style={styles.quickActionIcon}>🌳</Text>
+          <Text style={styles.quickActionText}>Cây gần đây</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={styles.quickActionButton}
+          onPress={() => navigation.navigate('RegisterTree')}
+        >
+          <Text style={styles.quickActionIcon}>➕</Text>
+          <Text style={styles.quickActionText}>Đăng ký cây</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -444,263 +422,258 @@ export default function TaskListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0f1e',
+    backgroundColor: '#f8fafc',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    paddingTop: 48,
-    backgroundColor: '#1e293b',
-    borderBottomWidth: 2,
-    borderBottomColor: '#334155',
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 20,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 3,
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 4,
   },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '500',
   },
   logoutButton: {
-    padding: 8,
-    minHeight: 48,
-    minWidth: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#fee2e2',
   },
   logoutText: {
-    color: '#ef4444',
+    color: '#dc2626',
     fontSize: 14,
     fontWeight: '600',
   },
-  // Bộ lọc thông minh
-  filtersSection: {
-    padding: 12,
-    backgroundColor: '#1e293b',
-    borderBottomWidth: 2,
-    borderBottomColor: '#334155',
-  },
-  filterRow: {
-    marginBottom: 12,
-  },
-  filterLabel: {
-    color: '#f1f5f9',
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  filterScroll: {
+  filterContainer: {
     flexDirection: 'row',
-  },
-  filterChip: {
-    backgroundColor: '#334155',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
-    marginRight: 8,
-    minHeight: 48,
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  filterChipActive: {
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  filterChipText: {
-    color: '#cbd5e1',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  filterChipTextActive: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-  clearFiltersButton: {
-    backgroundColor: '#475569',
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-    marginTop: 4,
-    minHeight: 48,
-    justifyContent: 'center',
-  },
-  clearFiltersText: {
-    color: '#f1f5f9',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  // Nút hành động trên cùng
-  topActions: {
-    flexDirection: 'row',
-    gap: 8,
-    padding: 12,
-    backgroundColor: '#1e293b',
-    borderBottomWidth: 1,
-    borderBottomColor: '#334155',
-  },
-  topActionButton: {
-    flex: 1,
     paddingVertical: 12,
-    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    gap: 8,
+  },
+  filterTab: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
     alignItems: 'center',
-    minHeight: 48,
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
   },
-  topActionButtonPrimary: {
-    backgroundColor: '#22c55e',
-  },
-  topActionButtonSecondary: {
+  filterTabActive: {
     backgroundColor: '#3b82f6',
   },
-  topActionButtonText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  resultsHeader: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#1e293b',
-  },
-  resultsCount: {
-    color: '#cbd5e1',
-    fontSize: 14,
+  filterTabText: {
+    fontSize: 12,
     fontWeight: '600',
+    color: '#64748b',
   },
-  list: {
-    padding: 12,
-    paddingBottom: 80,
+  filterTabTextActive: {
+    color: '#ffffff',
   },
-  // Card tinh gọn
-  taskCard: {
-    backgroundColor: '#1e293b',
-    borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: '#334155',
-    overflow: 'hidden',
-  },
-  taskMainInfo: {
+  listContent: {
     padding: 16,
+    paddingBottom: 100,
   },
-  taskHeader: {
+  taskCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    marginBottom: 16,
+    padding: 16,
+    borderLeftWidth: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 12,
   },
+  headerLeft: {
+    flex: 1,
+    gap: 6,
+  },
   taskType: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
-    color: '#fff',
-    letterSpacing: 0.3,
+    color: '#1e293b',
+  },
+  overdueTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  overdueText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#dc2626',
+  },
+  priorityChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  priorityText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#ffffff',
+    textTransform: 'uppercase',
+  },
+  cardBody: {
+    gap: 8,
+    marginBottom: 12,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  infoLabel: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '500',
+    width: 100,
+  },
+  infoValue: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1e293b',
+    fontWeight: '600',
+  },
+  overdueDate: {
+    color: '#dc2626',
   },
   statusBadge: {
-    paddingHorizontal: 14,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 8,
+    marginBottom: 12,
   },
   statusText: {
-    color: '#fff',
     fontSize: 12,
     fontWeight: '700',
+    color: '#ffffff',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
-  treeInfo: {
-    fontSize: 14,
-    color: '#cbd5e1',
-    marginBottom: 6,
-  },
-  scheduledDate: {
-    fontSize: 14,
-    color: '#cbd5e1',
-  },
-  // Nút hành động nhanh
-  quickActions: {
-    padding: 12,
-    backgroundColor: '#0f172a',
-    borderTopWidth: 1,
-    borderTopColor: '#334155',
+  cardActions: {
+    flexDirection: 'row',
+    gap: 8,
   },
   actionButton: {
-    paddingVertical: 14,
-    borderRadius: 12,
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
     alignItems: 'center',
-    minHeight: 52,
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
   },
-  actionButtonStart: {
+  mapButton: {
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  updateButton: {
     backgroundColor: '#3b82f6',
   },
-  actionButtonComplete: {
-    backgroundColor: '#22c55e',
-  },
   actionButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1e293b',
   },
-  // Empty state
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 24,
+    paddingVertical: 80,
+    paddingHorizontal: 32,
   },
   emptyIcon: {
     fontSize: 64,
     marginBottom: 16,
   },
-  emptyText: {
-    color: '#cbd5e1',
+  emptyTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: '700',
+    color: '#1e293b',
     marginBottom: 8,
+    textAlign: 'center',
   },
-  emptySubtext: {
-    color: '#64748b',
+  emptySubtitle: {
     fontSize: 14,
+    color: '#64748b',
     textAlign: 'center',
     lineHeight: 20,
   },
-  emptyActionButton: {
-    backgroundColor: '#22c55e',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 20,
-    minHeight: 52,
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 80,
   },
-  emptyActionButtonText: {
-    color: '#fff',
+  loadingText: {
+    marginTop: 16,
     fontSize: 16,
-    fontWeight: '700',
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  quickActionsContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+    gap: 12,
+  },
+  quickActionButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  quickActionIcon: {
+    fontSize: 24,
+    marginBottom: 4,
+  },
+  quickActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
   },
 });

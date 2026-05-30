@@ -20,6 +20,11 @@ export interface MaintenanceTask {
     species: {
       common_name: string;
     };
+    area?: {
+      id: number;
+      name: string;
+      type: string;
+    };
   };
 }
 
@@ -34,9 +39,16 @@ export interface UpdateTaskStatusRequest {
   status: 'Pending' | 'In_Progress' | 'Completed';
 }
 
-export async function getMyTasks(): Promise<MaintenanceTask[]> {
+export interface GetMyTasksParams {
+  date?: string; // YYYY-MM-DD
+  status?: 'Pending' | 'In_Progress' | 'Completed';
+}
+
+export async function getMyTasks(params?: GetMyTasksParams): Promise<MaintenanceTask[]> {
   try {
-    const response = await apiClient.get<MaintenanceTask[]>('/maintenance/tasks/my-tasks');
+    const response = await apiClient.get<MaintenanceTask[]>('/maintenance/tasks/my-tasks', {
+      params,
+    });
     console.log('My tasks response:', response.data);
     
     // Ensure we return an array

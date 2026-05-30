@@ -1,0 +1,34 @@
+### Test Task List API - Lấy danh sách task của staff
+
+### 1. Đăng nhập để lấy token (thay username/password phù hợp)
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "staff1",
+  "password": "password123"
+}
+
+### 2. Lấy tất cả task của staff hiện tại
+GET http://localhost:3000/maintenance/tasks/my-tasks
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### 3. Lọc task theo ngày hôm nay
+GET http://localhost:3000/maintenance/tasks/my-tasks?date=2026-05-30
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### 4. Lọc task theo trạng thái Pending
+GET http://localhost:3000/maintenance/tasks/my-tasks?status=Pending
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### 5. Lọc task theo trạng thái In_Progress
+GET http://localhost:3000/maintenance/tasks/my-tasks?status=In_Progress
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### 6. Lọc task theo trạng thái Completed
+GET http://localhost:3000/maintenance/tasks/my-tasks?status=Completed
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### 7. Lọc task theo ngày và trạng thái
+GET http://localhost:3000/maintenance/tasks/my-tasks?date=2026-05-30&status=Pending
+Authorization: Bearer YOUR_TOKEN_HERE

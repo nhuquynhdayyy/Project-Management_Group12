@@ -176,11 +176,27 @@ export class MaintenanceService {
     return updated;
   }
 
-  async findByUserId(userId: number): Promise<MaintenanceTask[]> {
+  async findByUserId(userId: number, date?: string, status?: string): Promise<MaintenanceTask[]> {
+    const where: any = { assigned_to: userId };
+    
+    // Lọc theo ngày nếu có
+    if (date) {
+      const targetDate = new Date(date);
+      targetDate.setHours(0, 0, 0, 0);
+      const nextDay = new Date(targetDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      where.scheduled_date = Between(targetDate, nextDay);
+    }
+    
+    // Lọc theo trạng thái nếu có
+    if (status) {
+      where.status = status;
+    }
+    
     return await this.taskRepository.find({
-      where: { assigned_to: userId },
-      relations: ['tree', 'tree.species'],
-      order: { scheduled_date: 'ASC' },
+      where,
+      relations: ['tree', 'tree.species', 'tree.area'],
+      order: { scheduled_date: 'ASC', created_at: 'DESC' },
     });
   }
 

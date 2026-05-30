@@ -82,14 +82,20 @@ export class MaintenanceController {
 
   @Get('tasks/my-tasks')
   @ApiOperation({ summary: 'Get tasks assigned to the current user' })
+  @ApiQuery({ name: 'date', required: false, description: 'Filter by date (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by status' })
   @ApiResponse({
     status: 200,
     description: 'List of tasks assigned to the user.',
   })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  async getMyTasks(@Request() req) {
+  async getMyTasks(
+    @Request() req,
+    @Query('date') date?: string,
+    @Query('status') status?: string,
+  ) {
     const userId = req.user.userId || req.user.id;
-    return await this.maintenanceService.findByUserId(userId);
+    return await this.maintenanceService.findByUserId(userId, date, status);
   }
 
   @Get('stats/by-staff')
