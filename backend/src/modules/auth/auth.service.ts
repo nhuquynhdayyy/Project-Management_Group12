@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { User } from './user.entity';
 import { Role } from '../../entities/role.entity';
+import { PasswordResetToken } from '../../entities/password-reset-token.entity';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { ProfileResponseDto } from './dto/profile-response.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -20,6 +21,8 @@ export class AuthService {
     private usersRepository: Repository<User>,
     @InjectRepository(Role)
     private rolesRepository: Repository<Role>,
+    @InjectRepository(PasswordResetToken)
+    private passwordResetTokenRepository: Repository<PasswordResetToken>,
     private jwtService: JwtService,
     private mailService: MailService,
     private storageService: StorageService,
@@ -413,6 +416,102 @@ relations: ['roles'],
     await this.usersRepository.save(user);
 
     return {
+      message: 'Đổi mật khẩu thành công',
+    };
+  }
+
+  /**
+   * Request password reset
+   */
+  async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
+    const user = await this.usersRepository.findOne({
+      where: { email },
+    });
+
+    // Always return success to prevent email enumeration
+    if (!user) {
+      return {
+        success: true,
+        message: 'Nếu email tồn tại, bạn sẽ nhận được hướng dẫn trong vài phút',
+      };
+    }
+
+    // Check if user has email
+    if (!user.email) {
+      return {
+        success: true,
+        message: 'Nếu email tồn tại, bạn sẽ nhận được hướng dẫn trong vài phút',
+      };
+    }
+
+    // Generate reset token
+    const token = uuidv4();
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 15); // 15 minutes from now
+
+    // Save token to database
+    const resetToken = this.passwordResetTokenRepository.create({
+      user_id: user.id,
+      token,
+      expires_at: expiresAt,
+      used: false,
+    });
+
+    await this.passwordResetTokenRepository.save(resetToken);
+
+    // Send password reset email
+    const resetLink = `http://localhost:5173/reset-password?token=${token}`;
+    await this.mailService.sendPasswordResetEmail(user.email, resetLink);
+
+    return {
+      success: true,
+      message: 'Nếu email tồn tại, bạn sẽ nhận được hướng dẫn trong vài phút',
+    };
+  }
+
+  /**
+   * Reset password with token
+   */
+  async resetPassword(token: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    // Find token
+    const resetToken = await this.passwordResetTokenRepository.findOne({
+      where: { token },
+      relations: ['user'],
+    });
+
+    if (!resetToken) {
+      throw new BadRequestException('Token không hợp lệ hoặc đã hết hạn');
+    }
+
+    // Check if token is expired
+    if (new Date() > resetToken.expires_at) {
+      throw new BadRequestException('Token đã hết hạn. Vui lòng yêu cầu đặt lại mật khẩu mới');
+    }
+
+    // Check if token is already used
+    if (resetToken.used) {
+      throw new BadRequestException('Token đã được sử dụng');
+    }
+
+    // Validate password length
+    if (newPassword.length < 6) {
+      throw new BadRequestException('Mật khẩu phải có ít nhất 6 ký tự');
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update user password
+    await this.usersRepository.update(resetToken.user_id, {
+      password: hashedPassword,
+    });
+
+    // Mark token as used
+    resetToken.used = true;
+    await this.passwordResetTokenRepository.save(resetToken);
+
+    return {
+      success: true,
       message: 'Đổi mật khẩu thành công',
     };
   }

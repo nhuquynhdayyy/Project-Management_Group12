@@ -60,3 +60,18 @@ export async function changePassword(payload: ChangePasswordPayload): Promise<{ 
   const { data } = await apiClient.patch<{ message: string }>('/auth/profile/password', payload);
   return data;
 }
+
+export async function forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
+  const { data } = await apiClient.post<{ success: boolean; message: string }>('/auth/forgot-password', {
+    email,
+  });
+  return data;
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+  const { data } = await apiClient.post<{ success: boolean; message: string }>('/auth/reset-password', {
+    token,
+    new_password: newPassword,
+  });
+  return data;
+}
