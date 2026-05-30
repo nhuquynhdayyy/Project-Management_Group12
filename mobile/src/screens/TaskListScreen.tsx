@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   StyleSheet,
   RefreshControl,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -16,16 +17,78 @@ import { RootStackParamList } from '../types/navigation';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'TaskList'>;
 
+// Bộ lọc thông minh cho Task
+type StatusFilter = 'all' | 'Pending' | 'In_Progress' | 'Completed';
+type TaskTypeFilter = 'all' | 'Cắt tỉa' | 'Bón phân' | 'Tưới nước' | 'Kiểm tra';
+
+interface TaskFilterState {
+  status: StatusFilter;
+  taskType: TaskTypeFilter;
+}
+
 export default function TaskListScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { signOut } = useAuth();
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [filters, setFilters] = useState<TaskFilterState>({
+    status: 'all',
+    taskType: 'all',
+  });
 
   useEffect(() => {
     loadTasks();
   }, []);
+
+  // Lọc và sắp xếp task
+  const filteredTasks = useMemo(() => {
+    let result = [...tasks];
+
+    // Lọc theo trạng thái
+    if (filters.status !== 'all') {
+      result = result.filter((task) => task.status === filters.status);
+    }
+
+    // Lọc theo loại công việc
+    if (filters.taskType !== 'all') {
+      result = result.filter((task) => task.task_type === filters.taskType);
+    }
+
+    // Sắp xếp: Ưu tiên Pending và In_Progress lên đầu
+    result.sort((a, b) => {
+      const priorityOrder = { 'Pending': 0, 'In_Progress': 1, 'Completed': 2 };
+      const aPriority = priorityOrder[a.status] ?? 3;
+      const bPriority = priorityOrder[b.status] ?? 3;
+      
+      if (aPriority !== bPriority) {
+        return aPriority - bPriority;
+      }
+      
+      // Nếu cùng trạng thái, sắp xếp theo ngày
+      return new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime();
+    });
+
+    return result;
+  }, [tasks, filters]);
+
+  function clearFilters() {
+    setFilters({ status: 'all', taskType: 'all' });
+  }
+
+  function toggleStatusFilter(status: StatusFilter) {
+    setFilters((prev) => ({
+      ...prev,
+      status: prev.status === status ? 'all' : status,
+    }));
+  }
+
+  function toggleTaskTypeFilter(taskType: TaskTypeFilter) {
+    setFilters((prev) => ({
+      ...prev,
+      taskType: prev.taskType === taskType ? 'all' : taskType,
+    }));
+  }
 
   async function loadTasks() {
     try {
@@ -57,11 +120,11 @@ export default function TaskListScreen() {
   function getStatusColor(status: string) {
     switch (status) {
       case 'Pending':
-        return '#f59e0b';
+        return '#fb923c'; // Tăng độ tương phản
       case 'In_Progress':
         return '#3b82f6';
       case 'Completed':
-        return '#10b981';
+        return '#22c55e'; // Tăng độ tương phản
       default:
         return '#6b7280';
     }
@@ -87,31 +150,60 @@ export default function TaskListScreen() {
     }
 
     return (
-      <TouchableOpacity
-        style={styles.taskCard}
-        onPress={() => navigation.navigate('TaskDetail', { task: item })}
-      >
-        <View style={styles.taskHeader}>
-          <Text style={styles.taskType}>{item.task_type || 'Không rõ'}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-            <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
+      <View style={styles.taskCard}>
+        {/* Thông tin chính - Compact */}
+        <TouchableOpacity
+          style={styles.taskMainInfo}
+          onPress={() => navigation.navigate('TaskDetail', { task: item })}
+          activeOpacity={0.7}
+        >
+          <View style={styles.taskHeader}>
+            <Text style={styles.taskType}>{item.task_type || 'Không rõ'}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+              <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
+            </View>
           </View>
-        </View>
-        
-        {item.tree ? (
-          <Text style={styles.treeInfo}>
-            🌳 {item.tree.tree_code || 'N/A'} - {item.tree.species?.common_name || 'Không rõ loài'}
+          
+          {item.tree ? (
+            <Text style={styles.treeInfo} numberOfLines={1}>
+              🌳 {item.tree.tree_code || 'N/A'} - {item.tree.species?.common_name || 'Không rõ loài'}
+            </Text>
+          ) : (
+            <Text style={styles.treeInfo}>
+              🌳 Cây ID: {item.tree_id || 'N/A'}
+            </Text>
+          )}
+          
+          <Text style={styles.scheduledDate}>
+            📅 {item.scheduled_date ? new Date(item.scheduled_date).toLocaleDateString('vi-VN') : 'Chưa có ngày'}
           </Text>
-        ) : (
-          <Text style={styles.treeInfo}>
-            🌳 Cây ID: {item.tree_id || 'N/A'}
-          </Text>
+        </TouchableOpacity>
+
+        {/* Nút hành động nhanh - Chỉ hiện cho task chưa hoàn thành */}
+        {item.status !== 'Completed' && (
+          <View style={styles.quickActions}>
+            {item.status === 'Pending' && (
+              <TouchableOpacity
+                style={[styles.actionButton, styles.actionButtonStart]}
+                onPress={() => {
+                  // TODO: Bắt đầu làm việc
+                  Alert.alert('Bắt đầu', `Bắt đầu làm việc: ${item.task_type}`);
+                }}
+              >
+                <Text style={styles.actionButtonText}>▶️ Bắt đầu làm việc</Text>
+              </TouchableOpacity>
+            )}
+            {item.status === 'In_Progress' && (
+              <TouchableOpacity
+                style={[styles.actionButton, styles.actionButtonComplete]}
+                onPress={() => navigation.navigate('TaskDetail', { task: item })}
+              >
+                <Text style={styles.actionButtonText}>✅ Hoàn thành</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         )}
-        
-        <Text style={styles.scheduledDate}>
-          📅 {item.scheduled_date ? new Date(item.scheduled_date).toLocaleDateString('vi-VN') : 'Chưa có ngày'}
-        </Text>
-      </TouchableOpacity>
+      </View>
     );
   }
 
@@ -120,22 +212,115 @@ export default function TaskListScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Công việc của tôi</Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity 
-            onPress={() => navigation.navigate('NearbyTrees')} 
-            style={styles.nearbyButton}
-          >
-            <Text style={styles.nearbyButtonText}>📍 Tìm cây</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            onPress={() => navigation.navigate('QRScanner')} 
-            style={styles.qrButton}
-          >
-            <Text style={styles.qrButtonText}>📷 Quét QR</Text>
-          </TouchableOpacity>
           <TouchableOpacity onPress={signOut} style={styles.logoutButton}>
             <Text style={styles.logoutText}>Đăng xuất</Text>
           </TouchableOpacity>
         </View>
+      </View>
+
+      {/* Bộ lọc thông minh */}
+      <View style={styles.filtersSection}>
+        <View style={styles.filterRow}>
+          <Text style={styles.filterLabel}>Trạng thái:</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
+            <TouchableOpacity
+              onPress={() => toggleStatusFilter('Pending')}
+              style={[
+                styles.filterChip,
+                filters.status === 'Pending' && styles.filterChipActive,
+                filters.status === 'Pending' && { backgroundColor: '#fb923c' },
+              ]}
+            >
+              <Text style={[styles.filterChipText, filters.status === 'Pending' && styles.filterChipTextActive]}>
+                ⏳ Cần bảo trì
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => toggleStatusFilter('In_Progress')}
+              style={[
+                styles.filterChip,
+                filters.status === 'In_Progress' && styles.filterChipActive,
+                filters.status === 'In_Progress' && { backgroundColor: '#3b82f6' },
+              ]}
+            >
+              <Text style={[styles.filterChipText, filters.status === 'In_Progress' && styles.filterChipTextActive]}>
+                🔄 Đang thực hiện
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => toggleStatusFilter('Completed')}
+              style={[
+                styles.filterChip,
+                filters.status === 'Completed' && styles.filterChipActive,
+                filters.status === 'Completed' && { backgroundColor: '#22c55e' },
+              ]}
+            >
+              <Text style={[styles.filterChipText, filters.status === 'Completed' && styles.filterChipTextActive]}>
+                ✅ Đã xong
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+
+        <View style={styles.filterRow}>
+          <Text style={styles.filterLabel}>Loại công việc:</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
+            <TouchableOpacity
+              onPress={() => toggleTaskTypeFilter('Cắt tỉa')}
+              style={[styles.filterChip, filters.taskType === 'Cắt tỉa' && styles.filterChipActive]}
+            >
+              <Text style={[styles.filterChipText, filters.taskType === 'Cắt tỉa' && styles.filterChipTextActive]}>
+                ✂️ Cắt tỉa
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => toggleTaskTypeFilter('Bón phân')}
+              style={[styles.filterChip, filters.taskType === 'Bón phân' && styles.filterChipActive]}
+            >
+              <Text style={[styles.filterChipText, filters.taskType === 'Bón phân' && styles.filterChipTextActive]}>
+                🌱 Bón phân
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => toggleTaskTypeFilter('Tưới nước')}
+              style={[styles.filterChip, filters.taskType === 'Tưới nước' && styles.filterChipActive]}
+            >
+              <Text style={[styles.filterChipText, filters.taskType === 'Tưới nước' && styles.filterChipTextActive]}>
+                💧 Tưới nước
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => toggleTaskTypeFilter('Kiểm tra')}
+              style={[styles.filterChip, filters.taskType === 'Kiểm tra' && styles.filterChipActive]}
+            >
+              <Text style={[styles.filterChipText, filters.taskType === 'Kiểm tra' && styles.filterChipTextActive]}>
+                🔍 Kiểm tra
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+
+        {(filters.status !== 'all' || filters.taskType !== 'all') && (
+          <TouchableOpacity onPress={clearFilters} style={styles.clearFiltersButton}>
+            <Text style={styles.clearFiltersText}>✖️ Xóa bộ lọc</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Nút hành động nhanh - Ở trên danh sách */}
+      <View style={styles.topActions}>
+        <TouchableOpacity 
+          onPress={() => navigation.navigate('NearbyTrees')} 
+          style={[styles.topActionButton, styles.topActionButtonPrimary]}
+        >
+          <Text style={styles.topActionButtonText}>📍 Tìm cây gần đây</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          onPress={() => navigation.navigate('QRScanner')} 
+          style={[styles.topActionButton, styles.topActionButtonSecondary]}
+        >
+          <Text style={styles.topActionButtonText}>📷 Quét QR</Text>
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -143,19 +328,51 @@ export default function TaskListScreen() {
           <Text style={styles.emptyText}>Đang tải...</Text>
         </View>
       ) : (
-        <FlatList
-          data={tasks}
-          renderItem={renderTask}
-          keyExtractor={(item) => item?.id?.toString() || Math.random().toString()}
-          contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>Không có công việc nào</Text>
-              <Text style={styles.emptySubtext}>Kéo xuống để làm mới</Text>
+        <>
+          {tasks.length > 0 && (
+            <View style={styles.resultsHeader}>
+              <Text style={styles.resultsCount}>
+                {filteredTasks.length === tasks.length
+                  ? `${tasks.length} công việc`
+                  : `Hiển thị ${filteredTasks.length}/${tasks.length} công việc`}
+              </Text>
             </View>
-          }
-        />
+          )}
+          <FlatList
+            data={filteredTasks}
+            renderItem={renderTask}
+            keyExtractor={(item) => item?.id?.toString() || Math.random().toString()}
+            contentContainerStyle={styles.list}
+            refreshControl={
+              <RefreshControl 
+                refreshing={refreshing} 
+                onRefresh={onRefresh}
+                tintColor="#22c55e"
+                colors={['#22c55e']}
+              />
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyIcon}>📋</Text>
+                <Text style={styles.emptyText}>
+                  {tasks.length === 0
+                    ? 'Không có công việc nào'
+                    : 'Không có công việc nào phù hợp với bộ lọc'}
+                </Text>
+                <Text style={styles.emptySubtext}>
+                  {tasks.length === 0
+                    ? 'Kéo xuống để làm mới'
+                    : 'Thử điều chỉnh bộ lọc hoặc xóa bộ lọc'}
+                </Text>
+                {tasks.length > 0 && (
+                  <TouchableOpacity onPress={clearFilters} style={styles.emptyActionButton}>
+                    <Text style={styles.emptyActionButtonText}>Xóa bộ lọc</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            }
+          />
+        </>
       )}
     </View>
   );
@@ -164,7 +381,7 @@ export default function TaskListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#0a0f1e',
   },
   header: {
     flexDirection: 'row',
@@ -173,58 +390,152 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 48,
     backgroundColor: '#1e293b',
-    borderBottomWidth: 1,
+    borderBottomWidth: 2,
     borderBottomColor: '#334155',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#fff',
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
-  nearbyButton: {
-    backgroundColor: '#3b82f6',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  nearbyButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  qrButton: {
-    backgroundColor: '#16a34a',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  qrButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
   },
   logoutButton: {
     padding: 8,
+    minHeight: 48,
+    minWidth: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   logoutText: {
     color: '#ef4444',
     fontSize: 14,
+    fontWeight: '600',
+  },
+  // Bộ lọc thông minh
+  filtersSection: {
+    padding: 12,
+    backgroundColor: '#1e293b',
+    borderBottomWidth: 2,
+    borderBottomColor: '#334155',
+  },
+  filterRow: {
+    marginBottom: 12,
+  },
+  filterLabel: {
+    color: '#f1f5f9',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  filterScroll: {
+    flexDirection: 'row',
+  },
+  filterChip: {
+    backgroundColor: '#334155',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginRight: 8,
+    minHeight: 48,
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  filterChipActive: {
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  filterChipText: {
+    color: '#cbd5e1',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  filterChipTextActive: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  clearFiltersButton: {
+    backgroundColor: '#475569',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  clearFiltersText: {
+    color: '#f1f5f9',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // Nút hành động trên cùng
+  topActions: {
+    flexDirection: 'row',
+    gap: 12,
+    padding: 12,
+    backgroundColor: '#1e293b',
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+  },
+  topActionButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    minHeight: 52,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  topActionButtonPrimary: {
+    backgroundColor: '#22c55e',
+  },
+  topActionButtonSecondary: {
+    backgroundColor: '#3b82f6',
+  },
+  topActionButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  resultsHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#1e293b',
+  },
+  resultsCount: {
+    color: '#cbd5e1',
+    fontSize: 14,
+    fontWeight: '600',
   },
   list: {
-    padding: 16,
+    padding: 12,
+    paddingBottom: 80,
   },
+  // Card tinh gọn
   taskCard: {
     backgroundColor: '#1e293b',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
     marginBottom: 12,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#334155',
+    overflow: 'hidden',
+  },
+  taskMainInfo: {
+    padding: 16,
   },
   taskHeader: {
     flexDirection: 'row',
@@ -233,41 +544,100 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   taskType: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
     color: '#fff',
+    letterSpacing: 0.3,
   },
   statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   statusText: {
     color: '#fff',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   treeInfo: {
     fontSize: 14,
-    color: '#94a3b8',
-    marginBottom: 4,
+    color: '#cbd5e1',
+    marginBottom: 6,
   },
   scheduledDate: {
     fontSize: 14,
-    color: '#94a3b8',
+    color: '#cbd5e1',
   },
+  // Nút hành động nhanh
+  quickActions: {
+    padding: 12,
+    backgroundColor: '#0f172a',
+    borderTopWidth: 1,
+    borderTopColor: '#334155',
+  },
+  actionButton: {
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    minHeight: 52,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  actionButtonStart: {
+    backgroundColor: '#3b82f6',
+  },
+  actionButtonComplete: {
+    backgroundColor: '#22c55e',
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  // Empty state
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 48,
+    paddingVertical: 60,
+    paddingHorizontal: 24,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 16,
   },
   emptyText: {
-    color: '#64748b',
-    fontSize: 16,
+    color: '#cbd5e1',
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 8,
   },
   emptySubtext: {
-    color: '#475569',
+    color: '#64748b',
     fontSize: 14,
-    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  emptyActionButton: {
+    backgroundColor: '#22c55e',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 20,
+    minHeight: 52,
+    justifyContent: 'center',
+  },
+  emptyActionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

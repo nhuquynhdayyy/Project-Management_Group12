@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,15 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'NearbyTrees
 
 const RADIUS_OPTIONS = [50, 100, 200, 500, 1000];
 
+// Bộ lọc thông minh
+type HealthFilter = 'all' | 'Sâu bệnh' | 'Yếu' | 'Tốt';
+type DistanceFilter = 'all' | 'near' | 'medium' | 'far';
+
+interface FilterState {
+  health: HealthFilter;
+  distance: DistanceFilter;
+}
+
 export default function NearbyTreesScreen() {
   const navigation = useNavigation<NavigationProp>();
   const [trees, setTrees] = useState<NearbyTree[]>([]);
@@ -26,6 +35,10 @@ export default function NearbyTreesScreen() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [selectedRadius, setSelectedRadius] = useState(200);
+  const [filters, setFilters] = useState<FilterState>({
+    health: 'all',
+    distance: 'all',
+  });
 
   useEffect(() => {
     getCurrentLocation();
@@ -90,14 +103,49 @@ export default function NearbyTreesScreen() {
     getCurrentLocation();
   }
 
+  // Lọc và sắp xếp cây theo bộ lọc
+  const filteredTrees = useMemo(() => {
+    let result = [...trees];
+
+    // Lọc theo sức khỏe
+    if (filters.health !== 'all') {
+      result = result.filter((tree) => tree.health_status === filters.health);
+    }
+
+    // Lọc theo khoảng cách
+    if (filters.distance === 'near') {
+      result = result.filter((tree) => tree.distance <= 50);
+    } else if (filters.distance === 'medium') {
+      result = result.filter((tree) => tree.distance > 50 && tree.distance <= 200);
+    } else if (filters.distance === 'far') {
+      result = result.filter((tree) => tree.distance > 200);
+    }
+
+    // Ưu tiên cây cần chú ý (Sâu bệnh, Yếu) lên đầu
+    result.sort((a, b) => {
+      const priorityOrder = { 'Sâu bệnh': 0, 'Yếu': 1, 'Tốt': 2, 'Chết': 3 };
+      const aPriority = priorityOrder[a.health_status] ?? 4;
+      const bPriority = priorityOrder[b.health_status] ?? 4;
+      
+      if (aPriority !== bPriority) {
+        return aPriority - bPriority;
+      }
+      
+      // Nếu cùng mức ưu tiên, sắp xếp theo khoảng cách
+      return a.distance - b.distance;
+    });
+
+    return result;
+  }, [trees, filters]);
+
   function getHealthStatusColor(status: string) {
     switch (status) {
       case 'Tốt':
-        return '#10b981';
+        return '#22c55e'; // Tăng độ tương phản
       case 'Yếu':
-        return '#f59e0b';
+        return '#fb923c'; // Tăng độ tương phản
       case 'Sâu bệnh':
-        return '#f97316';
+        return '#f97316'; // Tăng độ tương phản
       case 'Chết':
         return '#ef4444';
       default:
@@ -105,37 +153,75 @@ export default function NearbyTreesScreen() {
     }
   }
 
+  function clearFilters() {
+    setFilters({ health: 'all', distance: 'all' });
+  }
+
+  function toggleHealthFilter(health: HealthFilter) {
+    setFilters((prev) => ({
+      ...prev,
+      health: prev.health === health ? 'all' : health,
+    }));
+  }
+
+  function toggleDistanceFilter(distance: DistanceFilter) {
+    setFilters((prev) => ({
+      ...prev,
+      distance: prev.distance === distance ? 'all' : distance,
+    }));
+  }
+
   function renderTree({ item }: { item: NearbyTree }) {
     return (
-      <TouchableOpacity
-        style={styles.treeCard}
-        onPress={() => navigation.navigate('TreeHistory', { treeId: item.id, treeCode: item.tree_code })}
-      >
-        <View style={styles.treeHeader}>
-          <View style={styles.treeInfo}>
-            <Text style={styles.treeCode}>{item.tree_code}</Text>
-            <Text style={styles.speciesName}>{item.species?.common_name || 'Không rõ loài'}</Text>
+      <View style={styles.treeCard}>
+        {/* Thông tin chính - Compact */}
+        <TouchableOpacity
+          style={styles.treeMainInfo}
+          onPress={() => navigation.navigate('TreeHistory', { treeId: item.id, treeCode: item.tree_code })}
+          activeOpacity={0.7}
+        >
+          <View style={styles.treeHeader}>
+            <View style={styles.treeInfo}>
+              <Text style={styles.treeCode}>{item.tree_code}</Text>
+              <Text style={styles.speciesName}>{item.species?.common_name || 'Không rõ loài'}</Text>
+            </View>
+            <View style={styles.distanceContainer}>
+              <Text style={styles.distanceValue}>{item.distance}m</Text>
+            </View>
           </View>
-          <View style={styles.distanceContainer}>
-            <Text style={styles.distanceValue}>{item.distance}m</Text>
-            <Text style={styles.distanceLabel}>khoảng cách</Text>
+
+          <View style={styles.treeDetails}>
+            <View style={[styles.healthBadge, { backgroundColor: getHealthStatusColor(item.health_status) }]}>
+              <Text style={styles.healthText}>{item.health_status}</Text>
+            </View>
+            {item.area && (
+              <Text style={styles.detailText} numberOfLines={1}>📍 {item.area.area_name}</Text>
+            )}
           </View>
+        </TouchableOpacity>
+
+        {/* Nút hành động nhanh - Ở dưới để dễ bấm bằng ngón cái */}
+        <View style={styles.quickActions}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.actionButtonPrimary]}
+            onPress={() => {
+              // TODO: Tạo task bảo trì
+              Alert.alert('Tạo Task', `Tạo task bảo trì cho cây ${item.tree_code}`);
+            }}
+          >
+            <Text style={styles.actionButtonText}>🔧 Tạo Task</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.actionButtonSecondary]}
+            onPress={() => {
+              // TODO: Cập nhật sức khỏe
+              Alert.alert('Cập nhật', `Cập nhật sức khỏe cây ${item.tree_code}`);
+            }}
+          >
+            <Text style={styles.actionButtonText}>💚 Cập nhật</Text>
+          </TouchableOpacity>
         </View>
-
-        <View style={styles.treeDetails}>
-          <View style={[styles.healthBadge, { backgroundColor: getHealthStatusColor(item.health_status) }]}>
-            <Text style={styles.healthText}>{item.health_status}</Text>
-          </View>
-
-          {item.area && (
-            <Text style={styles.detailText}>📍 {item.area.area_name}</Text>
-          )}
-
-          {item.height_m && (
-            <Text style={styles.detailText}>📏 Cao: {item.height_m}m</Text>
-          )}
-        </View>
-      </TouchableOpacity>
+      </View>
     );
   }
 
@@ -163,9 +249,90 @@ export default function NearbyTreesScreen() {
         )}
       </View>
 
-      {/* Radius Selector */}
+      {/* Bộ lọc thông minh - Smart Filters */}
+      <View style={styles.filtersSection}>
+        <View style={styles.filterRow}>
+          <Text style={styles.filterLabel}>Sức khỏe:</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
+            <TouchableOpacity
+              onPress={() => toggleHealthFilter('Sâu bệnh')}
+              style={[
+                styles.filterChip,
+                filters.health === 'Sâu bệnh' && styles.filterChipActive,
+                filters.health === 'Sâu bệnh' && { backgroundColor: '#f97316' },
+              ]}
+            >
+              <Text style={[styles.filterChipText, filters.health === 'Sâu bệnh' && styles.filterChipTextActive]}>
+                🚨 Sâu bệnh
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => toggleHealthFilter('Yếu')}
+              style={[
+                styles.filterChip,
+                filters.health === 'Yếu' && styles.filterChipActive,
+                filters.health === 'Yếu' && { backgroundColor: '#fb923c' },
+              ]}
+            >
+              <Text style={[styles.filterChipText, filters.health === 'Yếu' && styles.filterChipTextActive]}>
+                ⚠️ Yếu
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => toggleHealthFilter('Tốt')}
+              style={[
+                styles.filterChip,
+                filters.health === 'Tốt' && styles.filterChipActive,
+                filters.health === 'Tốt' && { backgroundColor: '#22c55e' },
+              ]}
+            >
+              <Text style={[styles.filterChipText, filters.health === 'Tốt' && styles.filterChipTextActive]}>
+                ✅ Tốt
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+
+        <View style={styles.filterRow}>
+          <Text style={styles.filterLabel}>Khoảng cách:</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
+            <TouchableOpacity
+              onPress={() => toggleDistanceFilter('near')}
+              style={[styles.filterChip, filters.distance === 'near' && styles.filterChipActive]}
+            >
+              <Text style={[styles.filterChipText, filters.distance === 'near' && styles.filterChipTextActive]}>
+                📍 Gần nhất (&lt;50m)
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => toggleDistanceFilter('medium')}
+              style={[styles.filterChip, filters.distance === 'medium' && styles.filterChipActive]}
+            >
+              <Text style={[styles.filterChipText, filters.distance === 'medium' && styles.filterChipTextActive]}>
+                🚶 Trung bình (50-200m)
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => toggleDistanceFilter('far')}
+              style={[styles.filterChip, filters.distance === 'far' && styles.filterChipActive]}
+            >
+              <Text style={[styles.filterChipText, filters.distance === 'far' && styles.filterChipTextActive]}>
+                🚗 Xa (&gt;200m)
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+
+        {(filters.health !== 'all' || filters.distance !== 'all') && (
+          <TouchableOpacity onPress={clearFilters} style={styles.clearFiltersButton}>
+            <Text style={styles.clearFiltersText}>✖️ Xóa bộ lọc</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Radius Selector - Compact */}
       <View style={styles.radiusSection}>
-        <Text style={styles.radiusLabel}>Bán kính tìm kiếm:</Text>
+        <Text style={styles.radiusLabel}>Bán kính:</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.radiusScroll}>
           {RADIUS_OPTIONS.map((radius) => (
             <TouchableOpacity
@@ -191,40 +358,50 @@ export default function NearbyTreesScreen() {
         </ScrollView>
       </View>
 
-      {/* Refresh Button */}
-      <TouchableOpacity
-        onPress={handleRefreshLocation}
-        disabled={locationLoading}
-        style={[styles.refreshButton, locationLoading && styles.refreshButtonDisabled]}
-      >
-        <Text style={styles.refreshButtonText}>
-          {locationLoading ? '🔄 Đang lấy vị trí...' : '🔄 Làm mới vị trí'}
-        </Text>
-      </TouchableOpacity>
-
       {/* Results */}
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#16a34a" />
+          <ActivityIndicator size="large" color="#22c55e" />
           <Text style={styles.loadingText}>Đang tìm kiếm...</Text>
         </View>
       ) : (
         <>
           {trees.length > 0 && (
-            <Text style={styles.resultsCount}>
-              Tìm thấy {trees.length} cây trong bán kính {selectedRadius}m
-            </Text>
+            <View style={styles.resultsHeader}>
+              <Text style={styles.resultsCount}>
+                {filteredTrees.length === trees.length
+                  ? `Tìm thấy ${trees.length} cây`
+                  : `Hiển thị ${filteredTrees.length}/${trees.length} cây`}
+              </Text>
+              <TouchableOpacity onPress={handleRefreshLocation} disabled={locationLoading}>
+                <Text style={styles.refreshIcon}>{locationLoading ? '⏳' : '🔄'}</Text>
+              </TouchableOpacity>
+            </View>
           )}
           <FlatList
-            data={trees}
+            data={filteredTrees}
             renderItem={renderTree}
             keyExtractor={(item) => item.id.toString()}
             contentContainerStyle={styles.list}
             ListEmptyComponent={
               !locationLoading && userLocation ? (
                 <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>Không tìm thấy cây nào xung quanh</Text>
-                  <Text style={styles.emptySubtext}>Thử tăng bán kính tìm kiếm</Text>
+                  <Text style={styles.emptyIcon}>🌳</Text>
+                  <Text style={styles.emptyText}>
+                    {trees.length === 0
+                      ? 'Không tìm thấy cây nào xung quanh'
+                      : 'Không có cây nào phù hợp với bộ lọc'}
+                  </Text>
+                  <Text style={styles.emptySubtext}>
+                    {trees.length === 0
+                      ? `Thử tăng bán kính tìm kiếm (hiện tại: ${selectedRadius}m)`
+                      : 'Thử điều chỉnh bộ lọc hoặc xóa bộ lọc'}
+                  </Text>
+                  {trees.length > 0 && (
+                    <TouchableOpacity onPress={clearFilters} style={styles.emptyActionButton}>
+                      <Text style={styles.emptyActionButtonText}>Xóa bộ lọc</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               ) : null
             }
@@ -238,7 +415,7 @@ export default function NearbyTreesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#0a0f1e', // Tối hơn để tăng độ tương phản
   },
   header: {
     flexDirection: 'row',
@@ -247,24 +424,28 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 48,
     backgroundColor: '#1e293b',
-    borderBottomWidth: 1,
+    borderBottomWidth: 2,
     borderBottomColor: '#334155',
   },
   backButton: {
     padding: 8,
+    minHeight: 48,
+    minWidth: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   backButtonText: {
-    color: '#16a34a',
+    color: '#22c55e',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
   },
   placeholder: {
-    width: 80,
+    width: 48,
   },
   locationInfo: {
     padding: 12,
@@ -273,21 +454,88 @@ const styles = StyleSheet.create({
     borderBottomColor: '#334155',
   },
   locationText: {
-    color: '#94a3b8',
+    color: '#cbd5e1',
     fontSize: 12,
     textAlign: 'center',
   },
+  // Bộ lọc thông minh
+  filtersSection: {
+    padding: 12,
+    backgroundColor: '#1e293b',
+    borderBottomWidth: 2,
+    borderBottomColor: '#334155',
+  },
+  filterRow: {
+    marginBottom: 12,
+  },
+  filterLabel: {
+    color: '#f1f5f9',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  filterScroll: {
+    flexDirection: 'row',
+  },
+  filterChip: {
+    backgroundColor: '#334155',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginRight: 8,
+    minHeight: 48, // Dễ bấm
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  filterChipActive: {
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  filterChipText: {
+    color: '#cbd5e1',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  filterChipTextActive: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  clearFiltersButton: {
+    backgroundColor: '#475569',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  clearFiltersText: {
+    color: '#f1f5f9',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // Radius selector - compact
   radiusSection: {
-    padding: 16,
+    padding: 12,
     backgroundColor: '#1e293b',
     borderBottomWidth: 1,
     borderBottomColor: '#334155',
   },
   radiusLabel: {
-    color: '#e2e8f0',
-    fontSize: 14,
-    fontWeight: '600',
+    color: '#f1f5f9',
+    fontSize: 13,
+    fontWeight: '700',
     marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   radiusScroll: {
     flexDirection: 'row',
@@ -295,38 +543,29 @@ const styles = StyleSheet.create({
   radiusButton: {
     backgroundColor: '#334155',
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 8,
     marginRight: 8,
+    minHeight: 48,
+    justifyContent: 'center',
   },
   radiusButtonActive: {
-    backgroundColor: '#16a34a',
+    backgroundColor: '#22c55e',
   },
   radiusButtonDisabled: {
-    opacity: 0.5,
+    opacity: 0.4,
   },
   radiusButtonText: {
-    color: '#94a3b8',
+    color: '#cbd5e1',
     fontSize: 14,
     fontWeight: '600',
   },
   radiusButtonTextActive: {
     color: '#fff',
+    fontWeight: '700',
   },
-  refreshButton: {
-    backgroundColor: '#16a34a',
-    margin: 16,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  refreshButtonDisabled: {
-    opacity: 0.5,
-  },
-  refreshButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+  refreshIcon: {
+    fontSize: 20,
   },
   loadingContainer: {
     flex: 1,
@@ -334,26 +573,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    color: '#94a3b8',
+    color: '#cbd5e1',
     fontSize: 14,
     marginTop: 12,
   },
-  resultsCount: {
-    color: '#94a3b8',
-    fontSize: 14,
+  resultsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 12,
+    backgroundColor: '#1e293b',
+  },
+  resultsCount: {
+    color: '#cbd5e1',
+    fontSize: 14,
+    fontWeight: '600',
   },
   list: {
-    padding: 16,
+    padding: 12,
+    paddingBottom: 80, // Thêm padding để tránh che nút dưới
   },
+  // Card tinh gọn
   treeCard: {
     backgroundColor: '#1e293b',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
     marginBottom: 12,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#334155',
+    overflow: 'hidden',
+  },
+  treeMainInfo: {
+    padding: 16,
   },
   treeHeader: {
     flexDirection: 'row',
@@ -365,57 +616,122 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   treeCode: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 22, // To hơn để dễ đọc
+    fontWeight: '700',
     color: '#fff',
     marginBottom: 4,
+    letterSpacing: 0.5,
   },
   speciesName: {
     fontSize: 14,
-    color: '#94a3b8',
+    color: '#cbd5e1',
   },
   distanceContainer: {
     alignItems: 'flex-end',
+    backgroundColor: '#22c55e',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   distanceValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#16a34a',
-  },
-  distanceLabel: {
-    fontSize: 10,
-    color: '#64748b',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
   },
   treeDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
+    flexWrap: 'wrap',
   },
   healthBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   healthText: {
     color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   detailText: {
-    fontSize: 14,
-    color: '#94a3b8',
+    fontSize: 13,
+    color: '#cbd5e1',
+    flex: 1,
   },
+  // Nút hành động nhanh - Ở dưới để dễ bấm
+  quickActions: {
+    flexDirection: 'row',
+    gap: 8,
+    padding: 12,
+    backgroundColor: '#0f172a',
+    borderTopWidth: 1,
+    borderTopColor: '#334155',
+  },
+  actionButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    minHeight: 52, // Đủ lớn để bấm dễ dàng
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  actionButtonPrimary: {
+    backgroundColor: '#22c55e',
+  },
+  actionButtonSecondary: {
+    backgroundColor: '#3b82f6',
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  // Empty state cải thiện
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 48,
+    paddingVertical: 60,
+    paddingHorizontal: 24,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 16,
   },
   emptyText: {
-    color: '#64748b',
-    fontSize: 16,
+    color: '#cbd5e1',
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 8,
   },
   emptySubtext: {
-    color: '#475569',
+    color: '#64748b',
     fontSize: 14,
-    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  emptyActionButton: {
+    backgroundColor: '#22c55e',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 20,
+    minHeight: 52,
+    justifyContent: 'center',
+  },
+  emptyActionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
