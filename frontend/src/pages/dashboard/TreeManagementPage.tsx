@@ -11,7 +11,7 @@ import {
   type CreateTreePayload,
 } from '../../api/trees';
 import { createTask, type CreateTaskPayload } from '../../api/maintenance';
-import { fetchUsers } from '../../api/auth';
+import { fetchStaffUsers } from '../../api/auth';
 import type {
   AdministrativeArea,
   DashboardUser,
@@ -619,7 +619,7 @@ export default function TreeManagementPage() {
   function loadData() {
     setLoading(true);
     setError('');
-    Promise.all([fetchTrees(), fetchTreeSpecies(), fetchAreas(), fetchUsers()])
+    Promise.all([fetchTrees(), fetchTreeSpecies(), fetchAreas(), fetchStaffUsers()])
       .then(([treeData, speciesData, areaData, userData]) => {
         setTrees(treeData);
         setSpecies(speciesData);

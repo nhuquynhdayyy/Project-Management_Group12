@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { createTask, fetchAllTasks, type CreateTaskPayload } from '../../api/maintenance';
-import { fetchUsers } from '../../api/auth';
+import { fetchStaffUsers } from '../../api/auth';
 import { fetchTrees } from '../../api/trees';
 import type { DashboardUser, MaintenanceTask, TaskStatus, TaskType, Tree } from '../../types';
 import {
@@ -377,7 +377,7 @@ export default function TaskManagementPage() {
   function loadData() {
     setLoading(true);
     setError('');
-    Promise.all([fetchAllTasks(), fetchTrees(), fetchUsers()])
+    Promise.all([fetchAllTasks(), fetchTrees(), fetchStaffUsers()])
       .then(([taskData, treeData, userData]) => {
         setTasks(taskData);
         setTrees(treeData);

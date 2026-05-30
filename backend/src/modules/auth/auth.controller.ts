@@ -64,9 +64,10 @@ export class AuthController {
   }
 
   @Post('users/by-role')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Admin', 'Manager')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get users by role (requires JWT)' })
+  @ApiOperation({ summary: 'Get users by role (Admin/Manager only)' })
   @ApiBody({
     schema: {
       type: 'object',
@@ -83,7 +84,7 @@ export class AuthController {
   })
   @ApiResponse({
     status: 403,
-    description: 'Forbidden. Token is invalid or expired.',
+    description: 'Forbidden. Admin or Manager role required.',
   })
   async getUsersByRole(
     @Body('role') role: string,

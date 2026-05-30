@@ -5,6 +5,8 @@ import { CreateTreeDto } from './dto/create-tree.dto';
 import { UpdateTreeDto } from './dto/update-tree.dto';
 import { FindTreesNearbyDto } from './dto/find-trees-nearby.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 import type { Response } from 'express';
 
 @ApiTags('trees')
@@ -15,9 +17,12 @@ export class TreesController {
   constructor(private readonly treesService: TreesService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new tree' })
+  @UseGuards(RolesGuard)
+  @Roles('Admin', 'Manager')
+  @ApiOperation({ summary: 'Create a new tree (Admin/Manager only)' })
   @ApiResponse({ status: 201, description: 'Tree successfully created.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
   async create(@Body() createTreeDto: CreateTreeDto, @Request() req) {
     const userId = req.user?.userId ?? req.user?.id ?? null;
     return await this.treesService.create(createTreeDto, userId);
@@ -72,10 +77,13 @@ export class TreesController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update a tree' })
+  @UseGuards(RolesGuard)
+  @Roles('Admin', 'Manager')
+  @ApiOperation({ summary: 'Update a tree (Admin/Manager only)' })
   @ApiResponse({ status: 200, description: 'Tree successfully updated.' })
   @ApiResponse({ status: 404, description: 'Tree not found.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
   async update(
     @Param('id') id: string,
     @Body() updateTreeDto: UpdateTreeDto,
@@ -86,10 +94,13 @@ export class TreesController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a tree' })
+  @UseGuards(RolesGuard)
+  @Roles('Admin', 'Manager')
+  @ApiOperation({ summary: 'Delete a tree (Admin/Manager only)' })
   @ApiResponse({ status: 200, description: 'Tree successfully deleted.' })
   @ApiResponse({ status: 404, description: 'Tree not found.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
   async delete(@Param('id') id: string, @Request() req) {
     const userId = req.user?.userId ?? req.user?.id ?? null;
     await this.treesService.delete(+id, userId);
@@ -127,9 +138,12 @@ export class TreesController {
   }
 
   @Patch(':id/health')
-  @ApiOperation({ summary: 'Update tree health status' })
+  @UseGuards(RolesGuard)
+  @Roles('Admin', 'Manager')
+  @ApiOperation({ summary: 'Update tree health status (Admin/Manager only)' })
   @ApiResponse({ status: 200, description: 'Health status updated.' })
   @ApiResponse({ status: 404, description: 'Tree not found.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
   async updateHealth(
     @Param('id') id: string,
     @Body('health_status') healthStatus: string,

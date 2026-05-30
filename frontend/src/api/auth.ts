@@ -17,6 +17,15 @@ export async function fetchUsers(): Promise<DashboardUser[]> {
   return data;
 }
 
+export async function fetchUsersByRole(role: string): Promise<DashboardUser[]> {
+  const { data } = await apiClient.post<DashboardUser[]>('/auth/users/by-role', { role });
+  return data;
+}
+
+export async function fetchStaffUsers(): Promise<DashboardUser[]> {
+  return fetchUsersByRole('Staff');
+}
+
 export async function registerUser(payload: RegisterUserPayload): Promise<DashboardUser> {
   const { data } = await apiClient.post<DashboardUser>('/auth/register', payload);
   return data;

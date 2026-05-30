@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts';
 import { fetchAllTasks, fetchOverdueTasks } from '../api/maintenance';
 import { fetchTrees } from '../api/trees';
-import { fetchUsers } from '../api/auth';
+import { fetchStaffUsers } from '../api/auth';
 import type { HealthStatus, MaintenanceTask, OverdueTask, Tree, DashboardUser } from '../types';
 import CreateTreeForm from '../components/CreateTreeForm';
 import CreateTaskForm from '../components/CreateTaskForm';
@@ -64,7 +64,7 @@ export default function DashboardPage() {
   const [showTaskModal, setShowTaskModal] = useState(false);
 
   useEffect(() => {
-    Promise.all([fetchTrees(), fetchAllTasks(), fetchOverdueTasks(), fetchUsers()])
+    Promise.all([fetchTrees(), fetchAllTasks(), fetchOverdueTasks(), fetchStaffUsers()])
       .then(([treeData, taskData, overdueData, userData]) => {
         setTrees(treeData);
         setTasks(taskData);

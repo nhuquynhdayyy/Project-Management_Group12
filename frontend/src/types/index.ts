@@ -120,6 +120,8 @@ export interface PaginatedActivityLogs {
     limit: number;
     totalPages: number;
   };
+}
+
 export interface StaffPerformance {
   username: string;
   completed: number;

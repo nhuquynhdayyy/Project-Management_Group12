@@ -33,6 +33,7 @@ import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { StaffPerformanceDto } from './dto/staff-performance.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 /** Minimal file descriptor — avoids requiring @types/multer */
 interface UploadedFileInterface {
@@ -53,9 +54,12 @@ export class MaintenanceController {
   ) {}
 
   @Post('tasks')
-  @ApiOperation({ summary: 'Create a new maintenance task' })
+  @UseGuards(RolesGuard)
+  @Roles('Admin', 'Manager')
+  @ApiOperation({ summary: 'Create a new maintenance task (Admin/Manager only)' })
   @ApiResponse({ status: 201, description: 'Task successfully created.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
   @ApiResponse({ status: 404, description: 'Tree or User not found.' })
   async create(
     @Body() createTaskDto: CreateMaintenanceTaskDto,
@@ -90,27 +94,33 @@ export class MaintenanceController {
 
   @Get('stats/by-staff')
   @UseGuards(RolesGuard)
+  @Roles('Admin', 'Manager')
   @ApiOperation({
-    summary: 'Get staff performance statistics',
+    summary: 'Get staff performance statistics (Admin/Manager only)',
     description: 'Thống kê hiệu suất nhân viên bảo trì gồm số task hoàn thành và thời gian trung bình.',
   })
   @ApiResponse({ status: 200, type: StaffPerformanceDto, isArray: true })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
   async getStaffPerformance() {
     return await this.maintenanceService.getStaffPerformance();
   }
 
   @Get('stats/overdue')
   @UseGuards(RolesGuard)
-  @ApiOperation({ summary: 'Get overdue maintenance tasks' })
+  @Roles('Admin', 'Manager')
+  @ApiOperation({ summary: 'Get overdue maintenance tasks (Admin/Manager only)' })
   @ApiResponse({ status: 200, description: 'Danh sách task quá hạn.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
   async getOverdueTasks() {
     return await this.maintenanceService.getOverdueTasks();
   }
 
   @Get('tasks/export')
   @UseGuards(RolesGuard)
-  @ApiOperation({ summary: 'Export maintenance tasks to Excel or PDF' })
+  @Roles('Admin', 'Manager')
+  @ApiOperation({ summary: 'Export maintenance tasks to Excel or PDF (Admin/Manager only)' })
   @ApiQuery({ name: 'format', required: true, enum: ['xlsx', 'pdf'] })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
   async exportTasks(
     @Query('format') format: string,
     @Query('from') from: string | undefined,
@@ -144,7 +154,10 @@ export class MaintenanceController {
   }
 
   @Patch('tasks/:id/status')
-  @ApiOperation({ summary: 'Update task status' })
+  @UseGuards(RolesGuard)
+  @Roles('Admin', 'Manager')
+  @ApiOperation({ summary: 'Update task status (Admin/Manager only)' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
   async updateStatus(
     @Param('id') id: string,
     @Body() updateStatusDto: UpdateTaskStatusDto,
