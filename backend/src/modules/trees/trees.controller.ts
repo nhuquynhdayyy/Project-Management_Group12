@@ -23,11 +23,11 @@ export class TreesController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('Admin', 'Manager')
-  @ApiOperation({ summary: 'Create a new tree (Admin/Manager only)' })
+  @Roles('Admin', 'Manager', 'Staff')
+  @ApiOperation({ summary: 'Create a new tree (Admin/Manager/Staff)' })
   @ApiResponse({ status: 201, description: 'Tree successfully created.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Staff role or higher required.' })
   async create(@Body() createTreeDto: CreateTreeDto, @Request() req) {
     const userId = req.user?.userId ?? req.user?.id ?? null;
     return await this.treesService.create(createTreeDto, userId);

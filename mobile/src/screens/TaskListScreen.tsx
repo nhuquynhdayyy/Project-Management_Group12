@@ -367,8 +367,14 @@ export default function TaskListScreen() {
       {/* Nút hành động nhanh - Ở trên danh sách */}
       <View style={styles.topActions}>
         <TouchableOpacity 
-          onPress={() => navigation.navigate('NearbyTrees')} 
+          onPress={() => navigation.navigate('RegisterTree')} 
           style={[styles.topActionButton, styles.topActionButtonPrimary]}
+        >
+          <Text style={styles.topActionButtonText}>🌳 Đăng ký cây mới</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          onPress={() => navigation.navigate('NearbyTrees')} 
+          style={[styles.topActionButton, styles.topActionButtonSecondary]}
         >
           <Text style={styles.topActionButtonText}>📍 Tìm cây gần đây</Text>
         </TouchableOpacity>
@@ -538,7 +544,7 @@ const styles = StyleSheet.create({
   // Nút hành động trên cùng
   topActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
     padding: 12,
     backgroundColor: '#1e293b',
     borderBottomWidth: 1,
@@ -546,10 +552,10 @@ const styles = StyleSheet.create({
   },
   topActionButton: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
-    minHeight: 52,
+    minHeight: 48,
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -565,7 +571,7 @@ const styles = StyleSheet.create({
   },
   topActionButtonText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '700',
   },
   resultsHeader: {

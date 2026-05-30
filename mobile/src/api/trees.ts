@@ -77,3 +77,51 @@ export async function updateTreeHealth(
   });
   return response.data;
 }
+
+export interface TreeSpecies {
+  id: number;
+  common_name: string;
+  scientific_name: string;
+}
+
+export interface AdministrativeArea {
+  id: number;
+  area_name: string;
+}
+
+export interface CreateTreeData {
+  tree_code: string;
+  species_id: number;
+  area_id: number;
+  latitude: number;
+  longitude: number;
+  planting_year?: number;
+  height_m?: number;
+  trunk_diameter_cm?: number;
+  canopy_diameter_m?: number;
+  tilt_degree?: number;
+}
+
+/**
+ * Get all tree species
+ */
+export async function getAllSpecies(): Promise<TreeSpecies[]> {
+  const response = await apiClient.get<TreeSpecies[]>('/trees/species');
+  return response.data;
+}
+
+/**
+ * Get all administrative areas
+ */
+export async function getAllAreas(): Promise<AdministrativeArea[]> {
+  const response = await apiClient.get<AdministrativeArea[]>('/trees/areas');
+  return response.data;
+}
+
+/**
+ * Create a new tree
+ */
+export async function createTree(data: CreateTreeData): Promise<Tree> {
+  const response = await apiClient.post<Tree>('/trees', data);
+  return response.data;
+}

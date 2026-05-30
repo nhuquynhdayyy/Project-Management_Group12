@@ -7,4 +7,5 @@ export type RootStackParamList = {
   TreeHistory: { treeId: number; treeCode?: string };
   QRScanner: undefined;
   NearbyTrees: undefined;
+  RegisterTree: undefined;
 };

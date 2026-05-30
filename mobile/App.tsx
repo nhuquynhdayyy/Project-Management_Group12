@@ -12,6 +12,8 @@ import { ActivityIndicator, View } from 'react-native';
 import { RootStackParamList } from './src/types/navigation';
 import * as Linking from 'expo-linking';
 
+import RegisterTreeScreen from './src/screens/RegisterTreeScreen';
+
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 // Deep linking configuration
@@ -25,6 +27,7 @@ const linking = {
       TreeHistory: 'tree/:treeId',
       QRScanner: 'scanner',
       NearbyTrees: 'nearby',
+      RegisterTree: 'register-tree',
     },
   },
 };
@@ -52,6 +55,7 @@ function AppNavigator() {
             <Stack.Screen name="TreeHistory" component={TreeHistoryScreen} />
             <Stack.Screen name="QRScanner" component={QRScannerScreen} />
             <Stack.Screen name="NearbyTrees" component={NearbyTreesScreen} />
+            <Stack.Screen name="RegisterTree" component={RegisterTreeScreen} />
           </>
         )}
       </Stack.Navigator>
