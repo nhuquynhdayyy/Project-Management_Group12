@@ -5,7 +5,7 @@
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Tree } from '../../entities/tree.entity';
+import { Tree, HealthStatus } from '../../entities/tree.entity';
 import { TreeSpecies } from '../../entities/tree-species.entity';
 import { AdministrativeArea } from '../../entities/administrative-area.entity';
 import { CreateTreeDto } from './dto/create-tree.dto';
@@ -113,8 +113,55 @@ export class TreesService {
     return await this.treeRepository.findOne({ where: { id } });
   }
 
-  async findAll(): Promise<Tree[]> {
-    return await this.treeRepository.find();
+  async findAll(filter: { species?: string; health_status?: string } = {}): Promise<Tree[]> {
+    const query = this.treeRepository
+      .createQueryBuilder('tree')
+      .leftJoinAndSelect('tree.species', 'species')
+      .leftJoinAndSelect('tree.area', 'area');
+
+    if (filter.species) {
+      const speciesTokens = filter.species
+        .split(',')
+        .map((token) => token.trim())
+        .filter(Boolean);
+      const speciesIds = speciesTokens
+        .map((token) => Number(token))
+        .filter((value) => Number.isInteger(value));
+      const speciesNames = speciesTokens
+        .filter((token) => !Number.isInteger(Number(token)))
+        .map((token) => token.toLowerCase());
+
+      if (speciesIds.length > 0 && speciesNames.length > 0) {
+        query.andWhere(
+          '(tree.species_id IN (:...speciesIds) OR LOWER(species.common_name) IN (:...speciesNames))',
+          { speciesIds, speciesNames },
+        );
+      } else if (speciesIds.length > 0) {
+        query.andWhere('tree.species_id IN (:...speciesIds)', { speciesIds });
+      } else if (speciesNames.length > 0) {
+        query.andWhere('LOWER(species.common_name) IN (:...speciesNames)', {
+          speciesNames,
+        });
+      }
+    }
+
+    if (filter.health_status) {
+      if (filter.health_status.toLowerCase() === 'danger') {
+        query.andWhere('tree.health_status IN (:...dangerStatuses)', {
+          dangerStatuses: [HealthStatus.DISEASED, HealthStatus.DEAD],
+        });
+      } else {
+        query.andWhere('tree.health_status = :healthStatus', {
+          healthStatus: filter.health_status,
+        });
+      }
+    }
+
+    return await query.getMany();
+  }
+
+  async findSpecies(): Promise<TreeSpecies[]> {
+    return await this.speciesRepository.find({ order: { common_name: 'ASC' } });
   }
 
   async update(

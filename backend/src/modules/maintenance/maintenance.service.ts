@@ -14,8 +14,13 @@ import { User } from '../auth/user.entity';
 import { CreateMaintenanceTaskDto } from './dto/create-maintenance-task.dto';
 import { CompleteTaskDto } from './dto/complete-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
+import {
+  CreateRecurringMaintenanceDto,
+  RecurrenceFrequency,
+} from './dto/create-recurring-maintenance.dto';
 import { AuditLogService } from '../audit-log/auditLog.service';
 import { AuditAction } from '../../entities/auditLog.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /** Minimal file descriptor — avoids requiring @types/multer */
 interface UploadedFile {
@@ -37,6 +42,7 @@ export class MaintenanceService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly auditLogService: AuditLogService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(
@@ -78,6 +84,65 @@ export class MaintenanceService {
     );
 
     return saved;
+  }
+
+  async createRecurringSchedule(
+    dto: CreateRecurringMaintenanceDto,
+    userId?: number,
+  ): Promise<{ created: number; tasks: MaintenanceTask[] }> {
+    const user = await this.userRepository.findOne({
+      where: { id: dto.assigned_to },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const trees = await this.findScheduleTrees(dto);
+    if (trees.length === 0) throw new NotFoundException('No trees found');
+
+    const tasks = trees.flatMap((tree) =>
+      Array.from({ length: dto.occurrences }, (_, index) =>
+        this.taskRepository.create({
+          tree_id: tree.id,
+          assigned_to: dto.assigned_to,
+          task_type: dto.task_type,
+          scheduled_date: this.addRecurrence(
+            new Date(dto.start_date),
+            dto.frequency,
+            index,
+          ),
+          notes: dto.notes,
+          status: TaskStatus.PENDING,
+        }),
+      ),
+    );
+
+    const saved = await this.taskRepository.save(tasks);
+
+    await this.auditLogService.log(
+      userId ?? null,
+      AuditAction.CREATE,
+      'maintenance_schedule',
+      null,
+      null,
+      {
+        tree_id: dto.tree_id ?? null,
+        area_id: dto.area_id ?? null,
+        assigned_to: dto.assigned_to,
+        task_type: dto.task_type,
+        frequency: dto.frequency,
+        occurrences: dto.occurrences,
+        generated_tasks: saved.length,
+      },
+    );
+
+    const firstDate = new Date(dto.start_date).toLocaleDateString('vi-VN');
+    await this.notificationsService.notifyUsers(
+      [dto.assigned_to],
+      'Lịch bảo trì mới',
+      `Bạn được giao ${saved.length} công việc ${dto.task_type}, bắt đầu từ ${firstDate}. Nhắc trước ${dto.reminder_minutes ?? 60} phút.`,
+      userId ?? null,
+    );
+
+    return { created: saved.length, tasks: saved };
   }
 
   async completeTask(
@@ -214,6 +279,36 @@ export class MaintenanceService {
 
   async findAll(): Promise<MaintenanceTask[]> {
     return await this.taskRepository.find({ order: { scheduled_date: 'ASC' } });
+  }
+
+  private async findScheduleTrees(dto: CreateRecurringMaintenanceDto) {
+    if (dto.tree_id) {
+      const tree = await this.treeRepository.findOne({
+        where: { id: dto.tree_id },
+      });
+      return tree ? [tree] : [];
+    }
+
+    return this.treeRepository.find({
+      where: { area_id: dto.area_id },
+      order: { tree_code: 'ASC' },
+    });
+  }
+
+  private addRecurrence(
+    startDate: Date,
+    frequency: RecurrenceFrequency,
+    index: number,
+  ): Date {
+    const next = new Date(startDate);
+    if (frequency === RecurrenceFrequency.DAILY) {
+      next.setDate(next.getDate() + index);
+    } else if (frequency === RecurrenceFrequency.WEEKLY) {
+      next.setDate(next.getDate() + index * 7);
+    } else {
+      next.setMonth(next.getMonth() + index);
+    }
+    return next;
   }
 
   private calculateDistance(lat1: number, lon1: number, tree: Tree): number {

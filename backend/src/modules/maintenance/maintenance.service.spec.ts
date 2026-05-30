@@ -13,6 +13,7 @@ import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { AuditLogService } from '../audit-log/auditLog.service';
 import { AuditLog } from '../../entities/auditLog.entity';
 import { CreateMaintenanceTaskDto } from './dto/create-maintenance-task.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 describe('MaintenanceService', () => {
   let service: MaintenanceService;
@@ -38,6 +39,10 @@ describe('MaintenanceService', () => {
     findAll: jest.fn().mockResolvedValue([]),
   };
 
+  const mockNotificationsService = {
+    notifyUsers: jest.fn().mockResolvedValue({ recipient_count: 1 }),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -52,6 +57,7 @@ describe('MaintenanceService', () => {
         // instantiate it, so its own @InjectRepository(AuditLog) dependency
         // is never resolved and the circular scan is avoided.
         { provide: AuditLogService, useValue: mockAuditLogService },
+        { provide: NotificationsService, useValue: mockNotificationsService },
         // AuditLogService's constructor metadata still lists AuditLog repo as
         // a dependency token. Providing it here satisfies the DI scanner.
         { provide: getRepositoryToken(AuditLog), useValue: {} },

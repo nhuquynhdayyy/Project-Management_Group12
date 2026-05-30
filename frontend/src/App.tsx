@@ -7,6 +7,10 @@ import LoginPage from './pages/LoginPage';
 import MapPage from './pages/MapPage';
 import DashboardPage from './pages/DashboardPage';
 import ActivityLogsPage from './pages/ActivityLogsPage';
+import CreateNotificationPage from './pages/CreateNotificationPage';
+import MaintenanceSchedulePage from './pages/MaintenanceSchedulePage';
+import StatsPage from './pages/StatsPage';
+import HelpPage from './pages/HelpPage';
 
 function DefaultRedirect() {
   const { user } = useAuth();
@@ -40,6 +44,14 @@ export default function App() {
               <Route element={<RoleGuard allowedRoles={['Admin']} />}>
                 <Route path="/activity-logs" element={<ActivityLogsPage />} />
               </Route>
+
+              <Route element={<RoleGuard allowedRoles={['Admin', 'Manager']} />}>
+                <Route path="/notifications/new" element={<CreateNotificationPage />} />
+                <Route path="/maintenance/schedules" element={<MaintenanceSchedulePage />} />
+                <Route path="/stats" element={<StatsPage />} />
+              </Route>
+
+              <Route path="/help" element={<HelpPage />} />
             </Route>
           </Route>
 

@@ -7,6 +7,9 @@ import { TreesModule } from './modules/trees/trees.module';
 import { SeederModule } from './database/seeder/seeder.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { AuditLogModule } from './modules/audit-log/auditLog.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { IncidentsModule } from './modules/incidents/incidents.module';
+import { StatsModule } from './modules/stats/stats.module';
 
 @Module({
   imports: [
@@ -45,6 +48,9 @@ import { AuditLogModule } from './modules/audit-log/auditLog.module';
     SeederModule,
     MaintenanceModule,
     AuditLogModule,
+    NotificationsModule,
+    IncidentsModule,
+    StatsModule,
   ],
   controllers: [AppController],
 })

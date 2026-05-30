@@ -24,6 +24,7 @@ describe('TreesService', () => {
 
   const mockSpeciesRepository = {
     findOne: jest.fn(),
+    find: jest.fn(),
   };
 
   const mockAreaRepository = {
@@ -330,7 +331,12 @@ describe('TreesService', () => {
         { id: 2, tree_code: 'TREE002' },
       ];
 
-      mockTreeRepository.find.mockResolvedValue(mockTrees);
+      const mockQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockTrees),
+      };
+
+      mockTreeRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
 
       // Act
       const result = await service.findAll();
@@ -338,7 +344,16 @@ describe('TreesService', () => {
       // Assert
       expect(result).toBeDefined();
       expect(result.length).toBe(2);
-      expect(mockTreeRepository.find).toHaveBeenCalled();
+      expect(mockTreeRepository.createQueryBuilder).toHaveBeenCalledWith('tree');
+      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith(
+        'tree.species',
+        'species',
+      );
+      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith(
+        'tree.area',
+        'area',
+      );
+      expect(mockQueryBuilder.getMany).toHaveBeenCalled();
     });
   });
 

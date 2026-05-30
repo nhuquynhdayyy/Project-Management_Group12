@@ -40,6 +40,7 @@ export interface Tree {
 }
 
 export type TaskStatus = 'Pending' | 'In_Progress' | 'Completed';
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
 export type TaskType = 'Cắt tỉa' | 'Bón phân' | 'Tưới nước' | 'Kiểm tra';
 
 export interface MaintenanceTask {
@@ -54,6 +55,29 @@ export interface MaintenanceTask {
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface CreateRecurringMaintenancePayload {
+  tree_id?: number;
+  area_id?: number;
+  assigned_to: number;
+  task_type: TaskType;
+  start_date: string;
+  frequency: RecurrenceFrequency;
+  occurrences: number;
+  reminder_minutes?: number;
+  notes?: string;
+}
+
+export interface HealthStats {
+  healthy: number;
+  weak: number;
+  dead: number;
+}
+
+export interface AgeStatsItem {
+  label: string;
+  count: number;
 }
 
 export type AuditAction =
@@ -110,4 +134,41 @@ export interface PaginatedActivityLogs {
     limit: number;
     totalPages: number;
   };
+}
+
+export type NotificationSeverity = 'normal' | 'urgent';
+export type NotificationAudience = 'all' | 'roles';
+
+export interface NotificationItem {
+  id: number;
+  notification_id: number;
+  user_id: number;
+  read_at: string | null;
+  notification: {
+    id: number;
+    title: string;
+    content: string;
+    severity: NotificationSeverity;
+    audience: NotificationAudience;
+    target_roles: string[] | null;
+    created_by: number | null;
+    created_at: string;
+  };
+}
+
+export interface CreateNotificationPayload {
+  title: string;
+  content: string;
+  audience: NotificationAudience;
+  severity: NotificationSeverity;
+  roles?: string[];
+}
+
+export type IncidentStatus = 'new' | 'in_progress' | 'resolved';
+
+export interface CreateIncidentPayload {
+  tree_id: number;
+  incident_type: string;
+  description: string;
+  image_url?: string;
 }

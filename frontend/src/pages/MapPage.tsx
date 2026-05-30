@@ -4,6 +4,8 @@ import {
   Cartesian2,
   Cartesian3,
   Color,
+  CallbackProperty,
+  Rectangle,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   defined,
@@ -11,17 +13,19 @@ import {
 } from 'cesium';
 // widgets.css is injected automatically by vite-plugin-cesium
 
-import { fetchTrees } from '../api/trees';
+import { createIncident } from '../api/incidents';
+import { fetchTreeSpecies, fetchTrees } from '../api/trees';
 import { healthColor, HEALTH_TAILWIND } from '../utils/cesiumHelpers';
-import type { Tree, HealthStatus } from '../types';
+import type { Tree, HealthStatus, TreeSpecies } from '../types';
 
 const CESIUM_ION_TOKEN =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJhZmY2N2FlNS1iYjc1LTQ1OGMtOTVlYi0wZDJiOGIzODVjNTEiLCJpZCI6NDEyMDM5LCJpYXQiOjE3NzUwMDY0Nzh9.Bq4bXnvHmboOY9-hdWbzc5mo1CQOGxQTHl_h2DX26_A';
 
 const HEALTH_STATUSES: HealthStatus[] = ['Tốt', 'Yếu', 'Sâu bệnh', 'Chết'];
+const DANGER_STATUSES: HealthStatus[] = ['Sâu bệnh', 'Chết'];
 
-// Liên Chiểu district, Da Nang — zoomed in to match seeded data
-const LIEN_CHIEU = Cartesian3.fromDegrees(108.145, 16.09, 6000);
+// Initial fallback before tree data is loaded.
+const DEFAULT_VIEW = Cartesian3.fromDegrees(106.7, 10.78, 6000);
 
 export default function MapPage() {
   const cesiumContainer = useRef<HTMLDivElement>(null);
@@ -29,19 +33,38 @@ export default function MapPage() {
   const handlerRef = useRef<ScreenSpaceEventHandler | null>(null);
 
   const [trees, setTrees] = useState<Tree[]>([]);
+  const [species, setSpecies] = useState<TreeSpecies[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedTree, setSelectedTree] = useState<Tree | null>(null);
+  const [selectedSpeciesIds, setSelectedSpeciesIds] = useState<Set<number>>(new Set());
+  const [dangerOnly, setDangerOnly] = useState(false);
+  const [incidentOpen, setIncidentOpen] = useState(false);
+  const [incidentType, setIncidentType] = useState('Gãy cành');
+  const [incidentDescription, setIncidentDescription] = useState('');
+  const [incidentImageUrl, setIncidentImageUrl] = useState('');
+  const [incidentMessage, setIncidentMessage] = useState('');
+  const [submittingIncident, setSubmittingIncident] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Set<HealthStatus>>(
     new Set(HEALTH_STATUSES),
   );
 
   // ── Load trees ───────────────────────────────────────────────────────────
   useEffect(() => {
-    fetchTrees()
+    setLoading(true);
+    fetchTrees({
+      species: [...selectedSpeciesIds],
+      healthStatus: dangerOnly ? 'danger' : undefined,
+    })
       .then(setTrees)
       .catch(() => setError('Không thể tải dữ liệu cây. Vui lòng thử lại.'))
       .finally(() => setLoading(false));
+  }, [selectedSpeciesIds, dangerOnly]);
+
+  useEffect(() => {
+    fetchTreeSpecies()
+      .then(setSpecies)
+      .catch(() => setSpecies([]));
   }, []);
 
   // ── Init Cesium viewer ───────────────────────────────────────────────────
@@ -63,7 +86,7 @@ export default function MapPage() {
       selectionIndicator: false,
     });
 
-    viewer.camera.flyTo({ destination: LIEN_CHIEU, duration: 1.5 });
+    viewer.camera.flyTo({ destination: DEFAULT_VIEW, duration: 1.5 });
     viewerRef.current = viewer;
 
     return () => {
@@ -85,22 +108,71 @@ export default function MapPage() {
 
     for (const tree of trees) {
       if (!activeFilters.has(tree.health_status)) continue;
-      const coords = tree.location?.coordinates;
+      const coords = getTreeCoordinates(tree);
       if (!coords) continue;
       const [lng, lat] = coords;
+
+      const danger = isDangerTree(tree);
 
       viewer.entities.add({
         id: String(tree.id),
         position: Cartesian3.fromDegrees(lng, lat),
         point: {
-          pixelSize: 10,
-          color: healthColor(tree.health_status),
+          pixelSize: danger
+            ? new CallbackProperty(() => 12 + Math.sin(Date.now() / 180) * 3, false)
+            : 10,
+          color: danger
+            ? new CallbackProperty(
+                () => Color.RED.withAlpha(0.65 + Math.abs(Math.sin(Date.now() / 220)) * 0.35),
+                false,
+              )
+            : healthColor(tree.health_status),
           outlineColor: Color.WHITE,
-          outlineWidth: 1.5,
+          outlineWidth: danger ? 2 : 1.5,
           heightReference: 1, // CLAMP_TO_GROUND
         },
       });
     }
+  }, [trees, activeFilters]);
+
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || trees.length === 0) return;
+
+    const visibleCoordinates = trees
+      .filter((tree) => activeFilters.has(tree.health_status))
+      .map(getTreeCoordinates)
+      .filter((coords): coords is [number, number] => Boolean(coords));
+
+    if (visibleCoordinates.length === 0) return;
+
+    const lngs = visibleCoordinates.map(([lng]) => lng);
+    const lats = visibleCoordinates.map(([, lat]) => lat);
+    const west = Math.min(...lngs);
+    const east = Math.max(...lngs);
+    const south = Math.min(...lats);
+    const north = Math.max(...lats);
+
+    if (visibleCoordinates.length === 1 || (west === east && south === north)) {
+      viewer.camera.flyTo({
+        destination: Cartesian3.fromDegrees(west, south, 2500),
+        duration: 0.8,
+      });
+      return;
+    }
+
+    const lngPadding = Math.max((east - west) * 0.2, 0.002);
+    const latPadding = Math.max((north - south) * 0.2, 0.002);
+
+    viewer.camera.flyTo({
+      destination: Rectangle.fromDegrees(
+        west - lngPadding,
+        south - latPadding,
+        east + lngPadding,
+        north + latPadding,
+      ),
+      duration: 0.8,
+    });
   }, [trees, activeFilters]);
 
   // ── Click handler ────────────────────────────────────────────────────────
@@ -142,7 +214,51 @@ export default function MapPage() {
     });
   }, []);
 
+  const toggleSpecies = useCallback((speciesId: number) => {
+    setSelectedSpeciesIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(speciesId)) {
+        next.delete(speciesId);
+      } else {
+        next.add(speciesId);
+      }
+      return next;
+    });
+  }, []);
+
+  function openDirections(tree: Tree) {
+    const coords = getTreeCoordinates(tree);
+    if (!coords) return;
+    const [lng, lat] = coords;
+    const label = encodeURIComponent(tree.tree_code);
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=walking&query=${label}`, '_blank');
+  }
+
+  async function submitIncident() {
+    if (!selectedTree || !incidentDescription.trim()) return;
+    setSubmittingIncident(true);
+    setIncidentMessage('');
+
+    try {
+      await createIncident({
+        tree_id: selectedTree.id,
+        incident_type: incidentType,
+        description: incidentDescription,
+        image_url: incidentImageUrl || undefined,
+      });
+      setIncidentDescription('');
+      setIncidentImageUrl('');
+      setIncidentOpen(false);
+      setIncidentMessage('Đã gửi báo cáo sự cố đến Manager.');
+    } catch {
+      setIncidentMessage('Không thể gửi báo cáo sự cố. Vui lòng thử lại.');
+    } finally {
+      setSubmittingIncident(false);
+    }
+  }
+
   const visibleCount = trees.filter((t) => activeFilters.has(t.health_status)).length;
+  const selectedTreeCoordinates = selectedTree ? getTreeCoordinates(selectedTree) : null;
 
   return (
     <div className="flex h-full bg-gray-900 text-white overflow-hidden">
@@ -157,6 +273,57 @@ export default function MapPage() {
             <span className="text-white font-semibold">{trees.length}</span>
             {' '}cây
           </p>
+        </div>
+
+        {/* Species filter */}
+        <div className="p-4 border-b border-gray-700">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+              Lọc loài cây
+            </h3>
+            {selectedSpeciesIds.size > 0 ? (
+              <button
+                type="button"
+                onClick={() => setSelectedSpeciesIds(new Set())}
+                className="text-[11px] text-green-400 hover:text-green-300"
+              >
+                Xóa lọc
+              </button>
+            ) : null}
+          </div>
+          <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
+            {species.map((item) => (
+              <label
+                key={item.id}
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-300 hover:bg-gray-700/50"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedSpeciesIds.has(item.id)}
+                  onChange={() => toggleSpecies(item.id)}
+                />
+                <span className="min-w-0 flex-1 truncate">{item.common_name}</span>
+              </label>
+            ))}
+            {species.length === 0 ? (
+              <p className="text-xs text-gray-500">Chưa có danh mục loài cây</p>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Danger filter */}
+        <div className="p-4 border-b border-gray-700">
+          <label className="flex items-center justify-between gap-3 rounded-md border border-gray-700 px-3 py-2 text-sm text-gray-200">
+            <span>Chỉ hiện cây nguy hiểm</span>
+            <input
+              type="checkbox"
+              checked={dangerOnly}
+              onChange={(event) => {
+                setDangerOnly(event.target.checked);
+                if (event.target.checked) setActiveFilters(new Set(HEALTH_STATUSES));
+              }}
+            />
+          </label>
         </div>
 
         {/* Health filter */}
@@ -228,11 +395,78 @@ export default function MapPage() {
                 label="Tọa độ"
                 value={
                   <span className="font-mono text-[10px] text-gray-400">
-                    {selectedTree.location.coordinates[1].toFixed(5)},{' '}
-                    {selectedTree.location.coordinates[0].toFixed(5)}
+                    {selectedTreeCoordinates
+                      ? `${selectedTreeCoordinates[1].toFixed(5)}, ${selectedTreeCoordinates[0].toFixed(5)}`
+                      : '—'}
                   </span>
                 }
               />
+              <div className="grid gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => openDirections(selectedTree)}
+                  className="h-9 rounded-md bg-green-600 px-3 text-sm font-semibold text-white hover:bg-green-500"
+                >
+                  Chỉ đường đến đây
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIncidentOpen((value) => !value);
+                    setIncidentMessage('');
+                  }}
+                  className="h-9 rounded-md border border-red-500/60 px-3 text-sm font-semibold text-red-200 hover:bg-red-950"
+                >
+                  Báo cáo sự cố
+                </button>
+              </div>
+
+              {incidentMessage ? (
+                <p className="rounded-md bg-gray-900 px-3 py-2 text-xs text-gray-300">{incidentMessage}</p>
+              ) : null}
+
+              {incidentOpen ? (
+                <div className="space-y-2 rounded-md border border-gray-700 bg-gray-900 p-3">
+                  <label className="block text-xs text-gray-300">
+                    Loại sự cố
+                    <select
+                      className="mt-1 h-9 w-full rounded-md border border-gray-700 bg-gray-950 px-2 text-sm text-white"
+                      value={incidentType}
+                      onChange={(event) => setIncidentType(event.target.value)}
+                    >
+                      <option>Gãy cành</option>
+                      <option>Sâu bệnh</option>
+                      <option>Đổ ngã</option>
+                      <option>Khác</option>
+                    </select>
+                  </label>
+                  <label className="block text-xs text-gray-300">
+                    Mô tả
+                    <textarea
+                      className="mt-1 min-h-20 w-full rounded-md border border-gray-700 bg-gray-950 px-2 py-1.5 text-sm text-white"
+                      value={incidentDescription}
+                      onChange={(event) => setIncidentDescription(event.target.value)}
+                    />
+                  </label>
+                  <label className="block text-xs text-gray-300">
+                    Ảnh đính kèm
+                    <input
+                      className="mt-1 h-9 w-full rounded-md border border-gray-700 bg-gray-950 px-2 text-sm text-white"
+                      value={incidentImageUrl}
+                      onChange={(event) => setIncidentImageUrl(event.target.value)}
+                      placeholder="URL ảnh"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={submitIncident}
+                    disabled={submittingIncident || !incidentDescription.trim()}
+                    className="h-9 w-full rounded-md bg-red-600 px-3 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+                  >
+                    {submittingIncident ? 'Đang gửi...' : 'Gửi báo cáo'}
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : (
@@ -268,6 +502,28 @@ export default function MapPage() {
       </div>
     </div>
   );
+}
+
+function isDangerTree(tree: Tree): boolean {
+  return DANGER_STATUSES.includes(tree.health_status);
+}
+
+function getTreeCoordinates(tree: Tree): [number, number] | null {
+  const location = tree.location as Tree['location'] | string | null | undefined;
+
+  if (!location) return null;
+
+  if (typeof location === 'string') {
+    const match = location.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/i);
+    if (!match) return null;
+
+    const lng = Number(match[1]);
+    const lat = Number(match[2]);
+    return Number.isFinite(lng) && Number.isFinite(lat) ? [lng, lat] : null;
+  }
+
+  const [lng, lat] = location.coordinates ?? [];
+  return Number.isFinite(lng) && Number.isFinite(lat) ? [lng, lat] : null;
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
