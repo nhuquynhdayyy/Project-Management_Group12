@@ -6,4 +6,5 @@ export type RootStackParamList = {
   TaskDetail: { task: MaintenanceTask };
   TreeHistory: { treeId: number; treeCode?: string };
   QRScanner: undefined;
+  NearbyTrees: undefined;
 };

@@ -1,21 +1,24 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { createMaintenanceTask } from '../api/maintenance';
 import { fetchTrees } from '../api/trees';
+import { fetchUsers } from '../api/auth';
 import type { CreateMaintenanceTaskPayload, MaintenanceTask, Tree, TaskType, DashboardUser } from '../types';
 
 interface CreateTaskFormProps {
   onSuccess: (task: MaintenanceTask) => void;
   onCancel: () => void;
-  staffUsers: DashboardUser[];
+  staffUsers?: DashboardUser[];
+  treeId?: number; // Optional pre-filled tree ID
 }
 
-export default function CreateTaskForm({ onSuccess, onCancel, staffUsers }: CreateTaskFormProps) {
+export default function CreateTaskForm({ onSuccess, onCancel, staffUsers: providedStaffUsers, treeId }: CreateTaskFormProps) {
   const [trees, setTrees] = useState<Tree[]>([]);
+  const [staffUsers, setStaffUsers] = useState<DashboardUser[]>(providedStaffUsers || []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<CreateMaintenanceTaskPayload>({
-    tree_id: 0,
+    tree_id: treeId || 0,
     assigned_to: 0,
     task_type: '' as TaskType,
     scheduled_date: '',
@@ -23,16 +26,28 @@ export default function CreateTaskForm({ onSuccess, onCancel, staffUsers }: Crea
   });
 
   useEffect(() => {
-    async function loadTrees() {
+    async function loadData() {
       try {
-        const treesData = await fetchTrees();
-        setTrees(treesData);
+        // Load trees if treeId is not provided
+        if (!treeId) {
+          const treesData = await fetchTrees();
+          setTrees(treesData);
+        }
+        
+        // Load staff users if not provided
+        if (!providedStaffUsers) {
+          const usersData = await fetchUsers();
+          const staffOnly = usersData.filter(user => 
+            user.roles.some(role => role.role_name === 'Staff')
+          );
+          setStaffUsers(staffOnly);
+        }
       } catch (err) {
-        setError('Không thể tải danh sách cây');
+        setError('Không thể tải dữ liệu');
       }
     }
-    loadTrees();
-  }, []);
+    loadData();
+  }, [treeId, providedStaffUsers]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -81,26 +96,28 @@ export default function CreateTaskForm({ onSuccess, onCancel, staffUsers }: Crea
       )}
 
       <div className="space-y-4">
-        {/* Tree Selection - Required */}
-        <div>
-          <label htmlFor="tree_id" className="block text-sm font-medium text-gray-300 mb-1">
-            Cây cần bảo trì <span className="text-red-500">*</span>
-          </label>
-          <select
-            id="tree_id"
-            required
-            value={formData.tree_id}
-            onChange={(e) => handleInputChange('tree_id', parseInt(e.target.value))}
-            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-green-600"
-          >
-            <option value={0}>-- Chọn cây --</option>
-            {trees.map((tree) => (
-              <option key={tree.id} value={tree.id}>
-                {tree.tree_code} - {tree.species.common_name} ({tree.area.area_name})
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Tree Selection - Required (hidden if treeId is provided) */}
+        {!treeId && (
+          <div>
+            <label htmlFor="tree_id" className="block text-sm font-medium text-gray-300 mb-1">
+              Cây cần bảo trì <span className="text-red-500">*</span>
+            </label>
+            <select
+              id="tree_id"
+              required
+              value={formData.tree_id}
+              onChange={(e) => handleInputChange('tree_id', parseInt(e.target.value))}
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-green-600"
+            >
+              <option value={0}>-- Chọn cây --</option>
+              {trees.map((tree) => (
+                <option key={tree.id} value={tree.id}>
+                  {tree.tree_code} - {tree.species.common_name} ({tree.area.area_name})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Staff Assignment - Required */}
         <div>

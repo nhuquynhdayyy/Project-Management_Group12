@@ -121,6 +121,12 @@ export default function TaskListScreen() {
         <Text style={styles.headerTitle}>Công việc của tôi</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity 
+            onPress={() => navigation.navigate('NearbyTrees')} 
+            style={styles.nearbyButton}
+          >
+            <Text style={styles.nearbyButtonText}>📍 Tìm cây</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
             onPress={() => navigation.navigate('QRScanner')} 
             style={styles.qrButton}
           >
@@ -178,7 +184,18 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
+  },
+  nearbyButton: {
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  nearbyButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   qrButton: {
     backgroundColor: '#16a34a',

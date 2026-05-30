@@ -104,6 +104,8 @@ export class TreesService {
 
     const query = this.treeRepository
       .createQueryBuilder('tree')
+      .leftJoinAndSelect('tree.species', 'species')
+      .leftJoinAndSelect('tree.area', 'area')
       .select([
         'tree.id',
         'tree.tree_code',
@@ -115,8 +117,15 @@ export class TreesService {
         'tree.trunk_diameter_cm',
         'tree.canopy_diameter_m',
         'tree.health_status',
-        'ST_AsText(tree.location) as location',
+        'tree.created_at',
+        'tree.updated_at',
+        'species.id',
+        'species.common_name',
+        'species.scientific_name',
+        'area.id',
+        'area.area_name',
       ])
+      .addSelect('ST_AsText(tree.location)', 'location')
       .addSelect(
         'ST_Distance(tree.location::geography, ST_GeomFromText(:point, 4326)::geography)',
         'distance',
@@ -127,7 +136,13 @@ export class TreesService {
       .setParameters({ point: wktPoint, radius: radius_meters })
       .orderBy('distance', 'ASC');
 
-    return await query.getRawMany();
+    const results = await query.getRawAndEntities();
+    
+    // Kết hợp entities với distance từ raw results
+    return results.entities.map((tree, index) => ({
+      ...tree,
+      distance: Math.round(results.raw[index].distance), // Làm tròn khoảng cách (mét)
+    }));
   }
 
   async findById(id: number): Promise<Tree | null> {

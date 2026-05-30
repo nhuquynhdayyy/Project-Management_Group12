@@ -56,7 +56,9 @@ export class TreesController {
   }
 
   @Get('nearby')
-  @ApiOperation({ summary: 'Find trees within a radius (PostGIS)' })
+  @UseGuards(RolesGuard)
+  @Roles('Admin', 'Manager', 'Staff')
+  @ApiOperation({ summary: 'Find trees within a radius (PostGIS) - Available for Staff' })
   @ApiQuery({ name: 'latitude', required: true, type: Number, example: 16.0544 })
   @ApiQuery({ name: 'longitude', required: true, type: Number, example: 108.2022 })
   @ApiQuery({
@@ -68,6 +70,7 @@ export class TreesController {
   })
   @ApiResponse({ status: 200, description: 'Trees within the given radius.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Staff role or higher required.' })
   async findNearby(@Query() findNearbyDto: FindTreesNearbyDto) {
     return await this.treesService.findTreesWithinRadius(findNearbyDto);
   }

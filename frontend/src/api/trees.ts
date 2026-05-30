@@ -146,3 +146,29 @@ export async function checkLocationExists(
   }>(`/trees/check/location?${params.toString()}`);
   return data;
 }
+
+export interface NearbyTree extends Tree {
+  distance: number; // Khoảng cách tính bằng mét
+}
+
+/**
+ * Tìm cây xung quanh vị trí hiện tại
+ * @param latitude Vĩ độ
+ * @param longitude Kinh độ
+ * @param radiusMeters Bán kính tìm kiếm (mét), mặc định 1000m
+ * @returns Danh sách cây xung quanh, sắp xếp theo khoảng cách
+ */
+export async function findTreesNearby(
+  latitude: number,
+  longitude: number,
+  radiusMeters: number = 1000,
+): Promise<NearbyTree[]> {
+  const { data } = await apiClient.get<NearbyTree[]>('/trees/nearby', {
+    params: {
+      latitude,
+      longitude,
+      radius_meters: radiusMeters,
+    },
+  });
+  return data;
+}

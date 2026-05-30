@@ -7,6 +7,7 @@ import TaskListScreen from './src/screens/TaskListScreen';
 import TaskDetailScreen from './src/screens/TaskDetailScreen';
 import TreeHistoryScreen from './src/screens/TreeHistoryScreen';
 import QRScannerScreen from './src/screens/QRScannerScreen';
+import NearbyTreesScreen from './src/screens/NearbyTreesScreen';
 import { ActivityIndicator, View } from 'react-native';
 import { RootStackParamList } from './src/types/navigation';
 import * as Linking from 'expo-linking';
@@ -23,6 +24,7 @@ const linking = {
       TaskDetail: 'tasks/:taskId',
       TreeHistory: 'tree/:treeId',
       QRScanner: 'scanner',
+      NearbyTrees: 'nearby',
     },
   },
 };
@@ -49,6 +51,7 @@ function AppNavigator() {
             <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
             <Stack.Screen name="TreeHistory" component={TreeHistoryScreen} />
             <Stack.Screen name="QRScanner" component={QRScannerScreen} />
+            <Stack.Screen name="NearbyTrees" component={NearbyTreesScreen} />
           </>
         )}
       </Stack.Navigator>
