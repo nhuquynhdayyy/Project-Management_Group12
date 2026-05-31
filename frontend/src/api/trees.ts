@@ -1,5 +1,48 @@
 import apiClient from './client';
-import type { HealthStatus, Tree, TreeSpecies } from '../types';
+import type { AdministrativeArea, Tree, TreeSpecies, MaintenanceTask, ActivityLog, HealthStatus } from '../types';
+
+export interface CreateTreePayload {
+  tree_code: string;
+  species_id: number;
+  area_id: number;
+  latitude: number;
+  longitude: number;
+  health_status?: string;
+  planting_year?: number;
+  height_m?: number;
+  trunk_diameter_cm?: number;
+  notes?: string;
+}
+
+export interface ExcelTreeRow {
+  tree_code: string;
+  species: string;
+  area_name: string;
+  latitude: number;
+  longitude: number;
+  height_m?: number;
+  trunk_diameter_cm?: number;
+  health_status?: string;
+  planting_year?: number;
+}
+
+export interface TreeImportError {
+  row: number;
+  message: string;
+}
+
+export interface TreeImportPreview {
+  total: number;
+  rows: ExcelTreeRow[];
+  errors: TreeImportError[];
+}
+
+export interface TreeImportResult {
+  total: number;
+  imported: number;
+  skipped: number;
+  errors: TreeImportError[];
+}
 
 export interface TreeFilters {
   species?: number[];
@@ -18,5 +61,279 @@ export async function fetchTrees(filters: TreeFilters = {}): Promise<Tree[]> {
 
 export async function fetchTreeSpecies(): Promise<TreeSpecies[]> {
   const { data } = await apiClient.get<TreeSpecies[]>('/trees/species');
+  return data;
+}
+
+export async function fetchTreeById(id: number): Promise<Tree> {
+  const { data } = await apiClient.get<Tree>(`/trees/${id}`);
+  return data;
+}
+
+export async function fetchTreeSpecies(): Promise<TreeSpecies[]> {
+  const { data } = await apiClient.get<TreeSpecies[]>('/trees/species');
+  return data;
+}
+
+export async function fetchAreas(): Promise<AdministrativeArea[]> {
+  const { data } = await apiClient.get<AdministrativeArea[]>('/trees/areas');
+  return data;
+}
+
+export async function previewTreeImport(file: File): Promise<TreeImportPreview> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await apiClient.post<TreeImportPreview>('/trees/import/preview', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
+
+export async function importTreesFromExcel(file: File): Promise<TreeImportResult> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await apiClient.post<TreeImportResult>('/trees/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
+
+export async function downloadTreeImportTemplate(): Promise<Blob> {
+  const { data } = await apiClient.get<Blob>('/trees/import/template', {
+    responseType: 'blob',
+  });
+  return data;
+}
+
+export interface CreateTreePayload {
+  tree_code: string;
+  species_id: number;
+  area_id: number;
+  latitude: number;
+  longitude: number;
+  health_status?: string;
+  planting_year?: number;
+  height_m?: number;
+  trunk_diameter_cm?: number;
+  notes?: string;
+}
+// Bổ sung dòng này để sửa lỗi "fetchAdministrativeAreas"
+export const fetchAdministrativeAreas = fetchAreas;
+
+export async function createTree(payload: CreateTreePayload): Promise<Tree> {
+  const { data } = await apiClient.post<Tree>('/trees', payload);
+  return data;
+}
+
+export async function updateTreeHealth(id: number, healthStatus: string): Promise<Tree> {
+  const { data } = await apiClient.patch<Tree>(`/trees/${id}/health`, {
+    health_status: healthStatus,
+  });
+  return data;
+}
+
+export async function fetchTasksByTreeId(treeId: number): Promise<MaintenanceTask[]> {
+  const { data } = await apiClient.get<MaintenanceTask[]>(`/maintenance/tasks?tree_id=${treeId}`);
+  return data;
+}
+
+export interface PhysicalLog {
+  id: number;
+  tree_id: number;
+  user_id: number;
+  height_m: number | null;
+  trunk_diameter_cm: number | null;
+  canopy_diameter_m: number | null;
+  tilt_degree: number | null;
+  old_values: {
+    height_m?: number;
+    trunk_diameter_cm?: number;
+    canopy_diameter_m?: number;
+    tilt_degree?: number;
+  };
+  new_values: {
+    height_m?: number;
+    trunk_diameter_cm?: number;
+    canopy_diameter_m?: number;
+    tilt_degree?: number;
+  };
+  notes: string | null;
+  measured_at: string;
+}
+
+export interface PhysicalHistoryResponse {
+  data: PhysicalLog[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export async function fetchPhysicalHistory(
+  treeId: number,
+  page: number = 1,
+  limit: number = 10
+): Promise<PhysicalHistoryResponse> {
+  const { data } = await apiClient.get<PhysicalHistoryResponse>(
+    `/trees/${treeId}/physical-history?page=${page}&limit=${limit}`
+  );
+  return data;
+}
+
+export interface UpdatePhysicalPayload {
+  height_m?: number;
+  trunk_diameter_cm?: number;
+  canopy_diameter_m?: number;
+  tilt_degree?: number;
+  notes?: string;
+}
+
+export async function updatePhysicalMeasurements(
+  treeId: number,
+  payload: UpdatePhysicalPayload
+): Promise<{ tree: Tree; log: PhysicalLog }> {
+  const { data } = await apiClient.patch(`/trees/${treeId}/physical`, payload);
+  return data;
+}
+/**
+ * Fetch tree change history from audit logs
+ * @param treeId Tree ID
+ * @returns List of audit log entries for tree updates
+ */
+export async function fetchTreeHistory(treeId: number): Promise<ActivityLog[]> {
+  const { data } = await apiClient.get<ActivityLog[]>(`/trees/${treeId}/history`);
+  return data;
+}
+
+/**
+ * Fetch QR code image as Blob with authentication
+ * @param treeId Tree ID
+ * @returns Blob of QR code image
+ */
+export async function fetchTreeQRCodeBlob(treeId: number): Promise<Blob> {
+  const response = await apiClient.get(`/trees/${treeId}/qr-code`, {
+    responseType: 'blob',
+  });
+  return new Blob([response.data], { type: 'image/png' });
+}
+
+/**
+ * Get QR code image URL for a tree (creates temporary blob URL)
+ * Note: Caller must revoke the URL after use with URL.revokeObjectURL()
+ * @param treeId Tree ID
+ * @returns Promise of temporary blob URL
+ */
+export async function getTreeQRCodeBlobUrl(treeId: number): Promise<string> {
+  const blob = await fetchTreeQRCodeBlob(treeId);
+  return URL.createObjectURL(blob);
+}
+
+/**
+ * Download QR code image for a tree
+ * @param treeId Tree ID
+ * @param filename Optional filename for download
+ */
+export async function downloadTreeQRCode(treeId: number, filename?: string): Promise<void> {
+  const blob = await fetchTreeQRCodeBlob(treeId);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename || `tree-${treeId}-qrcode.png`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Kiểm tra xem mã cây có tồn tại không
+ * @param treeCode Mã cây cần kiểm tra
+ * @param excludeId ID cây cần loại trừ (dùng khi update)
+ * @returns true nếu mã cây đã tồn tại
+ */
+export async function checkTreeCodeExists(
+  treeCode: string,
+  excludeId?: number,
+): Promise<boolean> {
+  const params = excludeId ? `?excludeId=${excludeId}` : '';
+  const { data } = await apiClient.get<{ exists: boolean }>(
+    `/trees/check/tree-code/${encodeURIComponent(treeCode)}${params}`,
+  );
+  return data.exists;
+}
+
+/**
+ * Kiểm tra xem tọa độ có cây nào đã đăng ký không
+ * @param latitude Vĩ độ
+ * @param longitude Kinh độ
+ * @param excludeId ID cây cần loại trừ (dùng khi update)
+ * @returns Thông tin cây nếu tồn tại
+ */
+export async function checkLocationExists(
+  latitude: number,
+  longitude: number,
+  excludeId?: number,
+): Promise<{ exists: boolean; tree?: { id: number; tree_code: string } }> {
+  const params = new URLSearchParams({
+    latitude: latitude.toString(),
+    longitude: longitude.toString(),
+  });
+  if (excludeId) {
+    params.append('excludeId', excludeId.toString());
+  }
+  const { data } = await apiClient.get<{
+    exists: boolean;
+    tree?: { id: number; tree_code: string };
+  }>(`/trees/check/location?${params.toString()}`);
+  return data;
+}
+
+export interface NearbyTree extends Tree {
+  distance: number; // Khoảng cách tính bằng mét
+}
+
+/**
+ * Tìm cây xung quanh vị trí hiện tại
+ * @param latitude Vĩ độ
+ * @param longitude Kinh độ
+ * @param radiusMeters Bán kính tìm kiếm (mét), mặc định 1000m
+ * @returns Danh sách cây xung quanh, sắp xếp theo khoảng cách
+ */
+export async function findTreesNearby(
+  latitude: number,
+  longitude: number,
+  radiusMeters: number = 1000,
+): Promise<NearbyTree[]> {
+  const { data } = await apiClient.get<NearbyTree[]>('/trees/nearby', {
+    params: {
+      latitude,
+      longitude,
+      radius_meters: radiusMeters,
+    },
+  });
+  return data;
+}
+
+export interface TreeLocation {
+  id: number;
+  latitude: number;
+  longitude: number;
+}
+
+/**
+ * Lấy danh sách tọa độ cây (tối ưu cho heatmap)
+ * @param areaId Lọc theo khu vực (tùy chọn)
+ * @param speciesId Lọc theo loài cây (tùy chọn)
+ * @returns Danh sách ID và tọa độ
+ */
+export async function fetchTreeLocations(
+  areaId?: number,
+  speciesId?: number,
+): Promise<TreeLocation[]> {
+  const params = new URLSearchParams();
+  if (areaId) params.append('area_id', areaId.toString());
+  if (speciesId) params.append('species_id', speciesId.toString());
+  
+  const { data } = await apiClient.get<TreeLocation[]>(
+    `/trees/locations${params.toString() ? `?${params.toString()}` : ''}`,
+  );
   return data;
 }

@@ -2,13 +2,36 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { OfflineProvider } from './src/context/OfflineContext';
 import LoginScreen from './src/screens/LoginScreen';
 import TaskListScreen from './src/screens/TaskListScreen';
 import TaskDetailScreen from './src/screens/TaskDetailScreen';
+import TreeHistoryScreen from './src/screens/TreeHistoryScreen';
+import QRScannerScreen from './src/screens/QRScannerScreen';
+import NearbyTreesScreen from './src/screens/NearbyTreesScreen';
 import { ActivityIndicator, View } from 'react-native';
 import { RootStackParamList } from './src/types/navigation';
+import * as Linking from 'expo-linking';
+
+import RegisterTreeScreen from './src/screens/RegisterTreeScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+// Deep linking configuration
+const linking = {
+  prefixes: ['cayxanh://', 'https://cayxanh.danang.vn'],
+  config: {
+    screens: {
+      Login: 'login',
+      TaskList: 'tasks',
+      TaskDetail: 'tasks/:taskId',
+      TreeHistory: 'tree/:treeId',
+      QRScanner: 'scanner',
+      NearbyTrees: 'nearby',
+      RegisterTree: 'register-tree',
+    },
+  },
+};
 
 function AppNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -22,7 +45,7 @@ function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!isAuthenticated ? (
           <Stack.Screen name="Login" component={LoginScreen} />
@@ -30,6 +53,10 @@ function AppNavigator() {
           <>
             <Stack.Screen name="TaskList" component={TaskListScreen} />
             <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
+            <Stack.Screen name="TreeHistory" component={TreeHistoryScreen} />
+            <Stack.Screen name="QRScanner" component={QRScannerScreen} />
+            <Stack.Screen name="NearbyTrees" component={NearbyTreesScreen} />
+            <Stack.Screen name="RegisterTree" component={RegisterTreeScreen} />
           </>
         )}
       </Stack.Navigator>
@@ -40,7 +67,9 @@ function AppNavigator() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppNavigator />
+      <OfflineProvider>
+        <AppNavigator />
+      </OfflineProvider>
     </AuthProvider>
   );
 }

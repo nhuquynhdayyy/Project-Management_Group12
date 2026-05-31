@@ -1,295 +1,351 @@
-import { useEffect, useState } from 'react';
-import {
-  PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  LineChart, Line,
-} from 'recharts';
+import { useEffect, useMemo, useState } from 'react';
+import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts';
+import { fetchAllTasks, fetchOverdueTasks } from '../api/maintenance';
 import { fetchTrees } from '../api/trees';
-import { fetchAllTasks } from '../api/maintenance';
-import type { Tree, MaintenanceTask, HealthStatus } from '../types';
+import { fetchStaffUsers } from '../api/auth';
+import type { HealthStatus, MaintenanceTask, OverdueTask, Tree, DashboardUser } from '../types';
+import CreateTreeForm from '../components/CreateTreeForm';
+import CreateTaskForm from '../components/CreateTaskForm';
+import Modal from '../components/Modal';
+import {
+  DashboardPageFrame,
+  KpiCard,
+  Section,
+  TimeFilterControls,
+  filterTasksByRange,
+  getRangeStart,
+  isDangerTree,
+  normalizeOverdueTask,
+  type TrendDirection,
+  useTimeRange,
+} from './dashboard/dashboardShared';
 
-// ── Colour palette ────────────────────────────────────────────────────────
-const HEALTH_COLORS: Record<HealthStatus, string> = {
-  'Tốt':      '#22c55e',
-  'Yếu':      '#eab308',
-  'Sâu bệnh': '#f97316',
-  'Chết':     '#ef4444',
-};
-
-const BAR_COLOR = '#34d399';
-
-// ── Helpers ───────────────────────────────────────────────────────────────
-function last7Days(): string[] {
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    return d.toISOString().slice(0, 10);
-  });
+function compareTrend(current: number, previous: number): { direction: TrendDirection; value: number } {
+  if (current > previous) return { direction: 'up', value: current - previous };
+  if (current < previous) return { direction: 'down', value: current - previous };
+  return { direction: 'flat', value: 0 };
 }
 
-function formatDate(iso: string): string {
-  const [, m, d] = iso.split('-');
-  return `${d}/${m}`;
+function isInRange(dateValue: string, from: Date, to: Date): boolean {
+  const date = new Date(dateValue);
+  return date >= from && date <= to;
 }
 
-// ── KPI Card ─────────────────────────────────────────────────────────────
-function KpiCard({
-  label,
-  value,
-  sub,
-  accent,
-  icon,
-}: {
-  label: string;
-  value: number | string;
-  sub?: string;
-  accent: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="bg-gray-800 rounded-xl p-5 flex items-start gap-4 border border-gray-700">
-      <div className={`p-2.5 rounded-lg ${accent} shrink-0`}>{icon}</div>
-      <div>
-        <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">{label}</p>
-        <p className="text-3xl font-bold text-white">{value}</p>
-        {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
-      </div>
-    </div>
-  );
+function countTreesCreatedInRange(trees: Tree[], from: Date, to: Date, healthStatus?: HealthStatus): number {
+  return trees.filter((tree) => {
+    const matchesStatus = healthStatus ? tree.health_status === healthStatus : true;
+    return matchesStatus && isInRange(tree.created_at, from, to);
+  }).length;
 }
 
-// ── Section wrapper ───────────────────────────────────────────────────────
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-gray-800 rounded-xl border border-gray-700 p-5">
-      <h3 className="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">
-        {title}
-      </h3>
-      {children}
-    </div>
-  );
+function getHealthyGaugeColor(value: number): string {
+  if (value > 70) return '#22c55e';
+  if (value >= 40) return '#eab308';
+  return '#ef4444';
 }
 
-// ── Custom tooltip ────────────────────────────────────────────────────────
-function ChartTooltip({ active, payload, label }: {
-  active?: boolean;
-  payload?: { name: string; value: number; color: string }[];
-  label?: string;
-}) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs shadow-xl">
-      {label && <p className="text-gray-400 mb-1">{label}</p>}
-      {payload.map((p) => (
-        <p key={p.name} style={{ color: p.color }}>
-          {p.name}: <span className="font-bold text-white">{p.value}</span>
-        </p>
-      ))}
-    </div>
-  );
+function getHealthyStatusLabel(value: number): string {
+  if (value > 70) return 'Tot';
+  if (value >= 40) return 'Can theo doi';
+  return 'Nguy co cao';
 }
 
-// ── Main component ────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const [trees, setTrees] = useState<Tree[]>([]);
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
+  const [overdueTasks, setOverdueTasks] = useState<OverdueTask[]>([]);
+  const [users, setUsers] = useState<DashboardUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const timeRange = useTimeRange();
+
+  // Modal states
+  const [showTreeModal, setShowTreeModal] = useState(false);
+  const [showTaskModal, setShowTaskModal] = useState(false);
 
   useEffect(() => {
-    Promise.all([fetchTrees(), fetchAllTasks()])
-      .then(([t, m]) => {
-        setTrees(t);
-        setTasks(m);
+    Promise.all([fetchTrees(), fetchAllTasks(), fetchOverdueTasks(), fetchStaffUsers()])
+      .then(([treeData, taskData, overdueData, userData]) => {
+        setTrees(treeData);
+        setTasks(taskData);
+        setOverdueTasks(overdueData);
+        setUsers(userData);
       })
-      .catch(() => setError('Không thể tải dữ liệu. Vui lòng thử lại.'))
+      .catch(() => setError('Khong the tai du lieu. Vui long thu lai.'))
       .finally(() => setLoading(false));
   }, []);
 
-  // ── Derived data ─────────────────────────────────────────────────────────
-  const totalTrees = trees.length;
-  const activeTasks = tasks.filter(
-    (t) => t.status === 'Pending' || t.status === 'In_Progress',
-  ).length;
-  const dangerCount = trees.filter(
-    (t) => t.health_status === 'Chết' || t.health_status === 'Sâu bệnh',
-  ).length;
+  // Refresh data after creating tree or task
+  const refreshData = async () => {
+    try {
+      const [treeData, taskData, overdueData] = await Promise.all([
+        fetchTrees(),
+        fetchAllTasks(),
+        fetchOverdueTasks(),
+      ]);
+      setTrees(treeData);
+      setTasks(taskData);
+      setOverdueTasks(overdueData);
+    } catch (err) {
+      console.error('Failed to refresh data:', err);
+    }
+  };
 
-  // Pie: health distribution
-  const healthData = (['Tốt', 'Yếu', 'Sâu bệnh', 'Chết'] as HealthStatus[]).map(
-    (status) => ({
-      name: status,
-      value: trees.filter((t) => t.health_status === status).length,
-    }),
+  // Filter staff users for task assignment
+  const staffUsers = useMemo(
+    () => users.filter((user) => user.roles.some((role) => role.role_name === 'Staff')),
+    [users]
   );
 
-  // Bar: top species by count
-  const speciesMap = new Map<string, number>();
-  for (const tree of trees) {
-    const name = tree.species?.common_name ?? 'Không rõ';
-    speciesMap.set(name, (speciesMap.get(name) ?? 0) + 1);
-  }
-  const speciesData = [...speciesMap.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(([name, count]) => ({ name, count }));
+  const filteredTasks = useMemo(
+    () => filterTasksByRange(tasks, timeRange.rangeStart, timeRange.rangeEnd),
+    [tasks, timeRange.rangeStart, timeRange.rangeEnd],
+  );
 
-  // Line: completed tasks per day over last 7 days
-  const days = last7Days();
-  const completedByDay = days.map((day) => ({
-    date: formatDate(day),
-    completed: tasks.filter(
-      (t) => t.status === 'Completed' && t.completed_at?.slice(0, 10) === day,
-    ).length,
-  }));
-
-  // ── Render ────────────────────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center bg-gray-950">
-        <div className="flex flex-col items-center gap-3">
-          <svg className="animate-spin h-8 w-8 text-green-400" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
-          <span className="text-sm text-gray-400">Đang tải dữ liệu...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex h-full items-center justify-center bg-gray-950">
-        <div className="text-red-400 text-sm">{error}</div>
-      </div>
-    );
-  }
+  const goodTrees = trees.filter((tree) => tree.health_status === 'Tốt').length;
+  const sickTrees = trees.filter((tree) => tree.health_status === 'Sâu bệnh').length;
+  const deadTrees = trees.filter((tree) => tree.health_status === 'Chết').length;
+  const pendingTasks = filteredTasks.filter((task) => task.status === 'Pending').length;
+  const completedTasks = filteredTasks.filter((task) => task.status === 'Completed').length;
+const dangerTrees = trees.filter(isDangerTree);
+  const currentWeekStart = getRangeStart(7);
+  const currentWeekEnd = new Date(`${new Date().toISOString().slice(0, 10)}T23:59:59`);
+  const previousWeekStart = new Date(currentWeekStart);
+  previousWeekStart.setDate(previousWeekStart.getDate() - 7);
+  const previousWeekEnd = new Date(currentWeekStart);
+  previousWeekEnd.setMilliseconds(previousWeekEnd.getMilliseconds() - 1);
+  const previousWeekTasks = filterTasksByRange(tasks, previousWeekStart, previousWeekEnd);
+  const currentWeekTasks = filterTasksByRange(tasks, currentWeekStart, currentWeekEnd);
+  const healthyPercent = trees.length > 0 ? Math.round((goodTrees / trees.length) * 100) : 0;
+  const gaugeColor = getHealthyGaugeColor(healthyPercent);
+  const unhealthyTrees = Math.max(0, trees.length - goodTrees);
+  const healthyDonutData =
+    trees.length > 0
+      ? [
+          { name: 'Cay khoe manh', value: goodTrees, fill: gaugeColor },
+          { name: 'Can theo doi', value: unhealthyTrees, fill: '#374151' },
+        ]
+      : [{ name: 'Chua co du lieu', value: 1, fill: '#374151' }];
+  const healthyStatusLabel = getHealthyStatusLabel(healthyPercent);
+  const overdueRows = overdueTasks
+    .filter((task) => {
+      const scheduled = new Date(task.scheduled_date);
+      return scheduled >= timeRange.rangeStart && scheduled <= timeRange.rangeEnd;
+    })
+    .map(normalizeOverdueTask)
+    .sort((a, b) => (b.overdue_days ?? 0) - (a.overdue_days ?? 0));
 
   return (
-    <div className="h-full overflow-y-auto bg-gray-950 px-6 py-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Tổng quan hệ thống quản lý cây xanh đô thị — Đà Nẵng
-        </p>
+    <DashboardPageFrame
+      title="Tong quan"
+      subtitle="Tong quan he thong quan ly cay xanh do thi - Da Nang"
+      loading={loading}
+      error={error}
+    >
+      {/* Action Buttons */}
+      <div className="flex flex-wrap gap-3 mb-6">
+        <button
+          onClick={() => setShowTreeModal(true)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors shadow-lg shadow-green-600/20"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          Thêm cây mới
+        </button>
+
+        <button
+          onClick={() => setShowTaskModal(true)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/20"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+          </svg>
+          Giao nhiệm vụ
+        </button>
       </div>
 
-      {/* KPI row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <TimeFilterControls {...timeRange} />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4 mb-6">
         <KpiCard
-          label="Tổng số cây"
-          value={totalTrees}
-          sub="Trong toàn hệ thống"
+          label="Tong cay"
+          value={trees.length}
+          sub="So voi tuan truoc"
           accent="bg-green-600/20"
-          icon={
-            <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round"
-                d="M12 3C8 3 5 6.5 5 10c0 2.5 1.3 4.7 3.3 6L8 20h8l-.3-4C17.7 14.7 19 12.5 19 10c0-3.5-3-7-7-7z" />
-            </svg>
-          }
+          icon={<span className="text-green-400">T</span>}
+          trend={compareTrend(
+            countTreesCreatedInRange(trees, currentWeekStart, currentWeekEnd),
+            countTreesCreatedInRange(trees, previousWeekStart, previousWeekEnd),
+          )}
         />
         <KpiCard
-          label="Công việc đang xử lý"
-          value={activeTasks}
-          sub="Pending + In Progress"
-          accent="bg-blue-600/20"
-          icon={
-            <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round"
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-            </svg>
-          }
+          label="Cay tot"
+          value={goodTrees}
+          sub="So voi tuan truoc"
+          accent="bg-emerald-600/20"
+          icon={<span className="text-emerald-400">OK</span>}
+          trend={compareTrend(
+            countTreesCreatedInRange(trees, currentWeekStart, currentWeekEnd, 'Tốt'),
+            countTreesCreatedInRange(trees, previousWeekStart, previousWeekEnd, 'Tốt'),
+          )}
         />
         <KpiCard
-          label="Cảnh báo nguy hiểm"
-          value={dangerCount}
-          sub="Sâu bệnh + Chết"
+          label="Cay benh"
+          value={sickTrees}
+          sub="So voi tuan truoc"
+          accent="bg-orange-600/20"
+          icon={<span className="text-orange-400">B</span>}
+          trend={compareTrend(
+            countTreesCreatedInRange(trees, currentWeekStart, currentWeekEnd, 'Sâu bệnh'),
+countTreesCreatedInRange(trees, previousWeekStart, previousWeekEnd, 'Sâu bệnh'),
+          )}
+        />
+        <KpiCard
+          label="Cay chet"
+          value={deadTrees}
+          sub="So voi tuan truoc"
           accent="bg-red-600/20"
-          icon={
-            <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          }
+          icon={<span className="text-red-400">X</span>}
+          trend={compareTrend(
+            countTreesCreatedInRange(trees, currentWeekStart, currentWeekEnd, 'Chết'),
+            countTreesCreatedInRange(trees, previousWeekStart, previousWeekEnd, 'Chết'),
+          )}
+        />
+        <KpiCard
+          label="Task dang cho"
+          value={pendingTasks}
+          sub="So voi tuan truoc"
+          accent="bg-amber-600/20"
+          icon={<span className="text-amber-300">P</span>}
+          trend={compareTrend(
+            currentWeekTasks.filter((task) => task.status === 'Pending').length,
+            previousWeekTasks.filter((task) => task.status === 'Pending').length,
+          )}
+        />
+        <KpiCard
+          label="Task hoan thanh"
+          value={completedTasks}
+          sub="So voi tuan truoc"
+          accent="bg-blue-600/20"
+          icon={<span className="text-blue-400">C</span>}
+          trend={compareTrend(
+            currentWeekTasks.filter((task) => task.status === 'Completed').length,
+            previousWeekTasks.filter((task) => task.status === 'Completed').length,
+          )}
         />
       </div>
 
-      {/* Charts grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        {/* Pie chart */}
-        <Section title="Phân bố tình trạng sức khỏe">
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie
-                data={healthData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={95}
-                paddingAngle={3}
-                dataKey="value"
-                label={({ percent }) =>
-                  percent && percent > 0.04 ? `${(percent * 100).toFixed(0)}%` : ''
-                }
-                labelLine={false}
-              >
-                {healthData.map((entry) => (
-                  <Cell
-                    key={entry.name}
-                    fill={HEALTH_COLORS[entry.name as HealthStatus]}
-                  />
-                ))}
-              </Pie>
-              <Tooltip content={<ChartTooltip />} />
-              <Legend
-                formatter={(value) => (
-                  <span className="text-xs text-gray-300">{value}</span>
-                )}
-              />
-            </PieChart>
-          </ResponsiveContainer>
+      <Section title="Ty le cay khoe manh">
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 items-center">
+          <div className="relative h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={healthyDonutData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={72}
+                  outerRadius={102}
+                  paddingAngle={trees.length > 0 ? 3 : 0}
+                  dataKey="value"
+                  startAngle={90}
+                  endAngle={-270}
+                >
+                  {healthyDonutData.map((entry) => (
+                    <Cell key={entry.name} fill={entry.fill} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <p className="text-4xl font-bold text-white">{healthyPercent}%</p>
+              <p className="mt-1 text-xs uppercase tracking-wider text-gray-500">{healthyStatusLabel}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-lg bg-gray-900 px-4 py-3 border border-gray-700">
+              <p className="text-xs uppercase tracking-wider text-gray-500">Cay khoe manh</p>
+              <p className="mt-2 text-2xl font-bold text-white">{goodTrees}</p>
+              <div className="mt-3 h-1.5 rounded-full bg-gray-800">
+<div className="h-1.5 rounded-full" style={{ width: `${healthyPercent}%`, backgroundColor: gaugeColor }} />
+              </div>
+            </div>
+            <div className="rounded-lg bg-gray-900 px-4 py-3 border border-gray-700">
+              <p className="text-xs uppercase tracking-wider text-gray-500">Can theo doi</p>
+              <p className="mt-2 text-2xl font-bold text-white">{unhealthyTrees}</p>
+              <p className="mt-3 text-xs text-gray-500">Yeu + sau benh + chet</p>
+            </div>
+            <div className="rounded-lg bg-gray-900 px-4 py-3 border border-gray-700">
+              <p className="text-xs uppercase tracking-wider text-gray-500">Nguong danh gia</p>
+              <p className="mt-2 text-sm font-semibold" style={{ color: gaugeColor }}>
+                {healthyPercent > 70 ? 'Xanh > 70%' : healthyPercent >= 40 ? 'Vang 40-70%' : 'Do < 40%'}
+              </p>
+              <p className="mt-3 text-xs text-gray-500">Tong {trees.length} cay</p>
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+        <Section title="Canh bao cay chet / sau benh">
+          <div className="space-y-2">
+            {dangerTrees.slice(0, 8).map((tree) => (
+              <div key={tree.id} className="flex items-center justify-between rounded-lg bg-gray-900 px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium text-white">{tree.tree_code}</p>
+                  <p className="text-xs text-gray-500">{tree.species?.common_name ?? 'Khong ro'}</p>
+                </div>
+                <span className="text-sm font-semibold text-red-400">{tree.health_status}</span>
+              </div>
+            ))}
+            {dangerTrees.length === 0 && <p className="py-4 text-center text-sm text-gray-500">Khong co canh bao cay.</p>}
+          </div>
         </Section>
 
-        {/* Line chart */}
-        <Section title="Công việc hoàn thành — 7 ngày qua">
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={completedByDay} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 11 }} />
-              <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} allowDecimals={false} />
-              <Tooltip content={<ChartTooltip />} />
-              <Line
-                type="monotone"
-                dataKey="completed"
-                name="Hoàn thành"
-                stroke="#34d399"
-                strokeWidth={2}
-                dot={{ fill: '#34d399', r: 4 }}
-                activeDot={{ r: 6 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+        <Section title="Canh bao task tre">
+          <div className="space-y-2">
+            {overdueRows.slice(0, 8).map((task) => (
+              <div key={task.id} className="flex items-center justify-between rounded-lg bg-gray-900 px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium text-white">{task.tree_name}</p>
+                  <p className="text-xs text-gray-500">{task.staff_name}</p>
+                </div>
+                <span className="text-sm font-semibold text-amber-300">{task.overdue_days ?? 0} ngay</span>
+              </div>
+            ))}
+            {overdueRows.length === 0 && <p className="py-4 text-center text-sm text-gray-500">Khong co task tre.</p>}
+          </div>
         </Section>
       </div>
 
-      {/* Bar chart — full width */}
-      <Section title="Số lượng cây theo loài">
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={speciesData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-            <XAxis
-              dataKey="name"
-              tick={{ fill: '#9ca3af', fontSize: 11 }}
-              interval={0}
-            />
-            <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} allowDecimals={false} />
-            <Tooltip content={<ChartTooltip />} />
-            <Bar dataKey="count" name="Số cây" fill={BAR_COLOR} radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </Section>
-    </div>
+      {/* Create Tree Modal */}
+      <Modal isOpen={showTreeModal} onClose={() => setShowTreeModal(false)}>
+        <CreateTreeForm
+          onSuccess={(tree) => {
+            setShowTreeModal(false);
+            refreshData();
+            // Show success message (you can add a toast notification here)
+            alert(`Đã tạo cây ${tree.tree_code} thành công!`);
+          }}
+          onCancel={() => setShowTreeModal(false)}
+        />
+      </Modal>
+
+      {/* Create Task Modal */}
+      <Modal isOpen={showTaskModal} onClose={() => setShowTaskModal(false)}>
+        <CreateTaskForm
+          staffUsers={staffUsers}
+          onSuccess={() => {
+            setShowTaskModal(false);
+            refreshData();
+            // Show success message (you can add a toast notification here)
+            alert(`Đã tạo nhiệm vụ thành công!`);
+          }}
+          onCancel={() => setShowTaskModal(false)}
+        />
+      </Modal>
+    </DashboardPageFrame>
   );
 }

@@ -4,6 +4,11 @@ import ProtectedRoute from './components/ProtectedRoute';
 import RoleGuard from './components/RoleGuard';
 import AppShell from './components/AppShell';
 import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
+import ProfilePage from './pages/ProfilePage';
 import MapPage from './pages/MapPage';
 import DashboardPage from './pages/DashboardPage';
 import ActivityLogsPage from './pages/ActivityLogsPage';
@@ -11,6 +16,17 @@ import CreateNotificationPage from './pages/CreateNotificationPage';
 import MaintenanceSchedulePage from './pages/MaintenanceSchedulePage';
 import StatsPage from './pages/StatsPage';
 import HelpPage from './pages/HelpPage';
+import TreeStatsPage from './pages/dashboard/TreeStatsPage';
+import TaskStatsPage from './pages/dashboard/TaskStatsPage';
+import TaskManagementPage from './pages/dashboard/TaskManagementPage';
+import TreeManagementPage from './pages/dashboard/TreeManagementPage';
+import TreeHeatmapPage from './pages/dashboard/TreeHeatmapPage';
+import StaffStatsPage from './pages/dashboard/StaffStatsPage';
+import UsersPage from './pages/dashboard/UsersPage';
+import AreasPage from './pages/dashboard/AreasPage';
+import SystemSettingsPage from './pages/dashboard/SystemSettingsPage';
+import NearbyTreesPage from './pages/dashboard/NearbyTreesPage';
+import StaffTasksPage from './pages/dashboard/StaffTasksPage';
 
 function DefaultRedirect() {
   const { user } = useAuth();
@@ -30,15 +46,37 @@ export default function App() {
         <Routes>
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
 
           {/* Protected — all share the AppShell sidebar */}
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
               <Route path="/map" element={<MapPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              
+              {/* Nearby Trees - Staff, Manager, Admin */}
+              <Route element={<RoleGuard allowedRoles={['Admin', 'Manager', 'Staff']} />}>
+                <Route path="/nearby" element={<NearbyTreesPage />} />
+                <Route path="/tasks" element={<StaffTasksPage />} />
+              </Route>
               
               {/* Dashboard - Admin/Manager only */}
               <Route element={<RoleGuard allowedRoles={['Admin', 'Manager']} />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/dashboard/trees" element={<TreeStatsPage />} />
+                <Route path="/dashboard/trees/manage" element={<TreeManagementPage />} />
+                <Route path="/dashboard/trees/heatmap" element={<TreeHeatmapPage />} />
+                <Route path="/dashboard/tasks" element={<TaskStatsPage />} />
+                <Route path="/dashboard/tasks/manage" element={<TaskManagementPage />} />
+                <Route path="/dashboard/staff" element={<StaffStatsPage />} />
+                <Route path="/dashboard/areas" element={<AreasPage />} />
+              </Route>
+              <Route element={<RoleGuard allowedRoles={['Admin']} />}>
+                <Route path="/dashboard/users" element={<UsersPage />} />
+                <Route path="/dashboard/settings" element={<SystemSettingsPage />} />
               </Route>
 
               <Route element={<RoleGuard allowedRoles={['Admin']} />}>

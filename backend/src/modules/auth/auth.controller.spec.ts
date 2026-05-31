@@ -1,6 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
+import { AuthResponseDto } from './dto/auth-response.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 describe('AuthController', () => {
@@ -39,55 +42,83 @@ describe('AuthController', () => {
     jest.clearAllMocks();
   });
 
-  it('should register a new user', async () => {
-    const registerDto = {
-      username: 'test',
-      password: 'Test@123',
-      roles: ['admin'],
-    };
+  // ─────────────────────────────────────────────────────────────────────────────
+  // register
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('register', () => {
+    it('should register a new user and return user without password', async () => {
+      const registerDto: RegisterDto = {
+        username: 'test',
+        password: 'Test@123',
+        email: 'test@example.com',
+        full_name: 'Test User',
+        roles: ['admin'],
+      };
 
-    const mockResult = {
-      id: 1,
-      username: 'test',
-      email: null,
-      full_name: null,
-      roles: [],
-    };
-    mockAuthService.register.mockResolvedValue(mockResult);
+      const mockResult = {
+        id: 1,
+        username: 'test',
+        email: 'test@example.com',
+        full_name: 'Test User',
+        roles: [{ id: 1, role_name: 'admin' }],
+        is_active: true,
+      };
 
-    const result = await controller.register(registerDto);
+      mockAuthService.register.mockResolvedValue(mockResult);
 
-    expect(result).toBeDefined();
-    expect(result.username).toBe('test');
-    expect(mockAuthService.register).toHaveBeenCalled();
+      const result = await controller.register(registerDto as any);
+
+      expect(result).toBeDefined();
+      expect(result.username).toBe('test');
+      expect((result as any).password).toBeUndefined();
+      expect(mockAuthService.register).toHaveBeenCalled();
+    });
   });
 
-  it('should login a user and return access token', async () => {
-    const loginDto = { username: 'test', password: 'Test@123' };
-    const mockResult = {
-      access_token: 'jwt.token.here',
-      id: 1,
-      username: 'test',
-      roles: ['admin'],
-    };
-    mockAuthService.login.mockResolvedValue(mockResult);
+  // ─────────────────────────────────────────────────────────────────────────────
+  // login
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('login', () => {
+    it('should return AuthResponseDto with access_token on valid credentials', async () => {
+      const loginDto: LoginDto = { username: 'test', password: 'Test@123' };
+      const mockAuthResponse: AuthResponseDto = { 
+        access_token: 'jwt.token.here', 
+        id: 1, 
+        username: 'test', 
+        roles: ['admin'] 
+      };
 
-    const result = await controller.login(loginDto);
+      mockAuthService.login.mockResolvedValue(mockAuthResponse);
 
-    expect(result).toBeDefined();
-    expect(result.access_token).toBeDefined();
-    expect(mockAuthService.login).toHaveBeenCalledWith('test', 'Test@123');
+      const result = await controller.login(loginDto);
+
+      expect(result).toBeDefined();
+      expect(result.access_token).toBeDefined();
+      expect(result.username).toBe('test');
+      expect(mockAuthService.login).toHaveBeenCalledWith('test', 'Test@123');
+    });
   });
 
-  it('should get users by role', async () => {
-    const mockUsers = [{ id: 1, username: 'admin', roles: [] }];
-    mockAuthService.getUsersByRole.mockResolvedValue(mockUsers);
+  // ─────────────────────────────────────────────────────────────────────────────
+  // getUsersByRole
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('getUsersByRole', () => {
+    it('should return list of users with the given role', async () => {
+      const mockUsers = [{ id: 1, username: 'admin', roles: [{ role_name: 'admin' }] }];
+      mockAuthService.getUsersByRole.mockResolvedValue(mockUsers);
 
-    const result = await controller.getUsersByRole('admin');
+      const result = await controller.getUsersByRole('admin');
 
-    expect(result).toBeDefined();
-    expect(result.length).toBe(1);
-    expect(mockAuthService.getUsersByRole).toHaveBeenCalledWith('admin');
+      expect(result).toBeDefined();
+      expect(result.length).toBe(1);
+      expect(mockAuthService.getUsersByRole).toHaveBeenCalledWith('admin');
+    });
+
+    it('should return empty array when no users have the given role', async () => {
+      mockAuthService.getUsersByRole.mockResolvedValue([]);
+      const result = await controller.getUsersByRole('NonExistentRole');
+      expect(result).toEqual([]);
+    });
   });
 
   it('should logout the current user', async () => {

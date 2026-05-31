@@ -55,7 +55,10 @@ export class AuditLogController {
   ) {
     // Only users with the 'admin' role may access audit logs
     const roles: string[] = req.user?.roles ?? [];
-    if (!roles.includes('admin')) {
+    // Kiểm tra không phân biệt hoa thường
+    const isAdmin = roles.some(role => role.toLowerCase() === 'admin');
+    
+    if (!isAdmin) {
       throw new ForbiddenException('Admin role required to access audit logs');
     }
 
@@ -106,7 +109,9 @@ export class AuditLogController {
     @Query('to') to?: string,
   ) {
     const roles: string[] = req.user?.roles ?? [];
-    if (!roles.includes('admin')) {
+    const isAdmin = roles.some(role => role.toLowerCase() === 'admin');
+    
+    if (!isAdmin) {
       throw new ForbiddenException('Admin role required to access audit logs');
     }
 

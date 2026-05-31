@@ -11,10 +11,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isUnverified, setIsUnverified] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
+    setIsUnverified(false);
+    setIsLocked(false);
     setLoading(true);
     try {
       const data = await login(username, password);
@@ -24,9 +28,42 @@ export default function LoginPage() {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data
           ?.message ?? 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.';
-      setError(Array.isArray(msg) ? msg.join(', ') : msg);
+      const errorMsg = Array.isArray(msg) ? msg.join(', ') : msg;
+      setError(errorMsg);
+      
+      // Check if error is about unverified email
+      if (errorMsg.includes('chưa được xác minh') || errorMsg.includes('not verified')) {
+        setIsUnverified(true);
+      }
+      
+      // Check if error is about locked account
+      if (errorMsg.includes('bị khóa') || errorMsg.includes('locked')) {
+        setIsLocked(true);
+      }
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleResendVerification() {
+    const email = prompt('Nhập email của bạn để gửi lại link xác minh:');
+    if (!email) return;
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/auth/resend-verification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+
+      if (response.ok) {
+        alert('Email xác minh đã được gửi lại! Vui lòng kiểm tra hộp thư.');
+      } else {
+        const data = await response.json();
+        alert(data.message || 'Không thể gửi lại email. Vui lòng thử lại sau.');
+      }
+    } catch (err) {
+      alert('Không thể gửi lại email. Vui lòng thử lại sau.');
     }
   }
 
@@ -63,8 +100,34 @@ export default function LoginPage() {
           <h2 className="text-xl font-semibold text-gray-800 mb-6">Đăng nhập</h2>
 
           {error && (
-            <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-              {error}
+            <div className={`mb-4 px-4 py-3 rounded-lg border text-sm ${
+              isLocked 
+                ? 'bg-orange-50 border-orange-200 text-orange-800' 
+                : 'bg-red-50 border-red-200 text-red-700'
+            }`}>
+              <div className="flex items-start gap-2">
+                {isLocked && (
+                  <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                  </svg>
+                )}
+                <div className="flex-1">
+                  <p className="font-semibold">{error}</p>
+                  {isLocked && (
+                    <p className="mt-2 text-xs">
+                      Vui lòng liên hệ quản trị viên để được hỗ trợ mở khóa tài khoản.
+                    </p>
+                  )}
+                  {isUnverified && (
+                    <button
+                      onClick={handleResendVerification}
+                      className="block mt-2 text-blue-600 hover:text-blue-700 font-semibold underline"
+                    >
+                      Gửi lại email xác minh →
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -74,7 +137,7 @@ export default function LoginPage() {
                 htmlFor="username"
                 className="block text-sm font-medium text-gray-700 mb-1"
               >
-                Tên đăng nhập
+                Tên đăng nhập hoặc Email
               </label>
               <input
                 id="username"
@@ -83,7 +146,7 @@ export default function LoginPage() {
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="admin"
+                placeholder="admin hoặc admin@example.com"
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-300 text-gray-900 placeholder-gray-400
                            focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent
                            transition text-sm"
@@ -148,6 +211,27 @@ export default function LoginPage() {
             Tài khoản thử nghiệm: <span className="font-mono">admin</span> /{' '}
             <span className="font-mono">Test@123</span>
           </p>
+
+          {/* Links */}
+          <div className="mt-6 space-y-2 text-center">
+            <p className="text-sm text-gray-600">
+              Chưa có tài khoản?{' '}
+              <button
+                onClick={() => navigate('/register')}
+                className="text-green-600 hover:text-green-700 font-semibold"
+              >
+                Đăng ký ngay
+              </button>
+            </p>
+            <p className="text-sm text-gray-600">
+              <button
+                onClick={() => navigate('/forgot-password')}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                Quên mật khẩu?
+              </button>
+            </p>
+          </div>
         </div>
       </div>
     </div>

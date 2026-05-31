@@ -10,6 +10,9 @@ import {
   ScreenSpaceEventType,
   defined,
   Ion,
+  OpenStreetMapImageryProvider,
+  createWorldImageryAsync,
+  createWorldTerrainAsync,
 } from 'cesium';
 // widgets.css is injected automatically by vite-plugin-cesium
 
@@ -48,6 +51,7 @@ export default function MapPage() {
   const [activeFilters, setActiveFilters] = useState<Set<HealthStatus>>(
     new Set(HEALTH_STATUSES),
   );
+  const [useOSM, setUseOSM] = useState(false);
 
   // ── Load trees ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -86,7 +90,12 @@ export default function MapPage() {
       selectionIndicator: false,
     });
 
-    viewer.camera.flyTo({ destination: DEFAULT_VIEW, duration: 1.5 });
+    // Enable 3D terrain
+    createWorldTerrainAsync().then((terrainProvider) => {
+      viewer.terrainProvider = terrainProvider;
+    });
+
+    viewer.camera.flyTo({ destination: LIEN_CHIEU, duration: 1.5 });
     viewerRef.current = viewer;
 
     return () => {
@@ -98,6 +107,26 @@ export default function MapPage() {
       viewerRef.current = null;
     };
   }, []);
+
+  // ── Handle layer switching ───────────────────────────────────────────────
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+
+    const layers = viewer.imageryLayers;
+    layers.removeAll();
+
+    if (useOSM) {
+      const osmProvider = new OpenStreetMapImageryProvider({
+        url: 'https://tile.openstreetmap.org/',
+      });
+      layers.addImageryProvider(osmProvider);
+    } else {
+      createWorldImageryAsync().then((imageryProvider) => {
+        layers.addImageryProvider(imageryProvider);
+      });
+    }
+  }, [useOSM]);
 
   // ── Render markers ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -498,6 +527,33 @@ export default function MapPage() {
             Chưa có cây nào. Hãy chạy seeder.
           </div>
         )}
+        
+        {/* Layer Switcher */}
+        <div className="absolute top-4 right-4 z-10 flex gap-2 bg-gray-900/90 rounded-lg p-1.5 shadow-lg">
+          <button
+            onClick={() => setUseOSM(false)}
+            className={`px-4 py-2 text-sm font-medium rounded transition ${
+              !useOSM
+                ? 'bg-green-600 text-white shadow-md'
+                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+            }`}
+            title="Chuyển sang lớp vệ tinh"
+          >
+            🛰️ Vệ tinh
+          </button>
+          <button
+            onClick={() => setUseOSM(true)}
+            className={`px-4 py-2 text-sm font-medium rounded transition ${
+              useOSM
+                ? 'bg-green-600 text-white shadow-md'
+                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+            }`}
+            title="Chuyển sang bản đồ đường phố"
+          >
+            🗺️ Bản đồ
+          </button>
+        </div>
+        
         <div ref={cesiumContainer} className="w-full h-full" />
       </div>
     </div>

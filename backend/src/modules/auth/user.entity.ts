@@ -33,11 +33,20 @@ export class User {
   @Column({ type: 'varchar', length: 150, nullable: true })
   full_name: string | null;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  avatar_url: string | null;
+
   @Column({ type: 'int', nullable: true })
   assigned_area_id: number;
 
   @Column({ type: 'boolean', default: true })
   is_active: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  is_verified: boolean;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  verification_token: string | null;
 
   @Column({ type: USER_TIMESTAMP_COLUMN, nullable: true })
   last_login_at: Date;
