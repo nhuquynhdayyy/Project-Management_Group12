@@ -57,6 +57,7 @@ const NAV_ITEMS = [
     roles: ['Admin', 'Manager'],
     end: true,
   },
+  { to: '/stats', label: 'Thống kê', roles: ['Admin', 'Manager'], path: 'M11 3v18m-6-8l6-6 4 4 4-4' },
   {
     to: '/dashboard/trees/manage',
     label: 'Quản lý Cây',
@@ -79,6 +80,17 @@ const NAV_ITEMS = [
         <circle cx="12" cy="12" r="2" fill="currentColor" />
         <circle cx="8" cy="10" r="1.5" fill="currentColor" opacity="0.6" />
         <circle cx="16" cy="14" r="1.5" fill="currentColor" opacity="0.6" />
+      </svg>
+    ),
+    roles: ['Admin', 'Manager'],
+  },
+  {
+    to: '/maintenance/schedules',
+    label: 'Lịch bảo trì',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M8 7V3m8 4V3M4 11h16M6 5h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2z" />
       </svg>
     ),
     roles: ['Admin', 'Manager'],
