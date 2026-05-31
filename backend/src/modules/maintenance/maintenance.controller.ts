@@ -30,6 +30,7 @@ import { ExportService } from './export.service';
 import { CreateMaintenanceTaskDto } from './dto/create-maintenance-task.dto';
 import { CompleteTaskDto } from './dto/complete-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
+import { CreateRecurringMaintenanceDto } from './dto/create-recurring-maintenance.dto';
 import { StaffPerformanceDto } from './dto/staff-performance.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -67,6 +68,22 @@ export class MaintenanceController {
   ) {
     const userId = req.user?.userId ?? req.user?.id ?? null;
     return await this.maintenanceService.create(createTaskDto, userId);
+  }
+
+  @Post('schedules')
+  @ApiOperation({ summary: 'Create a recurring maintenance schedule and generate tasks' })
+  @ApiResponse({ status: 201, description: 'Recurring tasks successfully generated.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 404, description: 'Tree, area trees, or user not found.' })
+  async createSchedule(
+    @Body() createScheduleDto: CreateRecurringMaintenanceDto,
+    @Request() req,
+  ) {
+    const userId = req.user?.userId ?? req.user?.id ?? null;
+    return await this.maintenanceService.createRecurringSchedule(
+      createScheduleDto,
+      userId,
+    );
   }
 
   @Get('tasks')

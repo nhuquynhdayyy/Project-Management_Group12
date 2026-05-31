@@ -2,14 +2,75 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchActivityLogs } from '../api/activityLogs';
 import type { ActivityLog, ActivityLogFilters, AuditAction } from '../types';
 
-const ACTIONS: Array<AuditAction | ''> = ['', 'CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'COMPLETE'];
-const ENTITY_TYPES = ['', 'auth', 'tree', 'task'];
+const ACTIONS: Array<AuditAction | ''> = [
+  '',
+  'CREATE',
+  'UPDATE',
+  'DELETE',
+  'LOGIN',
+  'LOGOUT',
+  'LOGIN_FAILED',
+  'CREATE_TASK',
+  'UPDATE_TASK',
+  'CHANGE_STATUS',
+  'COMPLETE',
+  'COMPLETE_TASK',
+  'CREATE_USER',
+  'UPDATE_USER',
+  'DELETE_USER',
+  'CHANGE_ROLE',
+];
+const ENTITY_TYPES = ['', 'auth', 'tree', 'task', 'maintenance', 'maintenance_task', 'user'];
 const DEFAULT_LIMIT = 10;
 
-function formatJson(value: Record<string, unknown> | null): string {
-  if (!value) return '-';
-  return JSON.stringify(value);
-}
+const QUICK_FILTERS = [
+  { value: '', label: 'Tất cả' },
+  { value: 'tree', label: 'Cây xanh' },
+  { value: 'task', label: 'Công việc' },
+  { value: 'user', label: 'Người dùng' },
+  { value: 'auth', label: 'Đăng nhập' },
+];
+
+const ACTION_BADGES: Partial<Record<AuditAction, string>> = {
+  CREATE: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30',
+  CREATE_TASK: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30',
+  CREATE_USER: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30',
+  UPDATE: 'bg-amber-500/15 text-amber-300 ring-amber-500/30',
+  UPDATE_TASK: 'bg-amber-500/15 text-amber-300 ring-amber-500/30',
+  UPDATE_USER: 'bg-amber-500/15 text-amber-300 ring-amber-500/30',
+  DELETE: 'bg-red-500/15 text-red-300 ring-red-500/30',
+  DELETE_USER: 'bg-red-500/15 text-red-300 ring-red-500/30',
+  LOGIN: 'bg-blue-500/15 text-blue-300 ring-blue-500/30',
+  LOGIN_FAILED: 'bg-red-500/15 text-red-300 ring-red-500/30',
+  LOGOUT: 'bg-slate-500/15 text-slate-300 ring-slate-500/30',
+  COMPLETE: 'bg-violet-500/15 text-violet-300 ring-violet-500/30',
+  COMPLETE_TASK: 'bg-violet-500/15 text-violet-300 ring-violet-500/30',
+  CHANGE_STATUS: 'bg-orange-500/15 text-orange-300 ring-orange-500/30',
+  CHANGE_ROLE: 'bg-orange-500/15 text-orange-300 ring-orange-500/30',
+};
+
+const FIELD_LABELS: Record<string, string> = {
+  tree_code: 'Tên cây',
+  name: 'Tên cây',
+  common_name: 'Tên cây',
+  height: 'Chiều cao',
+  height_m: 'Chiều cao',
+  health_status: 'Tình trạng',
+  trunk_diameter_cm: 'Đường kính thân',
+  canopy_diameter_m: 'Đường kính tán',
+  tilt_degree: 'Độ nghiêng',
+  planting_year: 'Năm trồng',
+  species_id: 'Loài cây',
+  area_id: 'Khu vực',
+  task_type: 'Loại bảo trì',
+  status: 'Trạng thái',
+  assigned_to: 'Người phụ trách',
+  scheduled_date: 'Ngày hẹn',
+  completed_at: 'Thời điểm hoàn thành',
+  username: 'Tài khoản',
+  roles: 'Vai trò',
+  role: 'Vai trò',
+};
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat('vi-VN', {
@@ -17,6 +78,86 @@ function formatDate(value: string): string {
     timeStyle: 'medium',
     timeZone: 'Asia/Ho_Chi_Minh',
   }).format(new Date(value));
+}
+
+function getTreeName(log: ActivityLog): string {
+  const source = log.new_value ?? log.old_value ?? {};
+  const name =
+    source.common_name ?? source.tree_name ?? source.name ?? source.tree_code ?? `Cây #${log.entity_id ?? '-'}`;
+  return String(name);
+}
+
+function formatValue(key: string, value: unknown): string {
+  if (value === null || value === undefined || value === '') return '-';
+  if (Array.isArray(value)) return value.map((item) => formatValue(key, item)).join(', ');
+  if (value instanceof Date) return formatDate(value.toISOString());
+  if (typeof value === 'object') {
+    const objectValue = value as Record<string, unknown>;
+    if ('coordinates' in objectValue && Array.isArray(objectValue.coordinates)) {
+      return objectValue.coordinates.join(', ');
+    }
+    return Object.values(objectValue)
+      .map((item) => formatValue(key, item))
+      .filter(Boolean)
+      .join(', ');
+  }
+
+  const text = String(value);
+  if (key === 'height_m') return `${text}m`;
+  if (key === 'trunk_diameter_cm') return `${text}cm`;
+  if (key === 'canopy_diameter_m') return `${text}m`;
+  if (key === 'tilt_degree') return `${text}°`;
+  return text;
+}
+
+function getChangedKeys(
+  oldValue: Record<string, unknown> | null,
+  newValue: Record<string, unknown> | null,
+): string[] {
+  const keys = new Set([...Object.keys(oldValue ?? {}), ...Object.keys(newValue ?? {})]);
+  return [...keys].filter((key) => {
+    const before = oldValue?.[key];
+    const after = newValue?.[key];
+    return JSON.stringify(before) !== JSON.stringify(after);
+  });
+}
+
+function describeActivityLog(log: ActivityLog): string[] {
+  const actor = log.user?.username ?? log.new_value?.username ?? `User #${log.user_id ?? '-'}`;
+
+  if (log.action === 'LOGIN') return [`${actor} đăng nhập hệ thống`];
+  if (log.action === 'LOGOUT') return [`${actor} đăng xuất hệ thống`];
+  if (log.action === 'LOGIN_FAILED') return [`${actor} đăng nhập thất bại`];
+
+  if (log.entity_type === 'tree' && log.action === 'CREATE') {
+    return [`Tạo cây ${getTreeName(log)} (#${log.entity_id ?? '-'})`];
+  }
+
+  if (log.entity_type === 'tree' && log.action === 'DELETE') {
+    return [`Xóa cây ${getTreeName(log)} (#${log.entity_id ?? '-'})`];
+  }
+
+  const changedKeys = getChangedKeys(log.old_value, log.new_value);
+  if (changedKeys.length > 0) {
+    return changedKeys.map((key) => {
+      const label = FIELD_LABELS[key] ?? key;
+      return `${label}: ${formatValue(key, log.old_value?.[key])} → ${formatValue(key, log.new_value?.[key])}`;
+    });
+  }
+
+  if (log.action === 'CREATE_TASK' || (log.entity_type === 'task' && log.action === 'CREATE')) {
+    return [`Tạo lịch bảo trì #${log.entity_id ?? '-'}`];
+  }
+
+  if (log.action === 'COMPLETE_TASK' || log.action === 'COMPLETE') {
+    return [`Hoàn thành bảo trì #${log.entity_id ?? '-'}`];
+  }
+
+  return [`${log.action} ${log.entity_type} #${log.entity_id ?? '-'}`];
+}
+
+function getActionBadgeClass(action: AuditAction): string {
+  return ACTION_BADGES[action] ?? 'bg-slate-500/15 text-slate-300 ring-slate-500/30';
 }
 
 export default function ActivityLogsPage() {
@@ -79,14 +220,38 @@ export default function ActivityLogsPage() {
 
   return (
     <section className="h-full overflow-auto bg-slate-950 text-slate-100">
-      <div className="px-6 py-5 border-b border-slate-800 bg-slate-900/70">
+      <div className="border-b border-slate-800 bg-slate-900/70 px-6 py-5">
         <h1 className="text-xl font-semibold">Nhật ký hoạt động</h1>
         <p className="mt-1 text-sm text-slate-400">
           Theo dõi thao tác quản trị, cây xanh, bảo trì và đăng nhập hệ thống.
         </p>
       </div>
 
-      <div className="px-6 py-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 border-b border-slate-800">
+      <div className="border-b border-slate-800 px-6 py-4">
+        <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Bộ lọc nhanh nhật ký">
+          {QUICK_FILTERS.map((quickFilter) => {
+            const isActive = filters.entityType === quickFilter.value;
+            return (
+              <button
+                key={quickFilter.value || 'all'}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                className={`h-9 rounded-md px-4 text-sm font-medium transition ${
+                  isActive
+                    ? 'border-0 bg-[#16a34a] text-white'
+                    : 'border border-slate-600 bg-transparent text-slate-400 hover:bg-slate-800'
+                }`}
+                onClick={() => updateFilter({ entityType: quickFilter.value })}
+              >
+                {quickFilter.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 border-b border-slate-800 px-6 py-4 md:grid-cols-2 xl:grid-cols-6">
         <label className="text-xs font-medium text-slate-300 xl:col-span-2">
           Tìm kiếm
           <input
@@ -186,19 +351,20 @@ export default function ActivityLogsPage() {
             <tbody className="divide-y divide-slate-800 bg-slate-950">
               {logs.map((log) => (
                 <tr key={log.id} className="hover:bg-slate-900/60">
-                  <td className="px-3 py-3 whitespace-nowrap">{formatDate(log.created_at)}</td>
+                  <td className="whitespace-nowrap px-3 py-3">{formatDate(log.created_at)}</td>
                   <td className="px-3 py-3">{log.user?.username ?? `User #${log.user_id ?? '-'}`}</td>
                   <td className="px-3 py-3">
-                    <span className="rounded bg-green-500/15 px-2 py-1 text-xs font-semibold text-green-300">
+                    <span className={`rounded px-2 py-1 text-xs font-semibold ring-1 ${getActionBadgeClass(log.action)}`}>
                       {log.action}
                     </span>
                   </td>
                   <td className="px-3 py-3">{log.entity_type}</td>
                   <td className="px-3 py-3">{log.entity_id ?? '-'}</td>
-                  <td className="px-3 py-3 max-w-xl">
-                    <div className="grid gap-1 font-mono text-xs text-slate-300">
-                      <span>Before: {formatJson(log.old_value)}</span>
-                      <span>After: {formatJson(log.new_value)}</span>
+                  <td className="max-w-xl px-3 py-3">
+                    <div className="grid gap-1 text-sm text-slate-200">
+                      {describeActivityLog(log).map((line) => (
+                        <span key={line}>{line}</span>
+                      ))}
                     </div>
                   </td>
                 </tr>

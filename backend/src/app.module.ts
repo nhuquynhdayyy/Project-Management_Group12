@@ -8,6 +8,9 @@ import { SeederModule } from './database/seeder/seeder.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { AreasModule } from './modules/areas/areas.module';
 import { AuditLogModule } from './modules/audit-log/auditLog.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { IncidentsModule } from './modules/incidents/incidents.module';
+import { StatsModule } from './modules/stats/stats.module';
 import { CloudStorageService } from './services/cloud-storage.service';
 import { SettingsModule } from './modules/settings/settings.module';
 
@@ -49,6 +52,9 @@ import { SettingsModule } from './modules/settings/settings.module';
     MaintenanceModule,
     AreasModule,
     AuditLogModule,
+    NotificationsModule,
+    IncidentsModule,
+    StatsModule,
     SettingsModule,
   ],
   controllers: [AppController],

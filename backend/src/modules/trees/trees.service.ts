@@ -169,8 +169,55 @@ canopy_diameter_m: createTreeDto.canopy_diameter_m,
     return await this.treeRepository.findOne({ where: { id } });
   }
 
-  async findAll(): Promise<Tree[]> {
-    return await this.treeRepository.find();
+  async findAll(filter: { species?: string; health_status?: string } = {}): Promise<Tree[]> {
+    const query = this.treeRepository
+      .createQueryBuilder('tree')
+      .leftJoinAndSelect('tree.species', 'species')
+      .leftJoinAndSelect('tree.area', 'area');
+
+    if (filter.species) {
+      const speciesTokens = filter.species
+        .split(',')
+        .map((token) => token.trim())
+        .filter(Boolean);
+      const speciesIds = speciesTokens
+        .map((token) => Number(token))
+        .filter((value) => Number.isInteger(value));
+      const speciesNames = speciesTokens
+        .filter((token) => !Number.isInteger(Number(token)))
+        .map((token) => token.toLowerCase());
+
+      if (speciesIds.length > 0 && speciesNames.length > 0) {
+        query.andWhere(
+          '(tree.species_id IN (:...speciesIds) OR LOWER(species.common_name) IN (:...speciesNames))',
+          { speciesIds, speciesNames },
+        );
+      } else if (speciesIds.length > 0) {
+        query.andWhere('tree.species_id IN (:...speciesIds)', { speciesIds });
+      } else if (speciesNames.length > 0) {
+        query.andWhere('LOWER(species.common_name) IN (:...speciesNames)', {
+          speciesNames,
+        });
+      }
+    }
+
+    if (filter.health_status) {
+      if (filter.health_status.toLowerCase() === 'danger') {
+        query.andWhere('tree.health_status IN (:...dangerStatuses)', {
+          dangerStatuses: [HealthStatus.DISEASED, HealthStatus.DEAD],
+        });
+      } else {
+        query.andWhere('tree.health_status = :healthStatus', {
+          healthStatus: filter.health_status,
+        });
+      }
+    }
+
+    return await query.getMany();
+  }
+
+  async findSpecies(): Promise<TreeSpecies[]> {
+    return await this.speciesRepository.find({ order: { common_name: 'ASC' } });
   }
 
   /**

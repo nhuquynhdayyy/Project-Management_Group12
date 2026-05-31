@@ -14,6 +14,7 @@ import { AuditLogService } from '../audit-log/auditLog.service';
 import { AuditLog } from '../../entities/auditLog.entity';
 import { CloudStorageService } from '../../services/cloud-storage.service';
 import { CreateMaintenanceTaskDto } from './dto/create-maintenance-task.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 describe('MaintenanceService', () => {
   let service: MaintenanceService;
@@ -45,6 +46,11 @@ describe('MaintenanceService', () => {
     findAll: jest.fn().mockResolvedValue([]),
   };
 
+// --- Định nghĩa các Mock Service ---
+  const mockNotificationsService = {
+    notifyUsers: jest.fn().mockResolvedValue({ recipient_count: 1 }),
+  };
+
   const mockCloudStorageService = {
     uploadImage: jest.fn(),
     deleteImage: jest.fn(),
@@ -66,12 +72,17 @@ describe('MaintenanceService', () => {
           provide: getRepositoryToken(User),
           useValue: mockUserRepository,
         },
-        // CloudStorageService phục vụ upload ảnh (từ main)
+        // CloudStorageService phục vụ upload ảnh
         {
           provide: CloudStorageService,
           useValue: mockCloudStorageService,
         },
-        // AuditLogService phục vụ truy vết bảo mật (từ phase-3)
+        // NotificationsService phục vụ gửi thông báo
+        {
+          provide: NotificationsService,
+          useValue: mockNotificationsService,
+        },
+        // AuditLogService phục vụ truy vết bảo mật
         // Cung cấp dưới dạng useValue để tránh lỗi vòng lặp DI (circular dependency)
         { 
           provide: AuditLogService, 
@@ -91,6 +102,8 @@ describe('MaintenanceService', () => {
     userRepository = module.get<Repository<User>>(getRepositoryToken(User));
     cloudStorageService = module.get<CloudStorageService>(CloudStorageService);
     auditLogService = module.get<AuditLogService>(AuditLogService);
+ 
+    // notificationsService = module.get<NotificationsService>(NotificationsService);
   });
 
   afterEach(() => {

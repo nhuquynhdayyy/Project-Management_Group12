@@ -21,6 +21,7 @@ describe('MaintenanceController', () => {
     findById: jest.fn(),
     updateStatus: jest.fn(),
     completeTask: jest.fn(),
+    createRecurringSchedule: jest.fn(),
     getTasksForExport: jest.fn(),
   };
 

@@ -70,10 +70,36 @@ export class TreesController {
 
   @Get()
   @ApiOperation({ summary: 'Get all trees' })
+  @ApiQuery({
+    name: 'species',
+    required: false,
+    type: String,
+    description: 'Comma-separated species ids or common names.',
+  })
+  @ApiQuery({
+    name: 'health_status',
+    required: false,
+    type: String,
+    description: 'Specific health status, or danger for diseased/dead trees.',
+  })
   @ApiResponse({ status: 200, description: 'List of all trees.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  async findAll() {
-    return await this.treesService.findAll();
+  async findAll(
+    @Query('species') species?: string,
+    @Query('health_status') healthStatus?: string,
+  ) {
+    return await this.treesService.findAll({
+      species,
+      health_status: healthStatus,
+    });
+  }
+
+  @Get('species')
+  @ApiOperation({ summary: 'Get all tree species' })
+  @ApiResponse({ status: 200, description: 'List of all species.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async findSpecies() {
+    return await this.treesService.findSpecies();
   }
 
   @Get('locations')

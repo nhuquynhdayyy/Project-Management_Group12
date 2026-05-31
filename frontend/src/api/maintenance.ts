@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { MaintenanceTask, OverdueTask, StaffPerformance, CreateMaintenanceTaskPayload } from '../types';
+import type { MaintenanceTask, OverdueTask, StaffPerformance, CreateMaintenanceTaskPayload, CreateRecurringMaintenancePayload, } from '../types';
 
 // Export type alias for backward compatibility
 export type CreateTaskPayload = CreateMaintenanceTaskPayload;
@@ -12,6 +12,15 @@ export async function fetchAllTasks(): Promise<MaintenanceTask[]> {
   return data;
 }
 
+export async function createRecurringMaintenanceSchedule(
+  payload: CreateRecurringMaintenancePayload,
+): Promise<{ created: number; tasks: MaintenanceTask[] }> {
+  const { data } = await apiClient.post<{ created: number; tasks: MaintenanceTask[] }>(
+    '/maintenance/schedules',
+    payload,
+  );
+  return data;
+}
 // Tạo bí danh fetchTasks để các component cũ không bị lỗi
 export const fetchTasks = fetchAllTasks;
 
