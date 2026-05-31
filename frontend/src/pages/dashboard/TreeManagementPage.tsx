@@ -158,7 +158,7 @@ function TreeDetailModal({
   
   // Physical history state
   const [physicalHistory, setPhysicalHistory] = useState<any[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadingPhysicalHistory, setLoadingPhysicalHistory] = useState(false);
   const [historyPage, setHistoryPage] = useState(1);
   const [historyTotal, setHistoryTotal] = useState(0);
 
@@ -175,7 +175,7 @@ function TreeDetailModal({
   // Load physical history when tab is active
   useEffect(() => {
     if (activeTab === 'physical') {
-      setLoadingHistory(true);
+      setLoadingPhysicalHistory(true);
       fetchPhysicalHistory(tree.id, historyPage, 10)
         .then((response) => {
           setPhysicalHistory(response.data);
@@ -185,7 +185,7 @@ function TreeDetailModal({
           console.error('Failed to fetch physical history:', error);
         })
         .finally(() => {
-          setLoadingHistory(false);
+          setLoadingPhysicalHistory(false);
         });
     }
   }, [activeTab, tree.id, historyPage]);
@@ -654,7 +654,7 @@ function TreeDetailModal({
               </div>
 
               {/* Bảng lịch sử đo đạc */}
-              {loadingHistory ? (
+              {loadingPhysicalHistory ? (
                 <p className="text-sm text-gray-500 italic text-center py-8">Đang tải...</p>
               ) : physicalHistory.length === 0 ? (
                 <p className="text-sm text-gray-500 italic text-center py-8">Chưa có lịch sử đo đạc</p>
@@ -759,8 +759,6 @@ function TreeDetailModal({
                   {downloadingQR ? 'Đang tải...' : '💾 Tải mã QR (PNG)'}
                 </button>
               </div>
-            </div>
-          )}
             </div>
           )}
         </div>

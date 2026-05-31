@@ -113,7 +113,7 @@ const NAV_ITEMS = [
   },
   {
     to: '/dashboard/areas',
-    label: '📍 Quản lý Khu vực',
+    label: 'Quản lý Khu vực',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round"

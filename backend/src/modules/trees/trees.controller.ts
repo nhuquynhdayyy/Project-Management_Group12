@@ -44,7 +44,6 @@ const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreads
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AuditLogService } from '../audit-log/auditLog.service';
 import { AuditAction } from '../../entities/auditLog.entity';
-import type { Response } from 'express';
 
 @ApiTags('trees')
 @ApiBearerAuth()

@@ -6,7 +6,7 @@
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Tree } from '../../entities/tree.entity';
+import { Tree, HealthStatus } from '../../entities/tree.entity';
 import { TreeSpecies } from '../../entities/tree-species.entity';
 import { AdministrativeArea } from '../../entities/administrative-area.entity';
 import { TreePhysicalLog } from '../../entities/tree-physical-log.entity';
@@ -332,6 +332,10 @@ canopy_diameter_m: createTreeDto.canopy_diameter_m,
     return updated;
   }
 
+  private async updateHealthStatusInternal(treeId: number, status: string): Promise<void> {
+    await this.treeRepository.update(treeId, { health_status: status as HealthStatus });
+  }
+
   /**
    * Generate QR Code for a tree
    * @param id Tree ID
@@ -569,7 +573,7 @@ canopy_diameter_m: createTreeDto.canopy_diameter_m,
     if (action.type === 'health_update') {
       const healthStatus = action.data.health_status ?? action.data.healthStatus;
       if (!healthStatus) throw new BadRequestException('health_status is required');
-      await this.updateHealthStatus(action.treeId, healthStatus);
+      await this.updateHealthStatusInternal(action.treeId, healthStatus);
     } else if (action.type === 'physical_update') {
       await this.updatePhysical(action.treeId, userId, action.data as UpdatePhysicalDto);
     } else if (action.type === 'task_complete') {
@@ -604,8 +608,17 @@ canopy_diameter_m: createTreeDto.canopy_diameter_m,
     };
   }
 
-  // Hàm bổ sung cho phần đồng bộ health_status
-  private async updateHealthStatus(treeId: number, status: HealthStatus): Promise<void> {
-    await this.treeRepository.update(treeId, { health_status: status });
+  private getLatitude(tree: Tree): number {
+    if (typeof tree.location === 'string') {
+      throw new BadRequestException('Invalid location format');
+    }
+    return tree.location.coordinates[1];
+  }
+
+  private getLongitude(tree: Tree): number {
+    if (typeof tree.location === 'string') {
+      throw new BadRequestException('Invalid location format');
+    }
+    return tree.location.coordinates[0];
   }
 }

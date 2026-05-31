@@ -115,8 +115,9 @@ export class MailService {
 
       this.logger.log(`Verification email sent to ${to}`);
     } catch (error) {
-      this.logger.error(`Failed to send verification email to ${to}`, error);
-      throw error;
+      this.logger.error(`Failed to send verification email to ${to}`);
+      this.logger.error(error);
+      // Don't throw - email is optional feature
     }
   }
 
@@ -216,8 +217,9 @@ export class MailService {
 
       this.logger.log(`Welcome email sent to ${to}`);
     } catch (error) {
-      this.logger.error(`Failed to send welcome email to ${to}`, error);
-      throw error;
+      this.logger.error(`Failed to send welcome email to ${to}`);
+      this.logger.error(error);
+      // Don't throw - email is optional feature
     }
   }
 
@@ -324,8 +326,9 @@ export class MailService {
 
       this.logger.log(`Account locked email sent to ${to}`);
     } catch (error) {
-      this.logger.error(`Failed to send account locked email to ${to}`, error);
-      throw error;
+      this.logger.error(`Failed to send account locked email to ${to}`);
+      this.logger.error(error);
+      // Don't throw - email is optional feature
     }
   }
 
@@ -424,8 +427,9 @@ export class MailService {
 
       this.logger.log(`Account unlocked email sent to ${to}`);
     } catch (error) {
-      this.logger.error(`Failed to send account unlocked email to ${to}`, error);
-      throw error;
+      this.logger.error(`Failed to send account unlocked email to ${to}`);
+      this.logger.error(error);
+      // Don't throw - email is optional feature
     }
   }
 
@@ -534,8 +538,9 @@ export class MailService {
 
       this.logger.log(`Password reset email sent to ${to}`);
     } catch (error) {
-      this.logger.error(`Failed to send password reset email to ${to}`, error);
-      throw error;
+      this.logger.error(`Failed to send password reset email to ${to}`);
+      this.logger.error(error);
+      // Don't throw - email is optional feature
     }
   }
 }
