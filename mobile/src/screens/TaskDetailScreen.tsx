@@ -16,7 +16,7 @@ import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { completeTask, getTaskById } from '../api/maintenance';
 import type { MaintenanceTask } from '../api/maintenance';
-import { getTreeById, updateHealthStatus, updatePhysicalMeasurements } from '../api/trees';
+import { getTreeById, updateTreeHealth, updatePhysicalMeasurements } from '../api/trees';
 import type { Tree } from '../api/trees';
 import NetworkStatusIndicator from '../components/NetworkStatusIndicator';
 import OfflineBanner from '../components/OfflineBanner';
@@ -422,8 +422,8 @@ if (trunkDiameter !== undefined && (isNaN(trunkDiameter) || trunkDiameter <= 0))
         return;
       }
 
-      const updatedTree = await updateHealthStatus(treeDetails.id, healthStatus);
-setTreeDetails(updatedTree);
+      const updatedTree = await updateTreeHealth(treeDetails.id, healthStatus);
+      setTreeDetails(updatedTree);
       await saveCachedTreeDetails(updatedTree);
       Alert.alert('Thành công', 'Đã cập nhật tình trạng cây');
     } catch (error: any) {

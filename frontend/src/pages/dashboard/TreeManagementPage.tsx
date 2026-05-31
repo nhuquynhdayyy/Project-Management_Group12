@@ -434,7 +434,7 @@ function TreeDetailModal({
             onClick={() => setActiveTab('physical')}
             className={`px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'physical' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}
           >
-            📏 Lịch sử đo đạc
+            Lịch sử đo đạc
           </button>
           <button
             onClick={() => setActiveTab('history')}
@@ -571,7 +571,7 @@ function TreeDetailModal({
               {/* Form cập nhật chỉ số - Chỉ cho Admin/Manager */}
               <div className="bg-gray-900 rounded-lg p-4 mb-4">
                 <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                  ✏️ Cập nhật chỉ số vật lý
+                  Cập nhật chỉ số vật lý
                 </h4>
                 <p className="text-xs text-gray-500 mb-3">
                   Nhập các chỉ số đo đạc mới (chỉ cần nhập những chỉ số thay đổi)

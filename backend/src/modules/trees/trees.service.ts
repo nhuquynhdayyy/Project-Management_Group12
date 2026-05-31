@@ -316,7 +316,7 @@ canopy_diameter_m: createTreeDto.canopy_diameter_m,
     if (!tree) throw new NotFoundException('Tree not found');
     
     const oldValue = this.toAuditValue(tree);
-    tree.health_status = healthStatus as any;
+    tree.health_status = healthStatus as HealthStatus;
     const updated = await this.treeRepository.save(tree);
     
     // Ghi audit log để lưu lịch sử thay đổi

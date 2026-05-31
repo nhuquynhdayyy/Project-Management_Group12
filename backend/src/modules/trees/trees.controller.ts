@@ -313,11 +313,11 @@ export class TreesController {
 
   @Patch(':id/health')
   @UseGuards(RolesGuard)
-  @Roles('Admin', 'Manager')
-  @ApiOperation({ summary: 'Update tree health status (Admin/Manager only)' })
+  @Roles('Admin', 'Manager', 'Staff')
+  @ApiOperation({ summary: 'Update tree health status (Admin/Manager/Staff)' })
   @ApiResponse({ status: 200, description: 'Health status updated.' })
   @ApiResponse({ status: 404, description: 'Tree not found.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. Admin or Manager role required.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Staff role or higher required.' })
   async updateHealth(
     @Param('id') id: string,
     @Body('health_status') healthStatus: string,
