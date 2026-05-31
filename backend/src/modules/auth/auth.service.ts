@@ -13,6 +13,8 @@ import { MailService } from '../mail/mail.service';
 import { StorageService } from '../storage/storage.service';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
+import { AuditLogService } from '../audit-log/auditLog.service';
+import { AuditAction } from '../../entities/auditLog.entity';
 
 @Injectable()
 export class AuthService {
@@ -24,12 +26,16 @@ export class AuthService {
     @InjectRepository(PasswordResetToken)
     private passwordResetTokenRepository: Repository<PasswordResetToken>,
     private jwtService: JwtService,
-    private mailService: MailService,
-    private storageService: StorageService,
+    private readonly mailService: MailService,
+    private readonly storageService: StorageService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
-  async register(user: User, roleNames: string[]): Promise<{ message: string; user: Omit<User, 'password'> }> {
-    // Check if username already exists
+  async register(
+    user: User, 
+    roleNames: string[]
+  ): Promise<{ message: string; user: Omit<User, 'password'> }> {
+
     const existingUsername = await this.usersRepository.findOne({
       where: { username: user.username },
     });
@@ -37,7 +43,6 @@ export class AuthService {
       throw new BadRequestException('Username already exists');
     }
 
-    // Check if email already exists
     if (user.email) {
       const existingEmail = await this.usersRepository.findOne({
         where: { email: user.email },
@@ -47,7 +52,6 @@ export class AuthService {
       }
     }
 
-    // Validate password length
     if (user.password.length < 6) {
       throw new BadRequestException('Password must be at least 6 characters');
     }
@@ -104,22 +108,53 @@ export class AuthService {
     });
 
     if (!user) {
+      this.auditLogService
+        .log(null, AuditAction.CREATE, 'auth', null, null, {
+          action: 'login_failed',
+          reason: 'user_not_found',
+          username,
+        })
+        .catch(() => {});
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Check if user is active
+    // 1. Kiểm tra tài khoản bị khóa
     if (!user.is_active) {
+      // Phải gọi log TRƯỚC KHI throw
+      this.auditLogService
+        .log(user.id, AuditAction.CREATE, 'auth', null, null, {
+          action: 'login_failed',
+          reason: 'account_locked', // Hoặc 'account_inactive'
+          username,
+        })
+        .catch(() => {});
+      
       throw new UnauthorizedException('Tài khoản của bạn đã bị khóa. Vui lòng liên hệ Admin để được hỗ trợ.');
     }
 
-    // Check if email is verified
+    // 2. Kiểm tra email chưa xác minh
     if (!user.is_verified) {
+      // Phải gọi log TRƯỚC KHI throw
+      this.auditLogService
+        .log(user.id, AuditAction.CREATE, 'auth', null, null, {
+          action: 'login_failed',
+          reason: 'email_not_verified',
+          username,
+        })
+        .catch(() => {});
+
       throw new UnauthorizedException('Tài khoản chưa được xác minh. Kiểm tra email của bạn.');
     }
 
-    // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
+      this.auditLogService
+        .log(user.id, AuditAction.CREATE, 'auth', null, null, {
+          action: 'login_failed',
+          reason: 'invalid_password',
+          username,
+        })
+        .catch(() => {});
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -128,7 +163,7 @@ export class AuthService {
       last_login_at: new Date(),
     });
 
-    // Extract role names for JWT payload
+    // Extract role names for JWT payload (keep original case for frontend matching)
     const roleNames = user.roles.map((role) => role.role_name);
 
     // Create JWT payload with roles array
@@ -136,8 +171,16 @@ export class AuthService {
       sub: user.id,
       userId: user.id,
       username: user.username,
-      roles: roleNames, // Array of role names
+      roles: roleNames, // Array of normalized role names
     };
+
+    // Fire-and-forget successful login log
+    this.auditLogService
+      .log(user.id, AuditAction.LOGIN, 'auth', null, null, {
+        username,
+        roles: roleNames,
+      })
+      .catch(() => {});
 
     return {
       access_token: this.jwtService.sign(payload),
@@ -153,6 +196,19 @@ export class AuthService {
       where: { id: payload.sub },
 relations: ['roles'],
     });
+  }
+
+  async logout(userId: number, username?: string): Promise<void> {
+    await this.auditLogService.log(
+      userId,
+      AuditAction.LOGOUT,
+      'auth',
+      null,
+      null,
+      {
+        username,
+      },
+    );
   }
 
   async getUsersByRole(roleName: string): Promise<Omit<User, 'password'>[]> {

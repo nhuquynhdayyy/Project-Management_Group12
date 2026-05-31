@@ -14,8 +14,21 @@ const NAV_ITEMS = [
     roles: ['Admin', 'Manager', 'Staff'], // All roles can see map
   },
   {
+    to: '/nearby',
+    label: 'Tìm cây xung quanh',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    ),
+    roles: ['Admin', 'Manager', 'Staff'], // All roles can use nearby search
+  },
+  {
     to: '/dashboard',
-    label: '📊 Tổng quan',
+    label: 'Tổng quan',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -27,7 +40,7 @@ const NAV_ITEMS = [
   },
   {
     to: '/dashboard/trees',
-    label: '🌳 Thống kê Cây',
+    label: 'Thống kê Cây',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -39,7 +52,7 @@ const NAV_ITEMS = [
   },
   {
     to: '/dashboard/trees/manage',
-    label: '🌿 Quản lý Cây',
+    label: 'Quản lý Cây',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -50,8 +63,22 @@ const NAV_ITEMS = [
     roles: ['Admin', 'Manager'],
   },
   {
+    to: '/dashboard/trees/heatmap',
+    label: 'Bản đồ nhiệt',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+        <circle cx="12" cy="12" r="2" fill="currentColor" />
+        <circle cx="8" cy="10" r="1.5" fill="currentColor" opacity="0.6" />
+        <circle cx="16" cy="14" r="1.5" fill="currentColor" opacity="0.6" />
+      </svg>
+    ),
+    roles: ['Admin', 'Manager'],
+  },
+  {
     to: '/dashboard/tasks',
-    label: '🔧 Thống kê Bảo trì',
+    label: 'Thống kê Bảo trì',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -64,7 +91,7 @@ const NAV_ITEMS = [
   },
   {
     to: '/dashboard/tasks/manage',
-    label: '📋 Quản lý Task',
+    label: 'Quản lý Task',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -75,7 +102,7 @@ const NAV_ITEMS = [
   },
   {
     to: '/dashboard/staff',
-    label: '👷 Hiệu suất Nhân viên',
+    label: 'Hiệu suất Nhân viên',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -99,7 +126,7 @@ const NAV_ITEMS = [
   },
   {
     to: '/dashboard/users',
-    label: '👥 Quản lý Users',
+    label: 'Quản lý Users',
 icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -110,14 +137,42 @@ icon: (
     ),
     roles: ['Admin'],
   },
+  {
+    to: '/dashboard/settings',
+    label: 'Cấu hình hệ thống',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.607 2.296.07 2.572-1.065z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    ),
+    roles: ['Admin'],
+  },
+  {
+    to: '/activity-logs',
+    label: 'Nhật ký hoạt động',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5l5 5v11a2 2 0 01-2 2z" />
+      </svg>
+    ),
+    roles: ['Admin'],
+  },
 ];
+
+function hasAnyRole(userRoles: string[] | undefined, allowedRoles: string[]) {
+  const normalizedAllowedRoles = allowedRoles.map(role => role.toLowerCase());
+  return userRoles?.some(role => normalizedAllowedRoles.includes(role.toLowerCase())) ?? false;
+}
 
 export default function AppShell() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
 
-  function handleLogout() {
-    signOut();
+  async function handleLogout() {
+    await signOut();
     navigate('/login', { replace: true });
   }
 
@@ -141,9 +196,7 @@ export default function AppShell() {
 
         {/* Nav links */}
         <div className="flex-1 px-2 py-4 space-y-1">
-          {NAV_ITEMS.filter(item => 
-            user?.roles.some(role => item.roles.includes(role))
-          ).map(({ to, label, icon, end }) => (
+          {NAV_ITEMS.filter(item => hasAnyRole(user?.roles, item.roles)).map(({ to, label, icon, end }) => (
             <NavLink
               key={to}
               to={to}

@@ -9,14 +9,21 @@ export async function login(username: string, password: string): Promise<LoginRe
   return data;
 }
 
+export async function logout(): Promise<void> {
+  await apiClient.post('/auth/logout');
+}
 export async function fetchUsers(): Promise<DashboardUser[]> {
   const { data } = await apiClient.get<DashboardUser[]>('/auth/users');
   return data;
 }
 
-export async function fetchStaffUsers(): Promise<DashboardUser[]> {
-  const { data } = await apiClient.get<DashboardUser[]>('/auth/staff');
+export async function fetchUsersByRole(role: string): Promise<DashboardUser[]> {
+  const { data } = await apiClient.post<DashboardUser[]>('/auth/users/by-role', { role });
   return data;
+}
+
+export async function fetchStaffUsers(): Promise<DashboardUser[]> {
+  return fetchUsersByRole('Staff');
 }
 
 export async function registerUser(payload: RegisterUserPayload): Promise<DashboardUser> {

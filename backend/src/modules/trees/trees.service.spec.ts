@@ -11,6 +11,8 @@ import { CreateTreeDto } from './dto/create-tree.dto';
 import { FindTreesNearbyDto } from './dto/find-trees-nearby.dto';
 import { UpdatePhysicalDto } from './dto/update-physical.dto';
 import { PhysicalHistoryQueryDto } from './dto/physical-history-query.dto';
+import { AuditLogService } from '../audit-log/auditLog.service';
+import { AuditLog } from '../../entities/auditLog.entity';
 
 describe('TreesService', () => {
   let service: TreesService;
@@ -19,12 +21,14 @@ describe('TreesService', () => {
   let areaRepository: Repository<AdministrativeArea>;
   let physicalLogRepository: Repository<TreePhysicalLog>;
   let taskRepository: Repository<MaintenanceTask>;
+  let auditLogService: AuditLogService;
 
   const mockTreeRepository = {
     create: jest.fn(),
     save: jest.fn(),
     findOne: jest.fn(),
     find: jest.fn(),
+    remove: jest.fn(),
     createQueryBuilder: jest.fn(),
   };
 
@@ -45,6 +49,11 @@ describe('TreesService', () => {
   const mockTaskRepository = {
     findOne: jest.fn(),
     save: jest.fn(),
+  };
+  
+  const mockAuditLogService = {
+    log: jest.fn().mockResolvedValue(undefined),
+    findAll: jest.fn().mockResolvedValue([]),
   };
 
   beforeEach(async () => {
@@ -71,6 +80,9 @@ describe('TreesService', () => {
           provide: getRepositoryToken(MaintenanceTask),
           useValue: mockTaskRepository,
         },
+        { provide: AuditLogService, useValue: mockAuditLogService },
+        // Satisfy AuditLogService's @InjectRepository(AuditLog) metadata scan
+        { provide: getRepositoryToken(AuditLog), useValue: {} },
       ],
     }).compile();
 
@@ -136,8 +148,12 @@ it('should create a tree with valid data', async () => {
       // Assert
       expect(result).toBeDefined();
       expect(result.tree_code).toBe('TREE001');
-      expect(mockSpeciesRepository.findOne).toHaveBeenCalledWith({ where: { id: 1 } });
-      expect(mockAreaRepository.findOne).toHaveBeenCalledWith({ where: { id: 1 } });
+      expect(mockSpeciesRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 1 },
+      });
+      expect(mockAreaRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 1 },
+      });
       expect(mockTreeRepository.save).toHaveBeenCalled();
     });
 
@@ -167,7 +183,9 @@ it('should create a tree with valid data', async () => {
       mockSpeciesRepository.findOne.mockResolvedValue(null);
 
       // Act & Assert
-      await expect(service.create(createTreeDto)).rejects.toThrow('Species not found');
+      await expect(service.create(createTreeDto)).rejects.toThrow(
+        'Species not found',
+      );
     });
 
     it('should fail if area does not exist', async () => {
@@ -185,7 +203,9 @@ it('should create a tree with valid data', async () => {
       mockAreaRepository.findOne.mockResolvedValue(null);
 
       // Act & Assert
-      await expect(service.create(createTreeDto)).rejects.toThrow('Area not found');
+      await expect(service.create(createTreeDto)).rejects.toThrow(
+        'Area not found',
+      );
     });
   });
 
@@ -230,7 +250,9 @@ it('should find trees within radius', async () => {
       // Assert
       expect(result).toBeDefined();
       expect(result.length).toBe(2);
-      expect(mockTreeRepository.createQueryBuilder).toHaveBeenCalledWith('tree');
+      expect(mockTreeRepository.createQueryBuilder).toHaveBeenCalledWith(
+        'tree',
+      );
       expect(mockQueryBuilder.where).toHaveBeenCalled();
       expect(mockQueryBuilder.getRawMany).toHaveBeenCalled();
     });
@@ -314,8 +336,11 @@ it('should find trees within radius', async () => {
 
       // Assert
       expect(result).toBeDefined();
-      expect(result.id).toBe(1);
-      expect(mockTreeRepository.findOne).toHaveBeenCalledWith({ where: { id: 1 } });
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe(1);
+      expect(mockTreeRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 1 },
+      });
     });
 
     it('should return null when tree not found', async () => {
@@ -400,7 +425,7 @@ it('should find trees within radius', async () => {
           tilt_degree: 5,
         },
         notes: 'Regular measurement',
-measured_at: new Date(),
+        measured_at: new Date(),
       };
 
       mockTreeRepository.findOne.mockResolvedValue(mockTree);
@@ -498,7 +523,7 @@ measured_at: new Date(),
   });
 
   describe('getPhysicalHistory', () => {
-it('should return paginated physical history', async () => {
+  it('should return paginated physical history', async () => {
       // Arrange
       const treeId = 1;
       const query: PhysicalHistoryQueryDto = {
@@ -611,7 +636,7 @@ it('should return paginated physical history', async () => {
       expect(mockPhysicalLogRepository.findAndCount).toHaveBeenCalledWith({
         where: { tree_id: treeId },
         order: { measured_at: 'DESC' },
-skip: 0,
+        skip: 0,
         take: 10,
       });
     });
@@ -747,6 +772,71 @@ skip: 0,
       expect(result.errors).toHaveLength(0);
       expect(mockTreeRepository.save).toHaveBeenCalledTimes(2);
       expect(mockPhysicalLogRepository.save).toHaveBeenCalledTimes(1);
+
+  describe('update', () => {
+    it('should update a tree and write an UPDATE audit log with old and new values', async () => {
+      const existingTree = {
+        id: 1,
+        tree_code: 'TREE001',
+        species_id: 1,
+        area_id: 1,
+        health_status: HealthStatus.GOOD,
+        location: { type: 'Point', coordinates: [105.8542, 21.0285] },
+      };
+      const savedTree = {
+        ...existingTree,
+        health_status: HealthStatus.WEAK,
+        height_m: 7,
+      };
+
+      mockTreeRepository.findOne.mockResolvedValue(existingTree);
+      mockTreeRepository.save.mockResolvedValue(savedTree);
+
+      const result = await service.update(
+        1,
+        { health_status: HealthStatus.WEAK, height_m: 7 },
+        9,
+      );
+
+      expect(result.health_status).toBe(HealthStatus.WEAK);
+      expect(mockAuditLogService.log).toHaveBeenCalledWith(
+        9,
+        'UPDATE',
+        'tree',
+        1,
+        expect.objectContaining({ health_status: HealthStatus.GOOD }),
+        expect.objectContaining({
+          health_status: HealthStatus.WEAK,
+          height_m: 7,
+        }),
+      );
+    });
+  });
+
+  describe('delete', () => {
+    it('should delete a tree and write a DELETE audit log with the previous value', async () => {
+      const existingTree = {
+        id: 1,
+        tree_code: 'TREE001',
+        species_id: 1,
+        area_id: 1,
+        health_status: HealthStatus.GOOD,
+      };
+
+      mockTreeRepository.findOne.mockResolvedValue(existingTree);
+      mockTreeRepository.remove.mockResolvedValue(existingTree);
+
+      await service.delete(1, 9);
+
+      expect(mockTreeRepository.remove).toHaveBeenCalledWith(existingTree);
+      expect(mockAuditLogService.log).toHaveBeenCalledWith(
+        9,
+        'DELETE',
+        'tree',
+        1,
+        expect.objectContaining({ tree_code: 'TREE001' }),
+        null,
+      );
     });
   });
 });

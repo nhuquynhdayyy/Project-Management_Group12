@@ -1,29 +1,53 @@
 import apiClient from './client';
-import type { MaintenanceTask, OverdueTask, StaffPerformance } from '../types';
+import type { MaintenanceTask, OverdueTask, StaffPerformance, CreateMaintenanceTaskPayload } from '../types';
 
+// Export type alias for backward compatibility
+export type CreateTaskPayload = CreateMaintenanceTaskPayload;
+
+/**
+ * LẤY DANH SÁCH CÔNG VIỆC
+ */
 export async function fetchAllTasks(): Promise<MaintenanceTask[]> {
   const { data } = await apiClient.get<MaintenanceTask[]>('/maintenance/tasks');
   return data;
 }
+
+// Tạo bí danh fetchTasks để các component cũ không bị lỗi
+export const fetchTasks = fetchAllTasks;
 
 export async function fetchTaskById(id: number): Promise<MaintenanceTask> {
   const { data } = await apiClient.get<MaintenanceTask>(`/maintenance/tasks/${id}`);
   return data;
 }
 
-export interface CreateTaskPayload {
-  tree_id: number;
-  assigned_to: number;
-  task_type: string;
-  scheduled_date: string;
-  notes?: string;
-}
-
-export async function createTask(payload: CreateTaskPayload): Promise<MaintenanceTask> {
+/**
+ * TẠO MỚI CÔNG VIỆC
+ */
+export async function createMaintenanceTask(payload: CreateMaintenanceTaskPayload): Promise<MaintenanceTask> {
   const { data } = await apiClient.post<MaintenanceTask>('/maintenance/tasks', payload);
   return data;
 }
 
+// SỬA LỖI: Tạo bí danh createTask để sửa lỗi ở TaskManagementPage.tsx
+export const createTask = createMaintenanceTask;
+
+/**
+ * CẬP NHẬT & XÓA
+ */
+export async function updateTaskStatus(id: number, status: string): Promise<MaintenanceTask> {
+  const { data } = await apiClient.patch<MaintenanceTask>(`/maintenance/tasks/${id}/status`, {
+    status: status,
+  });
+  return data;
+}
+
+export async function deleteTask(id: number): Promise<void> {
+  await apiClient.delete(`/maintenance/tasks/${id}`);
+}
+
+/**
+ * THỐNG KÊ
+ */
 export async function fetchStaffPerformance(): Promise<StaffPerformance[]> {
   const { data } = await apiClient.get<StaffPerformance[]>('/maintenance/stats/by-staff');
   return data;
@@ -34,6 +58,9 @@ export async function fetchOverdueTasks(): Promise<OverdueTask[]> {
   return data;
 }
 
+/**
+ * XUẤT FILE (EXCEL/PDF)
+ */
 export interface ExportTasksParams {
   format: 'xlsx' | 'pdf';
   from?: string;
@@ -41,23 +68,11 @@ export interface ExportTasksParams {
 }
 
 export async function exportTasks(params: ExportTasksParams): Promise<Blob> {
-  const token = localStorage.getItem('access_token');
-
-  const query = new URLSearchParams({ format: params.format });
-  if (params.from) query.set('from', params.from);
-  if (params.to) query.set('to', params.to);
-
-  const response = await fetch(`/api/maintenance/tasks/export?${query.toString()}`, {
-    method: 'GET',
-    headers: {
-      Authorization: token ? `Bearer ${token}` : '',
-    },
+  // Sử dụng trực tiếp apiClient để tận dụng cấu hình baseURL và Interceptors
+  const response = await apiClient.get('/maintenance/tasks/export', {
+    params: params,
+    responseType: 'blob', // Quan trọng để nhận dữ liệu file
   });
 
-  if (!response.ok) {
-    const message = await response.text().catch(() => 'Lỗi không xác định');
-    throw new Error(`Export thất bại (${response.status}): ${message}`);
-  }
-
-  return response.blob();
+  return response.data;
 }

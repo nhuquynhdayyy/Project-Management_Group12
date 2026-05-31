@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+﻿import { Module } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -10,6 +10,7 @@ import { Role } from '../../entities/role.entity';
 import { PasswordResetToken } from '../../entities/password-reset-token.entity';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { AuditLogModule } from '../audit-log/auditLog.module';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { MailModule } from '../mail/mail.module';
 import { StorageModule } from '../storage/storage.module';
@@ -28,6 +29,7 @@ import { StorageModule } from '../storage/storage.module';
     }),
     MailModule,
     StorageModule,
+    AuditLogModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, JwtAuthGuard, RolesGuard],

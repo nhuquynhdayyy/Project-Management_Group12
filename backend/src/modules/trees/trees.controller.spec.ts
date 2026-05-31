@@ -6,13 +6,15 @@ import { CreateTreeDto } from './dto/create-tree.dto';
 import { FindTreesNearbyDto } from './dto/find-trees-nearby.dto';
 import { HealthStatus } from '../../entities/tree.entity';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtService } from '@nestjs/jwt';
 
 describe('TreesController', () => {
   let controller: TreesController;
-  let service: TreesService;
 
   const mockTreesService = {
     create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
     findAll: jest.fn(),
     findById: jest.fn(),
     findTreesWithinRadius: jest.fn(),
@@ -30,6 +32,11 @@ describe('TreesController', () => {
     canActivate: jest.fn(() => true),
   };
 
+  // Minimal mock request with JWT user payload
+  const mockReq = {
+    user: { userId: 1, id: 1, username: 'admin', roles: ['admin'] },
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [TreesController],
@@ -42,6 +49,11 @@ describe('TreesController', () => {
           provide: ImportService,
           useValue: mockImportService,
         },
+        // JwtAuthGuard injects JwtService — provide a mock so NestJS DI doesn't fail
+        {
+          provide: JwtService,
+          useValue: { sign: jest.fn(), verify: jest.fn() },
+        },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -49,7 +61,6 @@ describe('TreesController', () => {
       .compile();
 
     controller = module.get<TreesController>(TreesController);
-    service = module.get<TreesService>(TreesService);
   });
 
   afterEach(() => {
@@ -82,12 +93,12 @@ describe('TreesController', () => {
       mockTreesService.create.mockResolvedValue(mockTree);
 
       // Act
-      const result = await controller.create(createTreeDto);
+      const result = await controller.create(createTreeDto, mockReq);
 
       // Assert
       expect(result).toBeDefined();
       expect(result.id).toBe(1);
-      expect(mockTreesService.create).toHaveBeenCalledWith(createTreeDto);
+      expect(mockTreesService.create).toHaveBeenCalledWith(createTreeDto, 1);
     });
   });
 
@@ -155,7 +166,36 @@ describe('TreesController', () => {
       // Assert
       expect(result).toBeDefined();
       expect(result.length).toBe(2);
-      expect(mockTreesService.findTreesWithinRadius).toHaveBeenCalledWith(findNearbyDto);
+      expect(mockTreesService.findTreesWithinRadius).toHaveBeenCalledWith(
+        findNearbyDto,
+      );
+    });
+  });
+
+  describe('update', () => {
+    it('should update a tree with the current user id', async () => {
+      const mockTree = { id: 1, tree_code: 'TREE001', height_m: 8 };
+      mockTreesService.update.mockResolvedValue(mockTree);
+
+      const result = await controller.update('1', { height_m: 8 }, mockReq);
+
+      expect(result).toBe(mockTree);
+      expect(mockTreesService.update).toHaveBeenCalledWith(
+        1,
+        { height_m: 8 },
+        1,
+      );
+    });
+  });
+
+  describe('delete', () => {
+    it('should delete a tree with the current user id', async () => {
+      mockTreesService.delete.mockResolvedValue(undefined);
+
+      const result = await controller.delete('1', mockReq);
+
+      expect(result).toEqual({ success: true });
+      expect(mockTreesService.delete).toHaveBeenCalledWith(1, 1);
     });
   });
 

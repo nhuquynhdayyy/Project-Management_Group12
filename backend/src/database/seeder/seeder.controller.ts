@@ -1,5 +1,10 @@
 import { Controller, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { SeederService } from './seeder.service';
 import { JwtAuthGuard } from '../../modules/auth/jwt-auth.guard';
 

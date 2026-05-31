@@ -18,7 +18,12 @@
 
 ## Phase 1 — Multimedia & Identification
 ### Mục tiêu: Hoàn thiện quy trình thực địa cho nhân viên (Staff)
-
+docker run --name cayxanh-db ^
+  -e POSTGRES_USER=postgres ^
+  -e POSTGRES_PASSWORD=123456 ^
+  -e POSTGRES_DB=cayxanh_db ^
+  -p 5432:5432 ^
+  -d postgis/postgis:15-3.4
 **Owner: SV1 (Technical Lead)**
 **Ưu tiên: Cao — Đây là nền tảng cho tính xác thực dữ liệu thực địa**
 

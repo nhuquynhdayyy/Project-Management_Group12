@@ -10,6 +10,16 @@ import {
 import { TreeSpecies } from './tree-species.entity';
 import { AdministrativeArea } from './administrative-area.entity';
 
+const TREE_LOCATION_COLUMN =
+  process.env.DB_TYPE === 'sqlite'
+    ? { type: 'simple-json' as const }
+    : { type: 'geometry' as const, spatialFeatureType: 'Point', srid: 4326 };
+
+const DATE_COLUMN_TYPE =
+  process.env.DB_TYPE === 'sqlite'
+    ? ('datetime' as const)
+    : ('timestamp' as const);
+
 export enum HealthStatus {
   GOOD = 'Tốt',
   WEAK = 'Yếu',
@@ -42,15 +52,13 @@ export class Tree {
   @JoinColumn({ name: 'area_id' })
   area: AdministrativeArea;
 
-  @Column({
-    type: 'geometry',
-    spatialFeatureType: 'Point',
-    srid: 4326,
-  })
-  location: {
-    type: 'Point';
-    coordinates: [number, number]; // [longitude, latitude]
-  } | string;
+  @Column(TREE_LOCATION_COLUMN)
+  location:
+    | {
+        type: 'Point';
+        coordinates: [number, number]; // [longitude, latitude]
+      }
+    | string;
 
   @Column({ type: 'int', nullable: true })
   planting_year: number;
@@ -74,7 +82,7 @@ export class Tree {
   })
   health_status: HealthStatus;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: DATE_COLUMN_TYPE, nullable: true })
   last_maintained_at: Date;
 
   @Column({ type: 'int', nullable: true })

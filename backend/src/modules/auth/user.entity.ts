@@ -10,6 +10,11 @@ import {
 import { Exclude } from 'class-transformer';
 import { Role } from '../../entities/role.entity';
 
+const USER_TIMESTAMP_COLUMN =
+  process.env.DB_TYPE === 'sqlite'
+    ? ('datetime' as const)
+    : ('timestamp' as const);
+
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn()
@@ -43,7 +48,7 @@ export class User {
   @Column({ type: 'varchar', length: 255, nullable: true })
   verification_token: string | null;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: USER_TIMESTAMP_COLUMN, nullable: true })
   last_login_at: Date;
 
   @ManyToMany(() => Role, (role) => role.users, { eager: true })

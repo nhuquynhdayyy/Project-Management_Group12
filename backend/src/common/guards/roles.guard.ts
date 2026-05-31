@@ -25,8 +25,11 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('Không có quyền truy cập. Chỉ Admin và Manager mới được phép.');
     }
 
-    // Check if user has any of the required roles
-    const hasRole = requiredRoles.some((role) => user.roles.includes(role));
+    // Check if user has any of the required roles (case-insensitive comparison)
+    const normalizedRequiredRoles = requiredRoles.map(role => role.toLowerCase());
+    const hasRole = user.roles.some((role: string) => 
+      normalizedRequiredRoles.includes(role.toLowerCase())
+    );
 
     console.log('[RolesGuard] User roles:', user.roles);
     console.log('[RolesGuard] Has required role:', hasRole);

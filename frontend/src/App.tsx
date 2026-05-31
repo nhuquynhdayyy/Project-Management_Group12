@@ -11,20 +11,25 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 import ProfilePage from './pages/ProfilePage';
 import MapPage from './pages/MapPage';
 import DashboardPage from './pages/DashboardPage';
+import ActivityLogsPage from './pages/ActivityLogsPage';
 import TreeStatsPage from './pages/dashboard/TreeStatsPage';
 import TaskStatsPage from './pages/dashboard/TaskStatsPage';
 import TaskManagementPage from './pages/dashboard/TaskManagementPage';
 import TreeManagementPage from './pages/dashboard/TreeManagementPage';
+import TreeHeatmapPage from './pages/dashboard/TreeHeatmapPage';
 import StaffStatsPage from './pages/dashboard/StaffStatsPage';
 import UsersPage from './pages/dashboard/UsersPage';
 import AreasPage from './pages/dashboard/AreasPage';
+import SystemSettingsPage from './pages/dashboard/SystemSettingsPage';
+import NearbyTreesPage from './pages/dashboard/NearbyTreesPage';
+import StaffTasksPage from './pages/dashboard/StaffTasksPage';
 
 function DefaultRedirect() {
   const { user } = useAuth();
   
   // Admin and Manager → Dashboard
   // Staff → Map
-  const hasManagerAccess = user?.roles.some(role => ['Admin', 'Manager'].includes(role));
+  const hasManagerAccess = user?.roles.some(role => ['admin', 'manager'].includes(role.toLowerCase()));
   const defaultPath = hasManagerAccess ? '/dashboard' : '/map';
   
   return <Navigate to={defaultPath} replace />;
@@ -48,11 +53,18 @@ export default function App() {
               <Route path="/map" element={<MapPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               
+              {/* Nearby Trees - Staff, Manager, Admin */}
+              <Route element={<RoleGuard allowedRoles={['Admin', 'Manager', 'Staff']} />}>
+                <Route path="/nearby" element={<NearbyTreesPage />} />
+                <Route path="/tasks" element={<StaffTasksPage />} />
+              </Route>
+              
               {/* Dashboard - Admin/Manager only */}
               <Route element={<RoleGuard allowedRoles={['Admin', 'Manager']} />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/dashboard/trees" element={<TreeStatsPage />} />
                 <Route path="/dashboard/trees/manage" element={<TreeManagementPage />} />
+                <Route path="/dashboard/trees/heatmap" element={<TreeHeatmapPage />} />
                 <Route path="/dashboard/tasks" element={<TaskStatsPage />} />
                 <Route path="/dashboard/tasks/manage" element={<TaskManagementPage />} />
                 <Route path="/dashboard/staff" element={<StaffStatsPage />} />
@@ -60,6 +72,11 @@ export default function App() {
               </Route>
               <Route element={<RoleGuard allowedRoles={['Admin']} />}>
                 <Route path="/dashboard/users" element={<UsersPage />} />
+                <Route path="/dashboard/settings" element={<SystemSettingsPage />} />
+              </Route>
+
+              <Route element={<RoleGuard allowedRoles={['Admin']} />}>
+                <Route path="/activity-logs" element={<ActivityLogsPage />} />
               </Route>
             </Route>
           </Route>

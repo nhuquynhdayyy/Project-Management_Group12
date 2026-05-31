@@ -2,7 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts';
 import { fetchAllTasks, fetchOverdueTasks } from '../api/maintenance';
 import { fetchTrees } from '../api/trees';
-import type { HealthStatus, MaintenanceTask, OverdueTask, Tree } from '../types';
+import { fetchStaffUsers } from '../api/auth';
+import type { HealthStatus, MaintenanceTask, OverdueTask, Tree, DashboardUser } from '../types';
+import CreateTreeForm from '../components/CreateTreeForm';
+import CreateTaskForm from '../components/CreateTaskForm';
+import Modal from '../components/Modal';
 import {
   DashboardPageFrame,
   KpiCard,
@@ -50,20 +54,48 @@ export default function DashboardPage() {
   const [trees, setTrees] = useState<Tree[]>([]);
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
   const [overdueTasks, setOverdueTasks] = useState<OverdueTask[]>([]);
+  const [users, setUsers] = useState<DashboardUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const timeRange = useTimeRange();
 
+  // Modal states
+  const [showTreeModal, setShowTreeModal] = useState(false);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+
   useEffect(() => {
-    Promise.all([fetchTrees(), fetchAllTasks(), fetchOverdueTasks()])
-      .then(([treeData, taskData, overdueData]) => {
+    Promise.all([fetchTrees(), fetchAllTasks(), fetchOverdueTasks(), fetchStaffUsers()])
+      .then(([treeData, taskData, overdueData, userData]) => {
         setTrees(treeData);
         setTasks(taskData);
         setOverdueTasks(overdueData);
+        setUsers(userData);
       })
       .catch(() => setError('Khong the tai du lieu. Vui long thu lai.'))
       .finally(() => setLoading(false));
   }, []);
+
+  // Refresh data after creating tree or task
+  const refreshData = async () => {
+    try {
+      const [treeData, taskData, overdueData] = await Promise.all([
+        fetchTrees(),
+        fetchAllTasks(),
+        fetchOverdueTasks(),
+      ]);
+      setTrees(treeData);
+      setTasks(taskData);
+      setOverdueTasks(overdueData);
+    } catch (err) {
+      console.error('Failed to refresh data:', err);
+    }
+  };
+
+  // Filter staff users for task assignment
+  const staffUsers = useMemo(
+    () => users.filter((user) => user.roles.some((role) => role.role_name === 'Staff')),
+    [users]
+  );
 
   const filteredTasks = useMemo(
     () => filterTasksByRange(tasks, timeRange.rangeStart, timeRange.rangeEnd),
@@ -110,6 +142,29 @@ const dangerTrees = trees.filter(isDangerTree);
       loading={loading}
       error={error}
     >
+      {/* Action Buttons */}
+      <div className="flex flex-wrap gap-3 mb-6">
+        <button
+          onClick={() => setShowTreeModal(true)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors shadow-lg shadow-green-600/20"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          Thêm cây mới
+        </button>
+
+        <button
+          onClick={() => setShowTaskModal(true)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/20"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+          </svg>
+          Giao nhiệm vụ
+        </button>
+      </div>
+
       <TimeFilterControls {...timeRange} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4 mb-6">
@@ -264,6 +319,33 @@ countTreesCreatedInRange(trees, previousWeekStart, previousWeekEnd, 'Sâu bệnh
           </div>
         </Section>
       </div>
+
+      {/* Create Tree Modal */}
+      <Modal isOpen={showTreeModal} onClose={() => setShowTreeModal(false)}>
+        <CreateTreeForm
+          onSuccess={(tree) => {
+            setShowTreeModal(false);
+            refreshData();
+            // Show success message (you can add a toast notification here)
+            alert(`Đã tạo cây ${tree.tree_code} thành công!`);
+          }}
+          onCancel={() => setShowTreeModal(false)}
+        />
+      </Modal>
+
+      {/* Create Task Modal */}
+      <Modal isOpen={showTaskModal} onClose={() => setShowTaskModal(false)}>
+        <CreateTaskForm
+          staffUsers={staffUsers}
+          onSuccess={() => {
+            setShowTaskModal(false);
+            refreshData();
+            // Show success message (you can add a toast notification here)
+            alert(`Đã tạo nhiệm vụ thành công!`);
+          }}
+          onCancel={() => setShowTaskModal(false)}
+        />
+      </Modal>
     </DashboardPageFrame>
   );
 }

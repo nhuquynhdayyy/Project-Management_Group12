@@ -11,6 +11,11 @@ import {
   downloadTreeImportTemplate,
   importTreesFromExcel,
   previewTreeImport,
+  fetchTreeHistory,
+  getTreeQRCodeBlobUrl,
+  downloadTreeQRCode,
+  checkTreeCodeExists,
+  checkLocationExists,
   type CreateTreePayload,
   type TreeImportPreview,
   type TreeImportResult,
@@ -19,6 +24,7 @@ import { createTask, type CreateTaskPayload } from '../../api/maintenance';
 import { fetchUsers, fetchStaffUsers } from '../../api/auth';
 import { useAuth } from '../../context/AuthContext';
 import type {
+  ActivityLog,
   AdministrativeArea,
   DashboardUser,
   HealthStatus,
@@ -70,6 +76,55 @@ function Row({ label, value, accent }: { label: string; value: string; accent?: 
   );
 }
 
+// ─── Utility: Translate tree changes to Vietnamese ────────────────────────────────────────
+
+function translateTreeChanges(oldValue: Record<string, any> | null, newValue: Record<string, any> | null): string[] {
+  if (!oldValue || !newValue) return [];
+  
+  const changes: string[] = [];
+  
+  const fieldLabels: Record<string, string> = {
+    health_status: 'Sức khỏe',
+    height_m: 'Chiều cao',
+    trunk_diameter_cm: 'Đường kính thân',
+    planting_year: 'Năm trồng',
+    area_id: 'Khu vực',
+    species_id: 'Loài cây',
+    tree_code: 'Mã cây',
+  };
+  
+  const healthLabels: Record<string, string> = {
+    'Tốt': 'Tốt',
+    'Yếu': 'Yếu',
+    'Sâu bệnh': 'Sâu bệnh',
+    'Chết': 'Chết',
+  };
+  
+  for (const key in newValue) {
+    if (oldValue[key] !== newValue[key] && oldValue[key] !== undefined) {
+      const label = fieldLabels[key] || key;
+      const oldVal = oldValue[key];
+      const newVal = newValue[key];
+      
+      if (key === 'health_status') {
+        const oldHealth = healthLabels[oldVal] || oldVal;
+        const newHealth = healthLabels[newVal] || newVal;
+        changes.push(`${label} thay đổi từ "${oldHealth}" sang "${newHealth}"`);
+      } else if (key === 'height_m') {
+        changes.push(`${label} thay đổi từ ${oldVal}m sang ${newVal}m`);
+      } else if (key === 'trunk_diameter_cm') {
+        changes.push(`${label} thay đổi từ ${oldVal}cm sang ${newVal}cm`);
+      } else if (key === 'planting_year') {
+        changes.push(`${label} thay đổi từ năm ${oldVal} sang năm ${newVal}`);
+      } else {
+        changes.push(`${label} thay đổi từ "${oldVal}" sang "${newVal}"`);
+      }
+    }
+  }
+  
+  return changes;
+}
+
 // ─── TreeDetailModal ────────────────────────────────────────────────────────────────────────────
 
 function TreeDetailModal({
@@ -79,6 +134,7 @@ function TreeDetailModal({
   staffUsers,
   onClose,
   onTaskCreated,
+  onHealthUpdated,
 }: {
   tree: Tree;
   tasks: MaintenanceTask[];
@@ -86,8 +142,9 @@ function TreeDetailModal({
   staffUsers: DashboardUser[];
   onClose: () => void;
   onTaskCreated: () => void;
+  onHealthUpdated?: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<'info' | 'tasks' | 'physical'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'tasks' | 'physical' | 'history' | 'qrcode'>('info');
   const [healthValue, setHealthValue] = useState<HealthStatus>(tree.health_status);
   const [savingHealth, setSavingHealth] = useState(false);
   const [healthMsg, setHealthMsg] = useState('');
@@ -203,6 +260,16 @@ function TreeDetailModal({
       setSavingPhysical(false);
     }
   }
+  const [downloadingQR, setDownloadingQR] = useState(false);
+  const [qrDownloadMsg, setQrDownloadMsg] = useState('');
+  const [qrCodeBlobUrl, setQrCodeBlobUrl] = useState<string | null>(null);
+  const [loadingQRCode, setLoadingQRCode] = useState(false);
+  const [qrCodeError, setQrCodeError] = useState(false);
+  
+  // History tab states
+  const [historyLogs, setHistoryLogs] = useState<ActivityLog[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
 
   async function handleHealthUpdate() {
     setSavingHealth(true);
@@ -210,6 +277,18 @@ function TreeDetailModal({
     try {
       await updateTreeHealth(tree.id, healthValue);
       setHealthMsg('Đã cập nhật!');
+      
+      // Gọi callback để refresh data trong component cha
+      if (onHealthUpdated) {
+        onHealthUpdated();
+      }
+      
+      // Cập nhật giá trị tree.health_status ngay lập tức
+      tree.health_status = healthValue;
+      
+      // Reset history để reload khi user mở lại tab history
+      setHasLoadedHistory(false);
+      setHistoryLogs([]);
     } catch {
       setHealthMsg('Cập nhật thất bại.');
     } finally {
@@ -249,6 +328,68 @@ function TreeDetailModal({
       setSavingTask(false);
     }
   }
+
+  async function handleDownloadQRCode() {
+    setDownloadingQR(true);
+    setQrDownloadMsg('');
+    try {
+      await downloadTreeQRCode(tree.id, `${tree.tree_code}-qrcode.png`);
+      setQrDownloadMsg('✅ Đã tải QR code thành công!');
+      setTimeout(() => setQrDownloadMsg(''), 3000);
+    } catch (error) {
+      setQrDownloadMsg('❌ Không thể tải QR code. Vui lòng thử lại.');
+    } finally {
+      setDownloadingQR(false);
+    }
+  }
+
+  // Load QR code when QR tab is active
+  useEffect(() => {
+    if (activeTab === 'qrcode' && !qrCodeBlobUrl && !loadingQRCode && !qrCodeError) {
+      setLoadingQRCode(true);
+      getTreeQRCodeBlobUrl(tree.id)
+        .then((url) => {
+          setQrCodeBlobUrl(url);
+          setQrCodeError(false);
+        })
+        .catch((error) => {
+          console.error('Failed to load QR code:', error);
+          setQrCodeError(true);
+          setQrCodeBlobUrl(null);
+        })
+        .finally(() => {
+          setLoadingQRCode(false);
+        });
+    }
+  }, [activeTab, tree.id]);
+
+  // Load history when history tab is active (only once)
+  useEffect(() => {
+    if (activeTab === 'history' && !hasLoadedHistory) {
+      setLoadingHistory(true);
+      setHasLoadedHistory(true);
+      fetchTreeHistory(tree.id)
+        .then((logs) => {
+          setHistoryLogs(logs);
+        })
+        .catch((error) => {
+          console.error('Failed to load tree history:', error);
+          setHistoryLogs([]);
+        })
+        .finally(() => {
+          setLoadingHistory(false);
+        });
+    }
+  }, [activeTab, tree.id, hasLoadedHistory]);
+
+  // Cleanup blob URL when modal closes
+  useEffect(() => {
+    return () => {
+      if (qrCodeBlobUrl) {
+        URL.revokeObjectURL(qrCodeBlobUrl);
+      }
+    };
+  }, [qrCodeBlobUrl]);
 
   const coords = tree.location?.coordinates;
   const lat = coords ? coords[1].toFixed(5) : '—';
@@ -294,6 +435,18 @@ function TreeDetailModal({
             className={`px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'physical' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}
           >
             📏 Lịch sử đo đạc
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'history' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            Lịch sử biến động ({historyLogs.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('qrcode')}
+            className={`px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'qrcode' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            Mã QR
           </button>
         </div>
 
@@ -412,6 +565,7 @@ function TreeDetailModal({
             </div>
           )}
 
+{/* --- TAB 1: CHỈ SỐ VẬT LÝ (ngyn) --- */}
           {activeTab === 'physical' && (
             <div className="px-5 py-4">
               {/* Form cập nhật chỉ số - Chỉ cho Admin/Manager */}
@@ -425,9 +579,7 @@ function TreeDetailModal({
                 
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <div>
-                    <label className="mb-1 block text-xs text-gray-500">
-                      Chiều cao (m)
-                    </label>
+                    <label className="mb-1 block text-xs text-gray-500">Chiều cao (m)</label>
                     <input
                       type="number"
                       step="0.1"
@@ -438,9 +590,7 @@ function TreeDetailModal({
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-gray-500">
-                      Đường kính thân (cm)
-                    </label>
+                    <label className="mb-1 block text-xs text-gray-500">Đường kính thân (cm)</label>
                     <input
                       type="number"
                       step="0.1"
@@ -451,9 +601,7 @@ function TreeDetailModal({
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-gray-500">
-                      Đường kính tán (m)
-                    </label>
+                    <label className="mb-1 block text-xs text-gray-500">Đường kính tán (m)</label>
                     <input
                       type="number"
                       step="0.1"
@@ -464,9 +612,7 @@ function TreeDetailModal({
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-gray-500">
-                      Độ nghiêng (0-90°)
-                    </label>
+                    <label className="mb-1 block text-xs text-gray-500">Độ nghiêng (0-90°)</label>
                     <input
                       type="number"
                       min="0"
@@ -507,7 +653,7 @@ function TreeDetailModal({
                 </div>
               </div>
 
-              {/* Bảng lịch sử */}
+              {/* Bảng lịch sử đo đạc */}
               {loadingHistory ? (
                 <p className="text-sm text-gray-500 italic text-center py-8">Đang tải...</p>
               ) : physicalHistory.length === 0 ? (
@@ -528,59 +674,93 @@ function TreeDetailModal({
                       </thead>
                       <tbody>
                         {physicalHistory.map((log, index) => (
-                          <tr 
-                            key={log.id} 
-                            className={`border-b border-gray-800 ${index === 0 ? 'bg-green-900/20' : ''}`}
-                          >
-                            <td className="py-2.5 pr-3 text-xs">
-                              {new Date(log.measured_at).toLocaleString('vi-VN')}
-                            </td>
-                            <td className="py-2.5 pr-3 text-xs">
-                              {log.height_m ?? '—'}
-                            </td>
-                            <td className="py-2.5 pr-3 text-xs">
-                              {log.trunk_diameter_cm ?? '—'}
-                            </td>
-                            <td className="py-2.5 pr-3 text-xs">
-                              {log.canopy_diameter_m ?? '—'}
-                            </td>
-                            <td className="py-2.5 pr-3 text-xs">
-                              {log.tilt_degree ?? '—'}
-                            </td>
-                            <td className="py-2.5 text-xs text-gray-400">
-                              {log.notes || '—'}
-                            </td>
+                          <tr key={log.id} className={`border-b border-gray-800 ${index === 0 ? 'bg-green-900/20' : ''}`}>
+                            <td className="py-2.5 pr-3 text-xs">{new Date(log.measured_at).toLocaleString('vi-VN')}</td>
+                            <td className="py-2.5 pr-3 text-xs">{log.height_m ?? '—'}</td>
+                            <td className="py-2.5 pr-3 text-xs">{log.trunk_diameter_cm ?? '—'}</td>
+                            <td className="py-2.5 pr-3 text-xs">{log.canopy_diameter_m ?? '—'}</td>
+                            <td className="py-2.5 pr-3 text-xs">{log.tilt_degree ?? '—'}</td>
+                            <td className="py-2.5 text-xs text-gray-400">{log.notes || '—'}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                  
-                  {historyTotal > 10 && (
-                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-700">
-                      <p className="text-xs text-gray-500">
-                        Trang {historyPage} / {Math.ceil(historyTotal / 10)}
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
-                          disabled={historyPage === 1}
-                          className="px-3 py-1 text-xs rounded bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          ← Trước
-                        </button>
-                        <button
-                          onClick={() => setHistoryPage(p => Math.min(Math.ceil(historyTotal / 10), p + 1))}
-                          disabled={historyPage >= Math.ceil(historyTotal / 10)}
-                          className="px-3 py-1 text-xs rounded bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          Sau →
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </>
               )}
+            </div>
+          )}
+
+          {/* --- TAB 2: LỊCH SỬ THAY ĐỔI (main) --- */}
+          {activeTab === 'history' && (
+            <div className="px-5 py-4">
+              {loadingHistory ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-center">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mb-2"></div>
+                    <p className="text-sm text-gray-400">Đang tải lịch sử...</p>
+                  </div>
+                </div>
+              ) : historyLogs.length === 0 ? (
+                <p className="text-sm text-gray-500 italic text-center py-8">Chưa có thay đổi nào được ghi nhận</p>
+              ) : (
+                <div className="space-y-3">
+                  {historyLogs.map((log) => {
+                    const changes = translateTreeChanges(log.old_value, log.new_value);
+                    if (changes.length === 0) return null;
+                    return (
+                      <div key={log.id} className="bg-gray-900 rounded-lg p-4 border-l-4 border-blue-500">
+                        <div className="flex items-start justify-between mb-2">
+                          <span className="text-xs text-gray-400">{new Date(log.created_at).toLocaleString('vi-VN')}</span>
+                          <span className="text-xs text-green-400 font-medium">{log.user?.username || 'Hệ thống'}</span>
+                        </div>
+                        <ul className="space-y-1.5">
+                          {changes.map((change, idx) => (
+                            <li key={idx} className="text-sm text-gray-300 flex items-start gap-2">
+                              <span className="text-blue-400 mt-1">•</span>
+                              <span>{change}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* --- TAB 3: MÃ QR (main) --- */}
+          {activeTab === 'qrcode' && (
+            <div className="px-5 py-4">
+              <div className="bg-gray-900 rounded-lg p-6 space-y-4">
+                <div className="text-center">
+                  <h4 className="text-sm font-semibold text-gray-300 mb-2">Mã QR cho cây {tree.tree_code}</h4>
+                  <p className="text-xs text-gray-500 mb-4">Quét mã QR này để xem thông tin nhanh</p>
+                </div>
+
+                <div className="flex justify-center">
+                  <div className="bg-white p-4 rounded-lg shadow-lg">
+                    {loadingQRCode ? (
+                      <div className="w-64 h-64 flex items-center justify-center animate-pulse bg-gray-200 rounded"></div>
+                    ) : qrCodeBlobUrl ? (
+                      <img src={qrCodeBlobUrl} alt="QR Code" className="w-64 h-64 object-contain" />
+                    ) : (
+                      <p className="text-sm text-gray-600">Lỗi tải mã QR</p>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleDownloadQRCode}
+                  disabled={downloadingQR || loadingQRCode}
+                  className="flex items-center gap-2 rounded-lg bg-green-600 px-6 py-3 text-sm font-medium text-white hover:bg-green-500 w-full justify-center disabled:opacity-50"
+                >
+                  {downloadingQR ? 'Đang tải...' : '💾 Tải mã QR (PNG)'}
+                </button>
+              </div>
+            </div>
+          )}
             </div>
           )}
         </div>
@@ -613,10 +793,78 @@ function CreateTreeModal({
   const [trunkDiameter, setTrunkDiameter] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  
+  // Validation states
+  const [treeCodeError, setTreeCodeError] = useState('');
+  const [locationError, setLocationError] = useState('');
+  const [checkingTreeCode, setCheckingTreeCode] = useState(false);
+  const [checkingLocation, setCheckingLocation] = useState(false);
+
+  // Kiểm tra mã cây khi người dùng nhập xong (onBlur)
+  async function handleTreeCodeBlur() {
+    const code = treeCode.trim();
+    if (!code) {
+      setTreeCodeError('');
+      return;
+    }
+
+    setCheckingTreeCode(true);
+    setTreeCodeError('');
+    try {
+      const exists = await checkTreeCodeExists(code);
+      if (exists) {
+        setTreeCodeError('⚠️ Mã cây này đã tồn tại trong hệ thống');
+      }
+    } catch (err) {
+      console.error('Error checking tree code:', err);
+    } finally {
+      setCheckingTreeCode(false);
+    }
+  }
+
+  // Kiểm tra tọa độ
+  async function checkLocation(lat: string, lng: string) {
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+    
+    if (!lat || !lng || isNaN(latNum) || isNaN(lngNum)) {
+      setLocationError('');
+      return;
+    }
+
+    setCheckingLocation(true);
+    setLocationError('');
+    try {
+      const result = await checkLocationExists(latNum, lngNum);
+      if (result.exists && result.tree) {
+        setLocationError(
+          `⚠️ Vị trí này đã được đăng ký cho cây ${result.tree.tree_code}. Vui lòng kiểm tra lại.`
+        );
+      }
+    } catch (err) {
+      console.error('Error checking location:', err);
+    } finally {
+      setCheckingLocation(false);
+    }
+  }
+
+  // Kiểm tra tọa độ khi người dùng nhập xong
+  function handleLocationBlur() {
+    if (latitude && longitude) {
+      checkLocation(latitude, longitude);
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setFormError('');
+    
+    // Kiểm tra lỗi validation trước khi submit
+    if (treeCodeError || locationError) {
+      setFormError('Vui lòng sửa các lỗi trước khi lưu');
+      return;
+    }
+    
     if (!treeCode.trim() || !speciesId || !areaId || !latitude || !longitude) {
       setFormError('Vui lòng điền đầy đủ các trường bắt buộc.');
       return;
@@ -659,7 +907,27 @@ function CreateTreeModal({
         <form onSubmit={handleSubmit} className="px-5 py-4 space-y-3 max-h-[70vh] overflow-y-auto">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-gray-400">Mã cây <span className="text-red-400">*</span></label>
-            <input type="text" value={treeCode} onChange={(e) => setTreeCode(e.target.value)} required className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500" />
+            <input 
+              type="text" 
+              value={treeCode} 
+              onChange={(e) => {
+                setTreeCode(e.target.value);
+                setTreeCodeError(''); // Xóa lỗi khi người dùng đang nhập
+              }}
+              onBlur={handleTreeCodeBlur}
+              required 
+              className={`w-full rounded-lg border px-3 py-2 text-sm text-gray-200 outline-none ${
+                treeCodeError
+                  ? 'border-red-600 bg-red-900/20 focus:border-red-500'
+                  : 'border-gray-700 bg-gray-900 focus:border-green-500'
+              }`}
+            />
+            {checkingTreeCode && (
+              <p className="mt-1 text-xs text-blue-400">Đang kiểm tra...</p>
+            )}
+            {treeCodeError && (
+              <p className="mt-1 text-xs text-red-400">{treeCodeError}</p>
+            )}
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-medium text-gray-400">Loài cây <span className="text-red-400">*</span></label>
@@ -678,13 +946,55 @@ function CreateTreeModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-xs font-medium text-gray-400">Vĩ độ <span className="text-red-400">*</span></label>
-              <input type="number" step="any" value={latitude} onChange={(e) => setLatitude(e.target.value)} required placeholder="10.7769" className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500" />
+              <input 
+                type="number" 
+                step="any" 
+                value={latitude} 
+                onChange={(e) => {
+                  setLatitude(e.target.value);
+                  setLocationError(''); // Xóa lỗi khi người dùng đang nhập
+                }}
+                onBlur={handleLocationBlur}
+                required 
+                placeholder="10.7769" 
+                className={`w-full rounded-lg border px-3 py-2 text-sm text-gray-200 outline-none ${
+                  locationError
+                    ? 'border-red-600 bg-red-900/20 focus:border-red-500'
+                    : 'border-gray-700 bg-gray-900 focus:border-green-500'
+                }`}
+              />
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-gray-400">Kinh độ <span className="text-red-400">*</span></label>
-              <input type="number" step="any" value={longitude} onChange={(e) => setLongitude(e.target.value)} required placeholder="106.7009" className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500" />
+              <input 
+                type="number" 
+                step="any" 
+                value={longitude} 
+                onChange={(e) => {
+                  setLongitude(e.target.value);
+                  setLocationError(''); // Xóa lỗi khi người dùng đang nhập
+                }}
+                onBlur={handleLocationBlur}
+                required 
+                placeholder="106.7009" 
+                className={`w-full rounded-lg border px-3 py-2 text-sm text-gray-200 outline-none ${
+                  locationError
+                    ? 'border-red-600 bg-red-900/20 focus:border-red-500'
+                    : 'border-gray-700 bg-gray-900 focus:border-green-500'
+                }`}
+              />
             </div>
           </div>
+          {(checkingLocation || locationError) && (
+            <div>
+              {checkingLocation && (
+                <p className="text-xs text-blue-400">Đang kiểm tra vị trí...</p>
+              )}
+              {locationError && (
+                <p className="text-xs text-red-400">{locationError}</p>
+              )}
+            </div>
+          )}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-gray-400">Sức khỏe</label>
             <select value={healthStatus} onChange={(e) => setHealthStatus(e.target.value as HealthStatus)} className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500">
@@ -710,7 +1020,12 @@ function CreateTreeModal({
           )}
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={onClose} className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors">Hủy</button>
-            <button type="submit" disabled={saving} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            <button 
+              type="submit" 
+              // Thêm điều kiện disable nút nếu đang check hoặc đang có lỗi
+              disabled={saving || checkingTreeCode || checkingLocation || !!treeCodeError || !!locationError} 
+              className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
               {saving ? 'Đang lưu...' : 'Thêm cây'}
             </button>
           </div>
@@ -1031,6 +1346,9 @@ export default function TreeManagementPage() {
           onClose={() => setSelectedTree(null)}
           onTaskCreated={() => {
             fetchTasksByTreeId(selectedTree.id).then(setSelectedTreeTasks).catch(() => {});
+          }}
+          onHealthUpdated={() => {
+            loadData();
           }}
         />
       )}

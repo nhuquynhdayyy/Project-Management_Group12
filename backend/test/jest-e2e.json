@@ -2,8 +2,27 @@
   "moduleFileExtensions": ["js", "json", "ts"],
   "rootDir": ".",
   "testEnvironment": "node",
+  "setupFiles": ["<rootDir>/setup.ts"],
   "testRegex": ".e2e-spec.ts$",
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "collectCoverage": false,
+  "coverageDirectory": "../coverage/e2e",
+  "collectCoverageFrom": [
+    "../src/modules/maintenance/**/*.ts",
+    "../src/modules/auth/**/*.ts",
+    "../src/modules/audit-log/**/*.ts",
+    "!**/*.spec.ts",
+    "!**/*.module.ts",
+    "!**/dto/**"
+  ],
+  "coverageThreshold": {
+    "global": {
+      "lines": 80,
+      "functions": 80,
+      "branches": 70,
+      "statements": 80
+    }
   }
 }

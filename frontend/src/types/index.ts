@@ -105,6 +105,47 @@ export interface MaintenanceTask {
   updated_at: string;
 }
 
+export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | 'COMPLETE';
+
+export interface AuditUser {
+  id: number;
+  username: string;
+}
+
+export interface ActivityLog {
+  id: number;
+  created_at: string;
+  user_id: number | null;
+  user: AuditUser | null;
+  action: AuditAction;
+  entity_type: string;
+  entity_id: number | null;
+  old_value: Record<string, unknown> | null;
+  new_value: Record<string, unknown> | null;
+  ip_address?: string | null;
+}
+
+export interface ActivityLogFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  userId?: number;
+  action?: AuditAction | '';
+  entityType?: string;
+  from?: string;
+  to?: string;
+}
+
+export interface PaginatedActivityLogs {
+  data: ActivityLog[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
 export interface StaffPerformance {
   username: string;
   completed: number;
@@ -130,4 +171,28 @@ export interface OverdueTask extends MaintenanceTask {
     username?: string;
     assigned_area_id?: number | null;
   };
+}
+
+export interface CreateTreePayload {
+  tree_code: string;
+  qr_code?: string;
+  species_id: number;
+  area_id: number;
+  latitude: number;
+  longitude: number;
+  planting_year?: number;
+  height_m?: number;
+  trunk_diameter_cm?: number;
+  canopy_diameter_m?: number;
+  tilt_degree?: number;
+  health_status?: HealthStatus;
+  created_by?: number;
+}
+
+export interface CreateMaintenanceTaskPayload {
+  tree_id: number;
+  assigned_to: number;
+  task_type: TaskType;
+  scheduled_date: string;
+  notes?: string;
 }

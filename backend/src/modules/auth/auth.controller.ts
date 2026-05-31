@@ -31,28 +31,65 @@ export class AuthController {
     user.email = registerDto.email || null;
     user.password = registerDto.password;
     user.full_name = registerDto.full_name || null;
-    
+
     return this.authService.register(user, registerDto.roles);
   }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with username and password' })
-  @ApiResponse({ status: 200, description: 'Returns a JWT access token.', type: AuthResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns a JWT access token.',
+    type: AuthResponseDto,
+  })
   @ApiResponse({ status: 401, description: 'Invalid credentials.' })
   async login(@Body() loginDto: LoginDto): Promise<AuthResponseDto> {
     return this.authService.login(loginDto.username, loginDto.password);
   }
 
-  @Post('users/by-role')
+  @Post('logout')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get users by role (requires JWT)' })
-  @ApiBody({ schema: { type: 'object', properties: { role: { type: 'string', example: 'admin' } } } })
-  @ApiResponse({ status: 200, description: 'List of users with the given role. Passwords excluded.' })
-  @ApiResponse({ status: 401, description: 'Unauthorized. Missing or invalid JWT.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. Token is invalid or expired.' })
-  async getUsersByRole(@Body('role') role: string): Promise<Omit<User, 'password'>[]> {
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Logout current user' })
+  @ApiResponse({ status: 200, description: 'Logout activity logged.' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized. Missing or invalid JWT.',
+  })
+  async logout(@Request() req): Promise<{ success: true }> {
+    const userId = req.user?.userId ?? req.user?.id;
+    await this.authService.logout(userId, req.user?.username);
+    return { success: true };
+  }
+
+  @Post('users/by-role')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Admin', 'Manager')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get users by role (Admin/Manager only)' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { role: { type: 'string', example: 'admin' } },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of users with the given role. Passwords excluded.',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized. Missing or invalid JWT.',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden. Admin or Manager role required.',
+  })
+  async getUsersByRole(
+    @Body('role') role: string,
+  ): Promise<Omit<User, 'password'>[]> {
     return this.authService.getUsersByRole(role);
   }
 

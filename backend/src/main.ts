@@ -3,6 +3,9 @@ import { ClassSerializerInterceptor } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { SeederService } from './database/seeder/seeder.service';
+import { SettingsService } from './modules/settings/settings.service';
+import dns from 'node:dns';
+dns.setDefaultResultOrder('ipv4first');
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -24,9 +27,15 @@ async function bootstrap() {
     await seeder.seed();
   }
 
+  // Initialize default system settings
+  const settingsService = app.get(SettingsService);
+  await settingsService.initializeDefaultSettings();
+
   const config = new DocumentBuilder()
     .setTitle('Urban Green Infrastructure API')
-    .setDescription('API documentation for the Urban Green Infrastructure Management System')
+    .setDescription(
+      'API documentation for the Urban Green Infrastructure Management System',
+    )
     .setVersion('1.0')
     .addBearerAuth()
     .build();

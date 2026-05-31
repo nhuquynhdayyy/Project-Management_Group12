@@ -1,4 +1,12 @@
-import { IsString, IsInt, IsOptional, IsEnum, IsNumber, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsInt,
+  IsOptional,
+  IsEnum,
+  IsNumber,
+  Min,
+  Max,
+} from 'class-validator';
 import { HealthStatus } from '../../../entities/tree.entity';
 
 export class CreateTreeDto {

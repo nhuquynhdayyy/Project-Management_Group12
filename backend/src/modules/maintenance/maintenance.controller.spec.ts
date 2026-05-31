@@ -8,11 +8,11 @@ import { CompleteTaskDto } from './dto/complete-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { TaskType, TaskStatus } from '../../entities/maintenance-task.entity';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtService } from '@nestjs/jwt';
 import { RolesGuard } from '../../common/guards/roles.guard';
 
 describe('MaintenanceController', () => {
   let controller: MaintenanceController;
-  let service: MaintenanceService;
 
   const mockMaintenanceService = {
     create: jest.fn(),
@@ -33,17 +33,24 @@ describe('MaintenanceController', () => {
     canActivate: jest.fn(() => true),
   };
 
+// --- PHẦN MOCK DATA ---
+  
+  // Minimal mock request with JWT user payload (Cần cho phase-3 để check user log)
+  const mockReq = { user: { userId: 2, id: 2, username: 'staff', roles: ['field_worker'] } };
+
   const mockRolesGuard = {
     canActivate: jest.fn(() => true),
   };
 
-  // Helper tạo mock Response object
+  // Helper tạo mock Response object (Cần cho các hàm export file từ nhánh main)
   const createMockResponse = () => ({
     setHeader: jest.fn(),
     end: jest.fn(),
     send: jest.fn(),
     status: jest.fn().mockReturnThis(),
   });
+
+  // --- PHẦN SETUP MODULE ---
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -57,6 +64,11 @@ describe('MaintenanceController', () => {
           provide: ExportService,
           useValue: mockExportService,
         },
+        // Cần JwtService mock để NestJS DI không bị lỗi khi khởi tạo Guard
+        {
+          provide: JwtService,
+          useValue: { sign: jest.fn(), verify: jest.fn() },
+        },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -66,7 +78,6 @@ describe('MaintenanceController', () => {
       .compile();
 
     controller = module.get<MaintenanceController>(MaintenanceController);
-    service = module.get<MaintenanceService>(MaintenanceService);
   });
 
   afterEach(() => {
@@ -94,12 +105,15 @@ describe('MaintenanceController', () => {
       mockMaintenanceService.create.mockResolvedValue(mockTask);
 
       // Act
-      const result = await controller.create(createTaskDto);
+      const result = await controller.create(createTaskDto, mockReq);
 
       // Assert
       expect(result).toBeDefined();
       expect(result.id).toBe(1);
-      expect(mockMaintenanceService.create).toHaveBeenCalledWith(createTaskDto);
+      expect(mockMaintenanceService.create).toHaveBeenCalledWith(
+        createTaskDto,
+        2,
+      );
     });
   });
 
@@ -187,12 +201,20 @@ describe('MaintenanceController', () => {
       mockMaintenanceService.updateStatus.mockResolvedValue(mockTask);
 
       // Act
-      const result = await controller.updateStatus('1', updateStatusDto, mockRequest);
+      const result = await controller.updateStatus(
+        '1',
+        updateStatusDto,
+        mockRequest,
+      );
 
       // Assert
       expect(result).toBeDefined();
       expect(result.status).toBe(TaskStatus.IN_PROGRESS);
-      expect(mockMaintenanceService.updateStatus).toHaveBeenCalledWith(1, 2, updateStatusDto);
+      expect(mockMaintenanceService.updateStatus).toHaveBeenCalledWith(
+        1,
+        2,
+        updateStatusDto,
+      );
     });
   });
 
