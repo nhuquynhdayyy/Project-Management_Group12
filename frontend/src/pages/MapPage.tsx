@@ -27,8 +27,8 @@ const CESIUM_ION_TOKEN =
 const HEALTH_STATUSES: HealthStatus[] = ['Tốt', 'Yếu', 'Sâu bệnh', 'Chết'];
 const DANGER_STATUSES: HealthStatus[] = ['Sâu bệnh', 'Chết'];
 
-// Initial fallback before tree data is loaded.
-const DEFAULT_VIEW = Cartesian3.fromDegrees(106.7, 10.78, 6000);
+// Liên Chiểu district, Da Nang
+const LIEN_CHIEU = Cartesian3.fromDegrees(108.145, 16.09, 8000);
 
 export default function MapPage() {
   const cesiumContainer = useRef<HTMLDivElement>(null);
@@ -142,67 +142,42 @@ export default function MapPage() {
       const [lng, lat] = coords;
 
       const danger = isDangerTree(tree);
+      const baseColor = healthColor(tree.health_status);
 
       viewer.entities.add({
         id: String(tree.id),
-        position: Cartesian3.fromDegrees(lng, lat),
+        position: Cartesian3.fromDegrees(lng, lat, 10), // Nâng lên 10m
         point: {
-          pixelSize: danger
-            ? new CallbackProperty(() => 12 + Math.sin(Date.now() / 180) * 3, false)
-            : 10,
+          pixelSize: danger ? 16 : 14, // Tăng kích thước
           color: danger
             ? new CallbackProperty(
-                () => Color.RED.withAlpha(0.65 + Math.abs(Math.sin(Date.now() / 220)) * 0.35),
+                () => baseColor.withAlpha(0.7 + Math.abs(Math.sin(Date.now() / 220)) * 0.3),
                 false,
               )
-            : healthColor(tree.health_status),
+            : baseColor,
           outlineColor: Color.WHITE,
-          outlineWidth: danger ? 2 : 1.5,
-          heightReference: 1, // CLAMP_TO_GROUND
+          outlineWidth: 2,
+          heightReference: 0, // NONE - không clamp xuống đất
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+        label: {
+          text: tree.tree_code,
+          font: '11px sans-serif',
+          fillColor: Color.WHITE,
+          outlineColor: Color.BLACK,
+          outlineWidth: 2,
+          style: 0, // FILL_AND_OUTLINE
+          verticalOrigin: 1, // BOTTOM
+          pixelOffset: new Cartesian2(0, -20),
+          showBackground: false,
+          heightReference: 0, // NONE
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
       });
     }
   }, [trees, activeFilters]);
 
-  useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer || trees.length === 0) return;
 
-    const visibleCoordinates = trees
-      .filter((tree) => activeFilters.has(tree.health_status))
-      .map(getTreeCoordinates)
-      .filter((coords): coords is [number, number] => Boolean(coords));
-
-    if (visibleCoordinates.length === 0) return;
-
-    const lngs = visibleCoordinates.map(([lng]) => lng);
-    const lats = visibleCoordinates.map(([, lat]) => lat);
-    const west = Math.min(...lngs);
-    const east = Math.max(...lngs);
-    const south = Math.min(...lats);
-    const north = Math.max(...lats);
-
-    if (visibleCoordinates.length === 1 || (west === east && south === north)) {
-      viewer.camera.flyTo({
-        destination: Cartesian3.fromDegrees(west, south, 2500),
-        duration: 0.8,
-      });
-      return;
-    }
-
-    const lngPadding = Math.max((east - west) * 0.2, 0.002);
-    const latPadding = Math.max((north - south) * 0.2, 0.002);
-
-    viewer.camera.flyTo({
-      destination: Rectangle.fromDegrees(
-        west - lngPadding,
-        south - latPadding,
-        east + lngPadding,
-        north + latPadding,
-      ),
-      duration: 0.8,
-    });
-  }, [trees, activeFilters]);
 
   // ── Click handler ────────────────────────────────────────────────────────
   useEffect(() => {

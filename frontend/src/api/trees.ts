@@ -69,11 +69,6 @@ export async function fetchTreeById(id: number): Promise<Tree> {
   return data;
 }
 
-export async function fetchTreeSpecies(): Promise<TreeSpecies[]> {
-  const { data } = await apiClient.get<TreeSpecies[]>('/trees/species');
-  return data;
-}
-
 export async function fetchAreas(): Promise<AdministrativeArea[]> {
   const { data } = await apiClient.get<AdministrativeArea[]>('/trees/areas');
   return data;
