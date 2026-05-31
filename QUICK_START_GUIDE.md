@@ -217,6 +217,7 @@ DB_USERNAME=postgres
 DB_PASSWORD=your_password
 DB_DATABASE=urban_tree_management
 
+
 # JWT
 JWT_SECRET=your-super-secret-jwt-key-change-in-production
 JWT_EXPIRES_IN=7d

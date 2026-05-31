@@ -29,6 +29,7 @@ import {
   saveOfflineAction,
 } from '../services/offlineStorage';
 import { RootStackParamList } from '../types/navigation';
+import { openDirections } from '../utils/directions';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'TaskDetail'>;
 type TaskDetailRouteProp = RouteProp<RootStackParamList, 'TaskDetail'>;
@@ -462,6 +463,19 @@ if (trunkDiameter !== undefined && (isNaN(trunkDiameter) || trunkDiameter <= 0))
     }
   }
 
+  function handleOpenDirections() {
+    const coordinates = treeDetails?.location?.coordinates ?? task.tree?.location?.coordinates;
+
+    if (!coordinates) {
+      Alert.alert('Lỗi', 'Không có thông tin vị trí cây');
+      return;
+    }
+
+    const [longitude, latitude] = coordinates;
+    const treeCode = treeDetails?.tree_code ?? task.tree?.tree_code ?? task.tree_id;
+    openDirections(latitude, longitude, `Cay ${treeCode}`);
+  }
+
   if (fetchingTask || fetchingTree) {
     return (
       <View style={styles.loadingContainer}>
@@ -614,6 +628,10 @@ if (trunkDiameter !== undefined && (isNaN(trunkDiameter) || trunkDiameter <= 0))
               </Text>
             </View>
 
+            <TouchableOpacity style={styles.directionsButton} onPress={handleOpenDirections}>
+              <Text style={styles.directionsButtonText}>Chỉ đường đến cây</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={styles.historyButton}
               onPress={() => navigation.navigate('TreeHistory', { 
@@ -734,6 +752,10 @@ style={styles.physicalInput}
                 {task.tree.location.coordinates[1].toFixed(6)}, {task.tree.location.coordinates[0].toFixed(6)}
               </Text>
             </View>
+
+            <TouchableOpacity style={styles.directionsButton} onPress={handleOpenDirections}>
+              <Text style={styles.directionsButtonText}>Chỉ đường đến cây</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -951,6 +973,20 @@ justifyContent: 'space-between',
     color: '#fff',
     fontSize: 15,
     fontWeight: '600',
+  },
+  directionsButton: {
+    backgroundColor: '#0ea5e9',
+    borderRadius: 8,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#38bdf8',
+  },
+  directionsButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
   },
   // Evidence image
   evidenceImage: {

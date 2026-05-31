@@ -15,28 +15,28 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Create a system notification' })
   @ApiResponse({ status: 201, description: 'Notification created.' })
   async create(@Body() dto: CreateNotificationDto, @Request() req) {
-    const userId = req.user?.userId ?? req.user?.id ?? null;
+    const userId = req.user?.userId ?? req.user?.sub ?? req.user?.id ?? null;
     return this.notificationsService.create(dto, userId);
   }
 
   @Get()
   @ApiOperation({ summary: 'Get current user notifications newest first' })
   async findMine(@Request() req) {
-    const userId = req.user?.userId ?? req.user?.id;
+    const userId = req.user?.userId ?? req.user?.sub ?? req.user?.id;
     return this.notificationsService.findMine(userId);
   }
 
   @Get('unread-count')
   @ApiOperation({ summary: 'Get unread notification count' })
   async unreadCount(@Request() req) {
-    const userId = req.user?.userId ?? req.user?.id;
+    const userId = req.user?.userId ?? req.user?.sub ?? req.user?.id;
     return { count: await this.notificationsService.countUnread(userId) };
   }
 
   @Patch(':id/read')
   @ApiOperation({ summary: 'Mark notification as read' })
   async markRead(@Param('id') id: string, @Request() req) {
-    const userId = req.user?.userId ?? req.user?.id;
+    const userId = req.user?.userId ?? req.user?.sub ?? req.user?.id;
     return this.notificationsService.markRead(+id, userId);
   }
 }

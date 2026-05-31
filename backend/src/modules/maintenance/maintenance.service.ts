@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { MaintenanceTask, TaskStatus } from '../../entities/maintenance-task.entity';
@@ -28,6 +28,8 @@ interface UploadedFile {
 
 @Injectable()
 export class MaintenanceService {
+  private readonly logger = new Logger(MaintenanceService.name);
+
   constructor(
     @InjectRepository(MaintenanceTask)
     private readonly taskRepository: Repository<MaintenanceTask>,
@@ -76,6 +78,8 @@ export class MaintenanceService {
         task_type: saved.task_type,
       },
     );
+
+    await this.notifyTaskAssigned(saved, tree, userId);
 
     return saved;
   }
@@ -375,6 +379,30 @@ export class MaintenanceService {
       where: { area_id: dto.area_id },
       order: { tree_code: 'ASC' },
     });
+  }
+
+  private async notifyTaskAssigned(
+    task: MaintenanceTask,
+    tree: Tree,
+    createdBy?: number,
+  ) {
+    const scheduledDate = new Date(task.scheduled_date).toLocaleDateString('vi-VN');
+    const treeLabel = tree.tree_code ? `cay ${tree.tree_code}` : `cay #${tree.id}`;
+
+    try {
+      await this.notificationsService.notifyUsers(
+        [task.assigned_to],
+        'Cong viec moi duoc giao',
+        `Ban duoc giao cong viec ${task.task_type} cho ${treeLabel}, ngay ${scheduledDate}. Mo Mobile > Cong viec cua toi > chon task > Chi duong den cay de xem huong dan di chuyen.`,
+        createdBy ?? null,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to notify assigned staff for task ${task.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   private addRecurrence(

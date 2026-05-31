@@ -15,6 +15,7 @@ import { AuditLog } from '../../entities/auditLog.entity';
 import { CloudStorageService } from '../../services/cloud-storage.service';
 import { CreateMaintenanceTaskDto } from './dto/create-maintenance-task.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { SettingsService } from '../settings/settings.service';
 
 describe('MaintenanceService', () => {
   let service: MaintenanceService;
@@ -56,6 +57,10 @@ describe('MaintenanceService', () => {
     deleteImage: jest.fn(),
   };
 
+  const mockSettingsService = {
+    getSettingAsNumber: jest.fn().mockResolvedValue(10),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -81,6 +86,10 @@ describe('MaintenanceService', () => {
         {
           provide: NotificationsService,
           useValue: mockNotificationsService,
+        },
+        {
+          provide: SettingsService,
+          useValue: mockSettingsService,
         },
         // AuditLogService phục vụ truy vết bảo mật
         // Cung cấp dưới dạng useValue để tránh lỗi vòng lặp DI (circular dependency)
@@ -167,6 +176,12 @@ describe('MaintenanceService', () => {
         where: { id: 2 },
       });
       expect(mockTaskRepository.save).toHaveBeenCalled();
+      expect(mockNotificationsService.notifyUsers).toHaveBeenCalledWith(
+        [2],
+        'Cong viec moi duoc giao',
+        expect.stringContaining('Chi duong den cay'),
+        null,
+      );
     });
 
     it('should fail if tree does not exist', async () => {
@@ -252,7 +267,7 @@ describe('MaintenanceService', () => {
       await expect(
         service.completeTask(taskId, userId, completeDto),
       ).rejects.toThrow(
-        'You must be within 10 meters of the tree to complete this task',
+        'Bạn ở quá xa cây',
       );
     });
 
@@ -507,7 +522,8 @@ describe('MaintenanceService', () => {
       expect(result.length).toBe(2);
       expect(mockTaskRepository.find).toHaveBeenCalledWith({
         where: { assigned_to: userId },
-        order: { scheduled_date: 'ASC' },
+        relations: ['tree', 'tree.species', 'tree.area'],
+        order: { scheduled_date: 'ASC', created_at: 'DESC' },
       });
     });
   });
@@ -532,6 +548,7 @@ describe('MaintenanceService', () => {
       expect(result.id).toBe(taskId);
       expect(mockTaskRepository.findOne).toHaveBeenCalledWith({
         where: { id: taskId },
+        relations: ['assignedUser', 'tree', 'tree.species'],
       });
     });
 

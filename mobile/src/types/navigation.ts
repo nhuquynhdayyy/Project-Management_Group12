@@ -8,4 +8,6 @@ export type RootStackParamList = {
   QRScanner: undefined;
   NearbyTrees: undefined;
   RegisterTree: undefined;
+  Notifications: undefined;
+  IncidentReport: undefined;
 };
