@@ -30,6 +30,27 @@ export interface RegisterUserPayload {
   roles: UserRole[];
 }
 
+// Profile management types
+export interface ProfileData {
+  id: number;
+  username: string;
+  full_name: string | null;
+  email: string | null;
+  avatar_url: string | null;
+  roles: string[];
+  created_at: string;
+}
+
+export interface UpdateProfilePayload {
+  full_name?: string;
+  email?: string;
+}
+
+export interface ChangePasswordPayload {
+  current_password: string;
+  new_password: string;
+}
+
 export interface TreeSpecies {
   id: number;
   common_name: string;
@@ -39,6 +60,9 @@ export interface TreeSpecies {
 export interface AdministrativeArea {
   id: number;
   area_name: string;
+  parent_id?: number | null;
+  children?: AdministrativeArea[];
+  trees?: Tree[];
 }
 
 export type HealthStatus = 'Tốt' | 'Yếu' | 'Sâu bệnh' | 'Chết';

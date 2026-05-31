@@ -38,44 +38,17 @@ export async function getTreeByCode(treeCode: string): Promise<Tree> {
   const response = await apiClient.get<Tree>(`/trees/code/${treeCode}`);
   return response.data;
 }
+// --- INTERFACES ---
+export interface UpdatePhysicalPayload {
+  height_m?: number;
+  trunk_diameter_cm?: number;
+  canopy_diameter_m?: number;
+  tilt_degree?: number;
+  notes?: string;
+}
 
 export interface NearbyTree extends Tree {
   distance: number; // Khoảng cách tính bằng mét
-}
-
-/**
- * Tìm cây xung quanh vị trí hiện tại
- * @param latitude Vĩ độ
- * @param longitude Kinh độ
- * @param radiusMeters Bán kính tìm kiếm (mét), mặc định 1000m
- * @returns Danh sách cây xung quanh, sắp xếp theo khoảng cách
- */
-export async function findTreesNearby(
-  latitude: number,
-  longitude: number,
-  radiusMeters: number = 1000,
-): Promise<NearbyTree[]> {
-  const response = await apiClient.get<NearbyTree[]>('/trees/nearby', {
-    params: {
-      latitude,
-      longitude,
-      radius_meters: radiusMeters,
-    },
-  });
-  return response.data;
-}
-
-/**
- * Update tree health status
- */
-export async function updateTreeHealth(
-  treeId: number,
-  healthStatus: 'Tốt' | 'Yếu' | 'Sâu bệnh' | 'Chết'
-): Promise<Tree> {
-  const response = await apiClient.patch<Tree>(`/trees/${treeId}/health`, {
-    health_status: healthStatus,
-  });
-  return response.data;
 }
 
 export interface TreeSpecies {
@@ -102,25 +75,53 @@ export interface CreateTreeData {
   tilt_degree?: number;
 }
 
-/**
- * Get all tree species
- */
+// --- FUNCTIONS ---
+
+/** Tìm cây xung quanh vị trí hiện tại */
+export async function findTreesNearby(
+  latitude: number,
+  longitude: number,
+  radiusMeters: number = 1000,
+): Promise<NearbyTree[]> {
+  const response = await apiClient.get<NearbyTree[]>('/trees/nearby', {
+    params: { latitude, longitude, radius_meters: radiusMeters },
+  });
+  return response.data;
+}
+
+/** Cập nhật trạng thái sức khỏe */
+export async function updateTreeHealth(
+  treeId: number,
+  healthStatus: 'Tốt' | 'Yêu' | 'Sâu bệnh' | 'Chết' | string
+): Promise<Tree> {
+  const response = await apiClient.patch<Tree>(`/trees/${treeId}/health`, {
+    health_status: healthStatus,
+  });
+  return response.data;
+}
+
+/** Cập nhật chỉ số vật lý (ngyn) */
+export async function updatePhysicalMeasurements(
+  treeId: number,
+  payload: UpdatePhysicalPayload
+): Promise<{ tree: Tree; log: any }> {
+  const response = await apiClient.patch(`/trees/${treeId}/physical`, payload);
+  return response.data;
+}
+
+/** Lấy danh sách loài cây */
 export async function getAllSpecies(): Promise<TreeSpecies[]> {
   const response = await apiClient.get<TreeSpecies[]>('/trees/species');
   return response.data;
 }
 
-/**
- * Get all administrative areas
- */
+/** Lấy danh sách khu vực */
 export async function getAllAreas(): Promise<AdministrativeArea[]> {
   const response = await apiClient.get<AdministrativeArea[]>('/trees/areas');
   return response.data;
 }
 
-/**
- * Create a new tree
- */
+/** Tạo cây mới */
 export async function createTree(data: CreateTreeData): Promise<Tree> {
   const response = await apiClient.post<Tree>('/trees', data);
   return response.data;

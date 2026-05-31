@@ -14,7 +14,10 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getMyTasks, MaintenanceTask } from '../api/maintenance';
+import NetworkStatusIndicator from '../components/NetworkStatusIndicator';
+import OfflineBanner from '../components/OfflineBanner';
 import { useAuth } from '../context/AuthContext';
+import { saveCachedTaskDetails } from '../services/offlineStorage';
 import { RootStackParamList } from '../types/navigation';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'TaskList'>;
@@ -75,19 +78,21 @@ export default function TaskListScreen() {
     return scheduledDate < today;
   };
 
-  const loadTasks = async () => {
+const loadTasks = async () => {
     try {
       setLoading(true);
       const data = await getMyTasks();
       
       if (Array.isArray(data)) {
+        // 1. Xử lý logic Ưu tiên và Quá hạn (từ nhánh main)
         const tasksWithPriority: TaskWithPriority[] = data.map(task => ({
           ...task,
           priority: calculatePriority(task),
           isOverdue: isTaskOverdue(task),
         }));
         
-        // Sắp xếp: Quá hạn > Ưu tiên cao > Đang thực hiện > Chờ xử lý > Hoàn thành
+        // 2. Sắp xếp danh sách theo thứ tự thông minh (từ nhánh main)
+        // Thứ tự: Quá hạn > Ưu tiên cao > Đang làm > Chờ xử lý > Hoàn thành
         tasksWithPriority.sort((a, b) => {
           if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
           
@@ -104,7 +109,13 @@ export default function TaskListScreen() {
           return new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime();
         });
         
+        // 3. Cập nhật giao diện với danh sách đã sắp xếp
         setTasks(tasksWithPriority);
+
+        // 4. Lưu dữ liệu đã xử lý vào bộ nhớ đệm để dùng Offline (từ nhánh ngyn)
+        // Việc này giúp khi mất mạng, nhân viên vẫn thấy danh sách đã được sắp xếp đúng
+        await Promise.all(tasksWithPriority.map(saveCachedTaskDetails));
+
       } else {
         setTasks([]);
         Alert.alert('Lỗi', 'Dữ liệu không đúng định dạng');
@@ -318,15 +329,17 @@ export default function TaskListScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Danh sách công việc</Text>
+          <Text style={styles.headerTitle}>Công việc của tôi</Text>
           <Text style={styles.headerSubtitle}>
             {tasks.length} công việc • {filteredTasks.filter(t => t.status !== 'Completed').length} chưa hoàn thành
           </Text>
+          <NetworkStatusIndicator />
         </View>
         <TouchableOpacity onPress={signOut} style={styles.logoutButton}>
           <Text style={styles.logoutText}>Đăng xuất</Text>
         </TouchableOpacity>
       </View>
+      <OfflineBanner />
 
       {/* Filter Tabs */}
       <View style={styles.filterContainer}>

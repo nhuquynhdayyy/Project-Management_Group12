@@ -9,12 +9,28 @@ import { Repository } from 'typeorm';
 import { Tree } from '../../entities/tree.entity';
 import { TreeSpecies } from '../../entities/tree-species.entity';
 import { AdministrativeArea } from '../../entities/administrative-area.entity';
+import { TreePhysicalLog } from '../../entities/tree-physical-log.entity';
+import { MaintenanceTask, TaskStatus } from '../../entities/maintenance-task.entity';
 import { CreateTreeDto } from './dto/create-tree.dto';
 import { UpdateTreeDto } from './dto/update-tree.dto';
 import { FindTreesNearbyDto } from './dto/find-trees-nearby.dto';
+import { UpdatePhysicalDto } from './dto/update-physical.dto';
+import { PhysicalHistoryQueryDto } from './dto/physical-history-query.dto';
+import { OfflineActionDto } from './dto/sync-trees.dto';
 import { AuditLogService } from '../audit-log/auditLog.service';
 import { AuditAction } from '../../entities/auditLog.entity';
 import * as QRCode from 'qrcode';
+
+export interface SyncResultItem {
+  id?: string;
+  type: string;
+  treeId: number;
+  taskId?: number;
+}
+
+export interface SyncErrorItem extends SyncResultItem {
+  message: string;
+}
 
 @Injectable()
 export class TreesService {
@@ -25,6 +41,10 @@ export class TreesService {
     private readonly speciesRepository: Repository<TreeSpecies>,
     @InjectRepository(AdministrativeArea)
     private readonly areaRepository: Repository<AdministrativeArea>,
+    @InjectRepository(TreePhysicalLog)
+    private readonly physicalLogRepository: Repository<TreePhysicalLog>,
+    @InjectRepository(MaintenanceTask)
+    private readonly taskRepository: Repository<MaintenanceTask>,
     private readonly auditLogService: AuditLogService,
   ) {}
 
@@ -76,7 +96,7 @@ export class TreesService {
       planting_year: createTreeDto.planting_year,
       height_m: createTreeDto.height_m,
       trunk_diameter_cm: createTreeDto.trunk_diameter_cm,
-      canopy_diameter_m: createTreeDto.canopy_diameter_m,
+canopy_diameter_m: createTreeDto.canopy_diameter_m,
       tilt_degree: createTreeDto.tilt_degree,
       health_status: createTreeDto.health_status,
       created_by: createTreeDto.created_by,
@@ -357,18 +377,217 @@ export class TreesService {
     return await this.treeRepository.save(tree);
   }
 
-  /**
-   * Find tree by QR code string
-   * @param qrCode QR code string (e.g., "cayxanh://tree/42")
-   * @returns Tree with related maintenance tasks
-   */
+  // ==========================================
+  // 1. TÍNH NĂNG CẬP NHẬT CHỈ SỐ VẬT LÝ (ngyn)
+  // ==========================================
+  async updatePhysical(
+    id: number,
+    userId: number,
+    updatePhysicalDto: UpdatePhysicalDto,
+  ): Promise<{ tree: Tree; log: TreePhysicalLog }> {
+    const tree = await this.treeRepository.findOne({ where: { id } });
+    if (!tree) {
+      throw new NotFoundException('Tree not found');
+    }
+
+    // Lưu lại giá trị cũ để làm log
+    const oldValues = {
+      height_m: tree.height_m,
+      trunk_diameter_cm: tree.trunk_diameter_cm,
+      canopy_diameter_m: tree.canopy_diameter_m,
+      tilt_degree: tree.tilt_degree,
+    };
+
+    // Cập nhật các giá trị mới
+    const newValues: any = {};
+    if (updatePhysicalDto.height_m !== undefined) {
+      tree.height_m = updatePhysicalDto.height_m;
+      newValues.height_m = updatePhysicalDto.height_m;
+    }
+    if (updatePhysicalDto.trunk_diameter_cm !== undefined) {
+      tree.trunk_diameter_cm = updatePhysicalDto.trunk_diameter_cm;
+      newValues.trunk_diameter_cm = updatePhysicalDto.trunk_diameter_cm;
+    }
+    if (updatePhysicalDto.canopy_diameter_m !== undefined) {
+      tree.canopy_diameter_m = updatePhysicalDto.canopy_diameter_m;
+      newValues.canopy_diameter_m = updatePhysicalDto.canopy_diameter_m;
+    }
+    if (updatePhysicalDto.tilt_degree !== undefined) {
+      tree.tilt_degree = updatePhysicalDto.tilt_degree;
+      newValues.tilt_degree = updatePhysicalDto.tilt_degree;
+    }
+
+    const updatedTree = await this.treeRepository.save(tree);
+
+    // Tạo nhật ký đo đạc (Physical Log)
+    const log = this.physicalLogRepository.create({
+      tree_id: id,
+      user_id: userId,
+      height_m: updatePhysicalDto.height_m,
+      trunk_diameter_cm: updatePhysicalDto.trunk_diameter_cm,
+      canopy_diameter_m: updatePhysicalDto.canopy_diameter_m,
+      tilt_degree: updatePhysicalDto.tilt_degree,
+      old_values: oldValues,
+      new_values: newValues,
+      notes: updatePhysicalDto.notes,
+    });
+
+    const savedLog = await this.physicalLogRepository.save(log);
+
+    return { tree: updatedTree, log: savedLog };
+  }
+
+  async getPhysicalHistory(
+    id: number,
+    query: PhysicalHistoryQueryDto,
+  ): Promise<{ data: TreePhysicalLog[]; total: number; page: number; limit: number }> {
+    const tree = await this.treeRepository.findOne({ where: { id } });
+    if (!tree) {
+      throw new NotFoundException('Tree not found');
+    }
+
+    const page = query.page || 1;
+    const limit = query.limit || 10;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await this.physicalLogRepository.findAndCount({
+      where: { tree_id: id },
+      order: { measured_at: 'DESC' },
+      skip,
+      take: limit,
+    });
+
+    return { data, total, page, limit };
+  }
+
+  // ==========================================
+  // 2. TÍNH NĂNG QR CODE & KIỂM TRA VỊ TRÍ (main)
+  // ==========================================
   async findByQRCode(qrCode: string): Promise<Tree | null> {
     return await this.treeRepository.findOne({ 
       where: { qr_code: qrCode },
       relations: ['species', 'area']
     });
   }
-  
+
+  async findAllSpecies(): Promise<TreeSpecies[]> {
+    return await this.speciesRepository.find({ order: { common_name: 'ASC' } });
+  }
+
+  async checkTreeCodeExists(treeCode: string, excludeId?: number): Promise<boolean> {
+    const query = this.treeRepository.createQueryBuilder('tree').where('tree.tree_code = :treeCode', { treeCode });
+    if (excludeId) query.andWhere('tree.id != :excludeId', { excludeId });
+    const count = await query.getCount();
+    return count > 0;
+  }
+
+  async checkLocationExists(latitude: number, longitude: number, excludeId?: number): Promise<{ exists: boolean; tree?: { id: number; tree_code: string } }> {
+    const tree = await this.findTreeAtLocation(latitude, longitude, excludeId);
+    if (tree) {
+      return { exists: true, tree: { id: tree.id, tree_code: tree.tree_code } };
+    }
+    return { exists: false };
+  }
+
+  // ==========================================
+  // 3. TÍNH NĂNG ĐỒNG BỘ OFFLINE (ngyn)
+  // ==========================================
+  async syncOfflineActions(
+    actions: OfflineActionDto[],
+    userId: number,
+  ): Promise<{ synced: SyncResultItem[]; skipped: SyncResultItem[]; errors: SyncErrorItem[] }> {
+    const synced: SyncResultItem[] = [];
+    const skipped: SyncResultItem[] = [];
+    const errors: SyncErrorItem[] = [];
+    const targetUpdatedAtByKey = new Map<string, Date>();
+
+    for (const action of actions) {
+      const item = this.toSyncResultItem(action);
+      const targetKey = this.getSyncTargetKey(action);
+
+      try {
+        const offlineDate = new Date(action.offlineTimestamp);
+        if (Number.isNaN(offlineDate.getTime())) {
+          errors.push({ ...item, message: 'Invalid offlineTimestamp' });
+          continue;
+        }
+
+        const targetUpdatedAt = targetUpdatedAtByKey.has(targetKey)
+          ? targetUpdatedAtByKey.get(targetKey)
+          : await this.getSyncTargetUpdatedAt(action);
+
+        if (!targetUpdatedAt) {
+          errors.push({ ...item, message: action.type === 'task_complete' ? 'Task not found' : 'Tree not found' });
+          continue;
+        }
+        targetUpdatedAtByKey.set(targetKey, targetUpdatedAt);
+
+        // Chống ghi đè dữ liệu cũ hơn dữ liệu hiện tại trên server
+        if (offlineDate.getTime() <= targetUpdatedAt.getTime()) {
+          skipped.push(item);
+          continue;
+        }
+
+        await this.applyOfflineAction(action, userId, offlineDate);
+        targetUpdatedAtByKey.set(targetKey, offlineDate);
+        synced.push(item);
+      } catch (error: any) {
+        errors.push({ ...item, message: error?.message || 'Sync failed' });
+      }
+    }
+
+    return { synced, skipped, errors };
+  }
+
+  // ==========================================
+  // 4. CÁC HÀM PRIVATE HỖ TRỢ
+  // ==========================================
+  private async findTreeAtLocation(latitude: number, longitude: number, excludeId?: number): Promise<Tree | null> {
+    const tolerance = 0.00001; // ~1 mét
+    const query = this.treeRepository.createQueryBuilder('tree')
+      .where('ABS(ST_X(tree.location::geometry) - :longitude) < :tolerance', { longitude, tolerance })
+      .andWhere('ABS(ST_Y(tree.location::geometry) - :latitude) < :tolerance', { latitude, tolerance });
+    if (excludeId) query.andWhere('tree.id != :excludeId', { excludeId });
+    return await query.getOne();
+  }
+
+  private async getSyncTargetUpdatedAt(action: OfflineActionDto): Promise<Date | null> {
+    if (action.type === 'task_complete') {
+      if (!action.taskId) return null;
+      const task = await this.taskRepository.findOne({ where: { id: action.taskId } });
+      return task?.updated_at ?? null;
+    }
+    const tree = await this.treeRepository.findOne({ where: { id: action.treeId } });
+    return tree?.updated_at ?? null;
+  }
+
+  private getSyncTargetKey(action: OfflineActionDto): string {
+    return action.type === 'task_complete' ? `task:${action.taskId ?? 'missing'}` : `tree:${action.treeId}`;
+  }
+
+  private async applyOfflineAction(action: OfflineActionDto, userId: number, offlineDate: Date): Promise<void> {
+    if (action.type === 'health_update') {
+      const healthStatus = action.data.health_status ?? action.data.healthStatus;
+      if (!healthStatus) throw new BadRequestException('health_status is required');
+      await this.updateHealthStatus(action.treeId, healthStatus);
+    } else if (action.type === 'physical_update') {
+      await this.updatePhysical(action.treeId, userId, action.data as UpdatePhysicalDto);
+    } else if (action.type === 'task_complete') {
+      if (!action.taskId) throw new BadRequestException('taskId is required for task_complete');
+      const task = await this.taskRepository.findOne({ where: { id: action.taskId } });
+      if (!task || task.tree_id !== action.treeId) throw new BadRequestException('Invalid task');
+      
+      task.status = TaskStatus.COMPLETED;
+      task.completed_at = offlineDate;
+      if (action.data.notes) task.notes = task.notes ? `${task.notes}\n\nNotes: ${action.data.notes}` : action.data.notes;
+      await this.taskRepository.save(task);
+    }
+  }
+
+  private toSyncResultItem(action: OfflineActionDto): SyncResultItem {
+    return { id: action.id, type: action.type, treeId: action.treeId, taskId: action.taskId };
+  }
+
   private toAuditValue(tree: Partial<Tree>): Record<string, any> {
     return {
       tree_code: tree.tree_code,
@@ -385,97 +604,8 @@ export class TreesService {
     };
   }
 
-  private getLongitude(tree: Tree): number {
-    const location = tree.location as any;
-    return typeof location === 'string'
-      ? Number(location.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/)?.[1])
-      : location.coordinates[0];
-  }
-
-  private getLatitude(tree: Tree): number {
-    const location = tree.location as any;
-    return typeof location === 'string'
-      ? Number(location.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/)?.[2])
-      : location.coordinates[1];
-  }
-  
-  async findAllSpecies(): Promise<TreeSpecies[]> {
-    return await this.speciesRepository.find({ order: { common_name: 'ASC' } });
-  }
-
-  /**
-   * Tìm cây tại vị trí cụ thể (cho phép sai số 0.00001 độ ~ 1 mét)
-   * @param latitude Vĩ độ
-   * @param longitude Kinh độ
-   * @param excludeId ID cây cần loại trừ (dùng khi update)
-   * @returns Cây tại vị trí đó hoặc null
-   */
-  private async findTreeAtLocation(
-    latitude: number,
-    longitude: number,
-    excludeId?: number,
-  ): Promise<Tree | null> {
-    const tolerance = 0.00001; // ~1 mét
-    
-    const query = this.treeRepository
-      .createQueryBuilder('tree')
-      .where(
-        'ABS(ST_X(tree.location::geometry) - :longitude) < :tolerance',
-        { longitude, tolerance },
-      )
-      .andWhere(
-        'ABS(ST_Y(tree.location::geometry) - :latitude) < :tolerance',
-        { latitude, tolerance },
-      );
-
-    if (excludeId) {
-      query.andWhere('tree.id != :excludeId', { excludeId });
-    }
-
-    return await query.getOne();
-  }
-
-  /**
-   * Kiểm tra xem mã cây có tồn tại không
-   * @param treeCode Mã cây cần kiểm tra
-   * @param excludeId ID cây cần loại trừ (dùng khi update)
-   * @returns true nếu mã cây đã tồn tại
-   */
-  async checkTreeCodeExists(
-    treeCode: string,
-    excludeId?: number,
-  ): Promise<boolean> {
-    const query = this.treeRepository
-      .createQueryBuilder('tree')
-      .where('tree.tree_code = :treeCode', { treeCode });
-
-    if (excludeId) {
-      query.andWhere('tree.id != :excludeId', { excludeId });
-    }
-
-    const count = await query.getCount();
-    return count > 0;
-  }
-
-  /**
-   * Kiểm tra xem tọa độ có cây nào đã đăng ký không
-   * @param latitude Vĩ độ
-   * @param longitude Kinh độ
-   * @param excludeId ID cây cần loại trừ (dùng khi update)
-   * @returns Thông tin cây nếu tồn tại, null nếu không
-   */
-  async checkLocationExists(
-    latitude: number,
-    longitude: number,
-    excludeId?: number,
-  ): Promise<{ exists: boolean; tree?: { id: number; tree_code: string } }> {
-    const tree = await this.findTreeAtLocation(latitude, longitude, excludeId);
-    if (tree) {
-      return {
-        exists: true,
-        tree: { id: tree.id, tree_code: tree.tree_code },
-      };
-    }
-    return { exists: false };
+  // Hàm bổ sung cho phần đồng bộ health_status
+  private async updateHealthStatus(treeId: number, status: HealthStatus): Promise<void> {
+    await this.treeRepository.update(treeId, { health_status: status });
   }
 }

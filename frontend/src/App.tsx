@@ -4,6 +4,11 @@ import ProtectedRoute from './components/ProtectedRoute';
 import RoleGuard from './components/RoleGuard';
 import AppShell from './components/AppShell';
 import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
+import ProfilePage from './pages/ProfilePage';
 import MapPage from './pages/MapPage';
 import DashboardPage from './pages/DashboardPage';
 import ActivityLogsPage from './pages/ActivityLogsPage';
@@ -14,6 +19,7 @@ import TreeManagementPage from './pages/dashboard/TreeManagementPage';
 import TreeHeatmapPage from './pages/dashboard/TreeHeatmapPage';
 import StaffStatsPage from './pages/dashboard/StaffStatsPage';
 import UsersPage from './pages/dashboard/UsersPage';
+import AreasPage from './pages/dashboard/AreasPage';
 import SystemSettingsPage from './pages/dashboard/SystemSettingsPage';
 import NearbyTreesPage from './pages/dashboard/NearbyTreesPage';
 import StaffTasksPage from './pages/dashboard/StaffTasksPage';
@@ -36,11 +42,16 @@ export default function App() {
         <Routes>
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
 
           {/* Protected — all share the AppShell sidebar */}
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
               <Route path="/map" element={<MapPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
               
               {/* Nearby Trees - Staff, Manager, Admin */}
               <Route element={<RoleGuard allowedRoles={['Admin', 'Manager', 'Staff']} />}>
@@ -57,6 +68,7 @@ export default function App() {
                 <Route path="/dashboard/tasks" element={<TaskStatsPage />} />
                 <Route path="/dashboard/tasks/manage" element={<TaskManagementPage />} />
                 <Route path="/dashboard/staff" element={<StaffStatsPage />} />
+                <Route path="/dashboard/areas" element={<AreasPage />} />
               </Route>
               <Route element={<RoleGuard allowedRoles={['Admin']} />}>
                 <Route path="/dashboard/users" element={<UsersPage />} />

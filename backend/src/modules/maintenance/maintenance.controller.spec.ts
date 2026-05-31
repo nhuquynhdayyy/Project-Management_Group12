@@ -220,8 +220,33 @@ describe('MaintenanceController', () => {
 
   describe('completeTask', () => {
     it('should complete a task with geofencing validation', async () => {
-      // This test is covered by E2E tests - skipping unit test due to decorator complexity
-      expect(true).toBe(true);
+      // Arrange
+      const mockRequest = {
+        user: { userId: 2 },
+      };
+
+      const completeDto: CompleteTaskDto = {
+        latitude: 16.0544,
+        longitude: 108.2022,
+        evidence_image_url: 'https://storage.example.com/evidence.jpg',
+        notes: 'Task completed',
+      };
+
+      const mockTask = {
+        id: 1,
+        status: TaskStatus.COMPLETED,
+        completed_at: new Date(),
+      };
+
+      mockMaintenanceService.completeTask.mockResolvedValue(mockTask);
+
+      // Act
+      const result = await controller.completeTask('1', completeDto, undefined as any, mockRequest);
+
+      // Assert
+      expect(result).toBeDefined();
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      expect(mockMaintenanceService.completeTask).toHaveBeenCalledWith(1, 2, completeDto, undefined);
     });
   });
 

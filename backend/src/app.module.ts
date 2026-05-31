@@ -6,6 +6,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { TreesModule } from './modules/trees/trees.module';
 import { SeederModule } from './database/seeder/seeder.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
+import { AreasModule } from './modules/areas/areas.module';
 import { AuditLogModule } from './modules/audit-log/auditLog.module';
 import { CloudStorageService } from './services/cloud-storage.service';
 import { SettingsModule } from './modules/settings/settings.module';
@@ -46,6 +47,7 @@ import { SettingsModule } from './modules/settings/settings.module';
     TreesModule,
     SeederModule,
     MaintenanceModule,
+    AreasModule,
     AuditLogModule,
     SettingsModule,
   ],

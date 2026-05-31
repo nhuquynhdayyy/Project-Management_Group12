@@ -4,6 +4,9 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { User } from './user.entity';
 import { Role } from '../../entities/role.entity';
+import { PasswordResetToken } from '../../entities/password-reset-token.entity';
+import { MailService } from '../mail/mail.service';
+import { StorageService } from '../storage/storage.service';
 import { AuditLogService } from '../audit-log/auditLog.service';
 import { AuditLog } from '../../entities/auditLog.entity';
 import { AuthService } from './auth.service';
@@ -31,8 +34,11 @@ describe('AuthService', () => {
     email: 'test@example.com',
     password: 'hashed_password',
     full_name: 'Test User',
+    avatar_url: null,
     assigned_area_id: null,
     is_active: true,
+    is_verified: true,
+    verification_token: null,
     last_login_at: null,
     roles: [mockAdminRole],
     created_at: new Date(),
@@ -57,6 +63,23 @@ describe('AuthService', () => {
     findOne: jest.fn(),
   };
 
+  const mockPasswordResetTokenRepository = {
+    create: jest.fn(),
+    save: jest.fn(),
+    findOne: jest.fn(),
+  };
+
+  const mockMailService = {
+    sendVerificationEmail: jest.fn(),
+    sendWelcomeEmail: jest.fn(),
+    sendPasswordResetEmail: jest.fn(),
+  };
+
+  const mockStorageService = {
+    uploadAvatar: jest.fn(),
+    deleteAvatar: jest.fn(),
+  };
+
   const mockJwtService = {
     sign: jest.fn().mockReturnValue('mock.jwt.token'),
     verify: jest.fn().mockReturnValue({ sub: 1, username: 'test_user' }),
@@ -71,9 +94,30 @@ describe('AuthService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
-        { provide: getRepositoryToken(User), useValue: mockUserRepository },
-        { provide: getRepositoryToken(Role), useValue: mockRoleRepository },
-        { provide: JwtService, useValue: mockJwtService },
+        {
+          provide: getRepositoryToken(User),
+          useValue: mockUserRepository,
+        },
+        {
+          provide: getRepositoryToken(Role),
+          useValue: mockRoleRepository,
+        },
+        {
+          provide: getRepositoryToken(PasswordResetToken),
+          useValue: mockPasswordResetTokenRepository,
+        },
+        {
+          provide: JwtService,
+          useValue: mockJwtService,
+        },
+        {
+          provide: MailService,
+          useValue: mockMailService,
+        },
+        {
+          provide: StorageService,
+          useValue: mockStorageService,
+        },
         { provide: AuditLogService, useValue: mockAuditLogService },
         // Cần thiết để AuditLogService không bị lỗi khi khởi tạo
         { provide: getRepositoryToken(AuditLog), useValue: {} },
@@ -97,13 +141,16 @@ describe('AuthService', () => {
       newUser.password = 'plain_password';
 
       mockRoleRepository.findOne.mockResolvedValue(mockAdminRole);
-      mockUserRepository.save.mockResolvedValue({ ...mockUser, username: 'test_user' });
+      mockUserRepository.save.mockResolvedValue(savedUser);
+      mockUserRepository.findOne.mockResolvedValue(null); // No existing user
 
       const result = await service.register(newUser, ['Admin']);
 
       expect(result).toBeDefined();
-      expect((result as any).password).toBeUndefined();
-      expect(result.username).toBe('test_user');
+      expect(result.message).toBeDefined();
+      expect(result.user).toBeDefined();
+      expect((result.user as any).password).toBeUndefined();
+      expect(result.user.username).toBe('test_user');
       expect(bcrypt.hash).toHaveBeenCalledWith('plain_password', 10);
       expect(mockUserRepository.save).toHaveBeenCalled();
     });

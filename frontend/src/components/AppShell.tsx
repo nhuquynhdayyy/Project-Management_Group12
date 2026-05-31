@@ -112,6 +112,19 @@ const NAV_ITEMS = [
     roles: ['Admin', 'Manager'],
   },
   {
+    to: '/dashboard/areas',
+    label: '📍 Quản lý Khu vực',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    ),
+    roles: ['Admin', 'Manager'],
+  },
+  {
     to: '/dashboard/users',
     label: 'Quản lý Users',
 icon: (
@@ -204,7 +217,16 @@ export default function AppShell() {
 
         {/* User section */}
         <div className="px-3 py-3 border-t border-gray-800">
-          <div className="flex items-center gap-2.5 mb-2.5">
+          <NavLink
+            to="/profile"
+            className={({ isActive }) =>
+              `flex items-center gap-2.5 mb-2.5 px-2 py-2 rounded-lg transition-colors
+              ${isActive
+                ? 'bg-green-600/20'
+                : 'hover:bg-gray-800'
+              }`
+            }
+          >
             <div className="w-7 h-7 rounded-full bg-green-700 flex items-center justify-center text-xs font-bold uppercase shrink-0">
               {user?.username?.[0] ?? '?'}
             </div>
@@ -212,9 +234,9 @@ export default function AppShell() {
               <p className="text-xs font-medium text-white truncate">{user?.username}</p>
               <p className="text-[10px] text-gray-500 truncate">
                 {user?.roles.join(', ')}
-</p>
+              </p>
             </div>
-          </div>
+          </NavLink>
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs text-gray-400

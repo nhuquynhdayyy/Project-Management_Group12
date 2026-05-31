@@ -6,15 +6,23 @@ import {
   fetchTrees,
   updateTreeHealth,
   fetchTasksByTreeId,
+  fetchPhysicalHistory,
+  updatePhysicalMeasurements,
+  downloadTreeImportTemplate,
+  importTreesFromExcel,
+  previewTreeImport,
   fetchTreeHistory,
   getTreeQRCodeBlobUrl,
   downloadTreeQRCode,
   checkTreeCodeExists,
   checkLocationExists,
   type CreateTreePayload,
+  type TreeImportPreview,
+  type TreeImportResult,
 } from '../../api/trees';
 import { createTask, type CreateTaskPayload } from '../../api/maintenance';
-import { fetchStaffUsers } from '../../api/auth';
+import { fetchUsers, fetchStaffUsers } from '../../api/auth';
+import { useAuth } from '../../context/AuthContext';
 import type {
   ActivityLog,
   AdministrativeArea,
@@ -136,7 +144,7 @@ function TreeDetailModal({
   onTaskCreated: () => void;
   onHealthUpdated?: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<'info' | 'tasks' | 'history' | 'qrcode'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'tasks' | 'physical' | 'history' | 'qrcode'>('info');
   const [healthValue, setHealthValue] = useState<HealthStatus>(tree.health_status);
   const [savingHealth, setSavingHealth] = useState(false);
   const [healthMsg, setHealthMsg] = useState('');
@@ -147,6 +155,111 @@ function TreeDetailModal({
   const [savingTask, setSavingTask] = useState(false);
   const [taskMsg, setTaskMsg] = useState('');
   const [taskMsgType, setTaskMsgType] = useState<'success' | 'error'>('error');
+  
+  // Physical history state
+  const [physicalHistory, setPhysicalHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
+
+  // Physical update form state
+  const [heightM, setHeightM] = useState('');
+  const [trunkDiameterCm, setTrunkDiameterCm] = useState('');
+  const [canopyDiameterM, setCanopyDiameterM] = useState('');
+  const [tiltDegree, setTiltDegree] = useState('');
+  const [physicalNotes, setPhysicalNotes] = useState('');
+  const [savingPhysical, setSavingPhysical] = useState(false);
+  const [physicalMsg, setPhysicalMsg] = useState('');
+  const [physicalMsgType, setPhysicalMsgType] = useState<'success' | 'error'>('error');
+
+  // Load physical history when tab is active
+  useEffect(() => {
+    if (activeTab === 'physical') {
+      setLoadingHistory(true);
+      fetchPhysicalHistory(tree.id, historyPage, 10)
+        .then((response) => {
+          setPhysicalHistory(response.data);
+          setHistoryTotal(response.total);
+        })
+        .catch((error) => {
+          console.error('Failed to fetch physical history:', error);
+        })
+        .finally(() => {
+          setLoadingHistory(false);
+        });
+    }
+  }, [activeTab, tree.id, historyPage]);
+
+  async function handlePhysicalUpdate() {
+    setPhysicalMsg('');
+    
+    // Validate at least one field
+    if (!heightM && !trunkDiameterCm && !canopyDiameterM && !tiltDegree) {
+      setPhysicalMsg('Vui lòng nhập ít nhất một chỉ số');
+      setPhysicalMsgType('error');
+      return;
+    }
+
+    // Validate numeric values
+    const height = heightM ? parseFloat(heightM) : undefined;
+    const trunkDiameter = trunkDiameterCm ? parseFloat(trunkDiameterCm) : undefined;
+    const canopyDiameter = canopyDiameterM ? parseFloat(canopyDiameterM) : undefined;
+    const tilt = tiltDegree ? parseInt(tiltDegree) : undefined;
+
+    if (height !== undefined && (isNaN(height) || height <= 0)) {
+      setPhysicalMsg('Chiều cao phải là số dương');
+      setPhysicalMsgType('error');
+      return;
+    }
+    if (trunkDiameter !== undefined && (isNaN(trunkDiameter) || trunkDiameter <= 0)) {
+      setPhysicalMsg('Đường kính thân phải là số dương');
+      setPhysicalMsgType('error');
+      return;
+    }
+    if (canopyDiameter !== undefined && (isNaN(canopyDiameter) || canopyDiameter < 0)) {
+      setPhysicalMsg('Đường kính tán phải là số không âm');
+      setPhysicalMsgType('error');
+      return;
+    }
+    if (tilt !== undefined && (isNaN(tilt) || tilt < 0 || tilt > 90)) {
+      setPhysicalMsg('Độ nghiêng phải từ 0 đến 90 độ');
+      setPhysicalMsgType('error');
+      return;
+    }
+
+    setSavingPhysical(true);
+    try {
+      const payload: any = {};
+      if (height !== undefined) payload.height_m = height;
+      if (trunkDiameter !== undefined) payload.trunk_diameter_cm = trunkDiameter;
+      if (canopyDiameter !== undefined) payload.canopy_diameter_m = canopyDiameter;
+      if (tilt !== undefined) payload.tilt_degree = tilt;
+      if (physicalNotes.trim()) payload.notes = physicalNotes.trim();
+
+      await updatePhysicalMeasurements(tree.id, payload);
+
+      setPhysicalMsg('Đã cập nhật chỉ số vật lý!');
+      setPhysicalMsgType('success');
+
+      // Clear form
+      setHeightM('');
+      setTrunkDiameterCm('');
+      setCanopyDiameterM('');
+      setTiltDegree('');
+      setPhysicalNotes('');
+
+      // Reload history
+      const response = await fetchPhysicalHistory(tree.id, historyPage, 10);
+      setPhysicalHistory(response.data);
+      setHistoryTotal(response.total);
+    } catch (error: any) {
+      const msg = error?.response?.data?.message ?? 'Cập nhật thất bại.';
+      setPhysicalMsg(Array.isArray(msg) ? msg.join(', ') : msg);
+      setPhysicalMsgType('error');
+    } finally {
+      setSavingPhysical(false);
+    }
+  }
   const [downloadingQR, setDownloadingQR] = useState(false);
   const [qrDownloadMsg, setQrDownloadMsg] = useState('');
   const [qrCodeBlobUrl, setQrCodeBlobUrl] = useState<string | null>(null);
@@ -318,6 +431,12 @@ function TreeDetailModal({
             Lịch sử task ({tasks.length})
           </button>
           <button
+            onClick={() => setActiveTab('physical')}
+            className={`px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'physical' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            📏 Lịch sử đo đạc
+          </button>
+          <button
             onClick={() => setActiveTab('history')}
             className={`px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'history' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}
           >
@@ -446,6 +565,133 @@ function TreeDetailModal({
             </div>
           )}
 
+{/* --- TAB 1: CHỈ SỐ VẬT LÝ (ngyn) --- */}
+          {activeTab === 'physical' && (
+            <div className="px-5 py-4">
+              {/* Form cập nhật chỉ số - Chỉ cho Admin/Manager */}
+              <div className="bg-gray-900 rounded-lg p-4 mb-4">
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                  ✏️ Cập nhật chỉ số vật lý
+                </h4>
+                <p className="text-xs text-gray-500 mb-3">
+                  Nhập các chỉ số đo đạc mới (chỉ cần nhập những chỉ số thay đổi)
+                </p>
+                
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="mb-1 block text-xs text-gray-500">Chiều cao (m)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={heightM}
+                      onChange={(e) => setHeightM(e.target.value)}
+                      placeholder={tree.height_m?.toString() || '—'}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-gray-500">Đường kính thân (cm)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={trunkDiameterCm}
+                      onChange={(e) => setTrunkDiameterCm(e.target.value)}
+                      placeholder={tree.trunk_diameter_cm?.toString() || '—'}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-gray-500">Đường kính tán (m)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={canopyDiameterM}
+                      onChange={(e) => setCanopyDiameterM(e.target.value)}
+                      placeholder="—"
+                      className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-gray-500">Độ nghiêng (0-90°)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="90"
+                      value={tiltDegree}
+                      onChange={(e) => setTiltDegree(e.target.value)}
+                      placeholder="0-90"
+                      className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <label className="mb-1 block text-xs text-gray-500">Ghi chú</label>
+                  <textarea
+                    value={physicalNotes}
+                    onChange={(e) => setPhysicalNotes(e.target.value)}
+                    rows={2}
+                    placeholder="Ghi chú về đo đạc..."
+                    className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500 resize-none"
+                  />
+                </div>
+
+                {physicalMsg && (
+                  <p className={`text-xs mb-3 ${physicalMsgType === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                    {physicalMsg}
+                  </p>
+                )}
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={handlePhysicalUpdate}
+                    disabled={savingPhysical}
+                    className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50 transition-colors"
+                  >
+                    {savingPhysical ? 'Đang lưu...' : '💾 Lưu chỉ số'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Bảng lịch sử đo đạc */}
+              {loadingHistory ? (
+                <p className="text-sm text-gray-500 italic text-center py-8">Đang tải...</p>
+              ) : physicalHistory.length === 0 ? (
+                <p className="text-sm text-gray-500 italic text-center py-8">Chưa có lịch sử đo đạc</p>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-gray-300">
+                      <thead className="border-b border-gray-700 text-xs uppercase text-gray-400">
+                        <tr>
+                          <th className="py-2 pr-3">Ngày đo</th>
+                          <th className="py-2 pr-3">Chiều cao (m)</th>
+                          <th className="py-2 pr-3">Đ.kính thân (cm)</th>
+                          <th className="py-2 pr-3">Đ.kính tán (m)</th>
+                          <th className="py-2 pr-3">Độ nghiêng (°)</th>
+                          <th className="py-2">Ghi chú</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {physicalHistory.map((log, index) => (
+                          <tr key={log.id} className={`border-b border-gray-800 ${index === 0 ? 'bg-green-900/20' : ''}`}>
+                            <td className="py-2.5 pr-3 text-xs">{new Date(log.measured_at).toLocaleString('vi-VN')}</td>
+                            <td className="py-2.5 pr-3 text-xs">{log.height_m ?? '—'}</td>
+                            <td className="py-2.5 pr-3 text-xs">{log.trunk_diameter_cm ?? '—'}</td>
+                            <td className="py-2.5 pr-3 text-xs">{log.canopy_diameter_m ?? '—'}</td>
+                            <td className="py-2.5 pr-3 text-xs">{log.tilt_degree ?? '—'}</td>
+                            <td className="py-2.5 text-xs text-gray-400">{log.notes || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* --- TAB 2: LỊCH SỬ THAY ĐỔI (main) --- */}
           {activeTab === 'history' && (
             <div className="px-5 py-4">
               {loadingHistory ? (
@@ -456,30 +702,17 @@ function TreeDetailModal({
                   </div>
                 </div>
               ) : historyLogs.length === 0 ? (
-                <p className="text-sm text-gray-500 italic text-center py-8">
-                  Chưa có thay đổi nào được ghi nhận
-                </p>
+                <p className="text-sm text-gray-500 italic text-center py-8">Chưa có thay đổi nào được ghi nhận</p>
               ) : (
                 <div className="space-y-3">
                   {historyLogs.map((log) => {
                     const changes = translateTreeChanges(log.old_value, log.new_value);
                     if (changes.length === 0) return null;
-                    
                     return (
                       <div key={log.id} className="bg-gray-900 rounded-lg p-4 border-l-4 border-blue-500">
                         <div className="flex items-start justify-between mb-2">
-                          <span className="text-xs text-gray-400">
-                            {new Date(log.created_at).toLocaleString('vi-VN', {
-                              year: 'numeric',
-                              month: '2-digit',
-                              day: '2-digit',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
-                          <span className="text-xs text-green-400 font-medium">
-                            {log.user?.username || 'Hệ thống'}
-                          </span>
+                          <span className="text-xs text-gray-400">{new Date(log.created_at).toLocaleString('vi-VN')}</span>
+                          <span className="text-xs text-green-400 font-medium">{log.user?.username || 'Hệ thống'}</span>
                         </div>
                         <ul className="space-y-1.5">
                           {changes.map((change, idx) => (
@@ -497,105 +730,37 @@ function TreeDetailModal({
             </div>
           )}
 
+          {/* --- TAB 3: MÃ QR (main) --- */}
           {activeTab === 'qrcode' && (
             <div className="px-5 py-4">
               <div className="bg-gray-900 rounded-lg p-6 space-y-4">
                 <div className="text-center">
                   <h4 className="text-sm font-semibold text-gray-300 mb-2">Mã QR cho cây {tree.tree_code}</h4>
-                  <p className="text-xs text-gray-500 mb-4">
-                    Quét mã QR này bằng ứng dụng di động để xem thông tin cây nhanh chóng
-                  </p>
+                  <p className="text-xs text-gray-500 mb-4">Quét mã QR này để xem thông tin nhanh</p>
                 </div>
 
-                {/* QR Code Preview */}
                 <div className="flex justify-center">
                   <div className="bg-white p-4 rounded-lg shadow-lg">
                     {loadingQRCode ? (
-                      <div className="w-64 h-64 flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mb-2"></div>
-                          <p className="text-sm text-gray-600">Đang tải QR code...</p>
-                        </div>
-                      </div>
-                    ) : qrCodeError ? (
-                      <div className="w-64 h-64 flex items-center justify-center">
-                        <div className="text-center">
-                          <svg className="w-12 h-12 text-red-500 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <p className="text-sm text-gray-600 mb-2">Không thể tải QR code</p>
-                          <button
-                            onClick={() => {
-                              setQrCodeError(false);
-                              setQrCodeBlobUrl(null);
-                            }}
-                            className="mt-2 px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
-                          >
-                            Thử lại
-                          </button>
-                        </div>
-                      </div>
+                      <div className="w-64 h-64 flex items-center justify-center animate-pulse bg-gray-200 rounded"></div>
                     ) : qrCodeBlobUrl ? (
-                      <img
-                        src={qrCodeBlobUrl}
-                        alt={`QR Code for ${tree.tree_code}`}
-                        className="w-64 h-64 object-contain"
-                      />
+                      <img src={qrCodeBlobUrl} alt="QR Code" className="w-64 h-64 object-contain" />
                     ) : (
-                      <div className="w-64 h-64 flex items-center justify-center">
-                        <p className="text-sm text-gray-600">Chưa tải QR code</p>
-                      </div>
+                      <p className="text-sm text-gray-600">Lỗi tải mã QR</p>
                     )}
                   </div>
                 </div>
 
-                {/* QR Code Info */}
-                <div className="bg-gray-800 rounded-lg p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="text-xs text-gray-500">Mã cây:</span>
-                    <span className="text-xs text-green-400 font-mono font-semibold">{tree.tree_code}</span>
-                  </div>
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="text-xs text-gray-500">QR Data:</span>
-                    <span className="text-xs text-gray-300 font-mono">cayxanh://tree/{tree.id}</span>
-                  </div>
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="text-xs text-gray-500">Loài cây:</span>
-                    <span className="text-xs text-gray-300">{tree.species?.common_name ?? '—'}</span>
-                  </div>
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="text-xs text-gray-500">Khu vực:</span>
-                    <span className="text-xs text-gray-300">{tree.area?.area_name ?? '—'}</span>
-                  </div>
-                </div>
-
-                {/* Download Button */}
-                <div className="flex flex-col items-center gap-3">
-                  <button
-                    onClick={handleDownloadQRCode}
-                    disabled={downloadingQR || loadingQRCode}
-                    className="flex items-center gap-2 rounded-lg bg-green-600 px-6 py-3 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors w-full justify-center"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    {downloadingQR ? 'Đang tải...' : 'Tải mã QR (PNG)'}
-                  </button>
-                  
-                  {qrDownloadMsg && (
-                    <p className={`text-xs ${qrDownloadMsg.includes('✅') ? 'text-green-400' : 'text-red-400'}`}>
-                      {qrDownloadMsg}
-                    </p>
-                  )}
-
-                  <div className="text-center mt-2">
-                    <p className="text-xs text-gray-500">
-                      💡 <strong>Hướng dẫn:</strong> Tải file PNG này và in ra để dán lên cây. 
-                      Nhân viên có thể quét mã QR bằng ứng dụng di động để xem thông tin và tạo task bảo trì.
-                    </p>
-                  </div>
-                </div>
+                <button
+                  onClick={handleDownloadQRCode}
+                  disabled={downloadingQR || loadingQRCode}
+                  className="flex items-center gap-2 rounded-lg bg-green-600 px-6 py-3 text-sm font-medium text-white hover:bg-green-500 w-full justify-center disabled:opacity-50"
+                >
+                  {downloadingQR ? 'Đang tải...' : '💾 Tải mã QR (PNG)'}
+                </button>
               </div>
+            </div>
+          )}
             </div>
           )}
         </div>
@@ -884,6 +1049,7 @@ function KpiMini({ label, value, color }: { label: string; value: number; color:
 // ─── Main Page ────────────────────────────────────────────────────────────────────────────
 
 export default function TreeManagementPage() {
+  const { user } = useAuth();
   const [trees, setTrees] = useState<Tree[]>([]);
   const [species, setSpecies] = useState<TreeSpecies[]>([]);
   const [areas, setAreas] = useState<AdministrativeArea[]>([]);
@@ -897,6 +1063,19 @@ export default function TreeManagementPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTreeTasks, setSelectedTreeTasks] = useState<MaintenanceTask[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
+
+  // Excel import states
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importStep, setImportStep] = useState<1 | 2 | 3>(1);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<TreeImportPreview | null>(null);
+  const [importResult, setImportResult] = useState<TreeImportResult | null>(null);
+  const [importError, setImportError] = useState('');
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [areErrorsOpen, setAreErrorsOpen] = useState(false);
+
+  const canImport = user?.roles.some((role) => role === 'Admin' || role === 'Manager') ?? false;
 
   function loadData() {
     setLoading(true);
@@ -959,6 +1138,82 @@ export default function TreeManagementPage() {
     dead: trees.filter((t) => t.health_status === 'Chết').length,
   }), [trees]);
 
+  // Excel import functions
+  function resetImportModal() {
+    setImportStep(1);
+    setSelectedFile(null);
+    setImportPreview(null);
+    setImportResult(null);
+    setImportError('');
+    setIsPreviewing(false);
+    setIsImporting(false);
+    setAreErrorsOpen(false);
+  }
+
+  function closeImportModal() {
+    setIsImportOpen(false);
+    resetImportModal();
+  }
+
+  async function handleTemplateDownload() {
+    setImportError('');
+    try {
+      const blob = await downloadTreeImportTemplate();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'tree-import-template.xlsx';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setImportError('Tai file mau that bai. Vui long thu lai.');
+    }
+  }
+
+  async function handleFileSelected(file: File | null) {
+    setImportError('');
+    setImportPreview(null);
+    setImportResult(null);
+    setSelectedFile(file);
+    setAreErrorsOpen(false);
+
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+      setImportError('Chi ho tro file .xlsx.');
+      setSelectedFile(null);
+      return;
+    }
+
+    setIsPreviewing(true);
+    try {
+      const preview = await previewTreeImport(file);
+      setImportPreview(preview);
+      setImportStep(2);
+    } catch {
+      setImportError('Khong the doc file Excel. Vui long kiem tra dinh dang file.');
+    } finally {
+      setIsPreviewing(false);
+    }
+  }
+
+  async function handleConfirmImport() {
+    if (!selectedFile) return;
+    setImportError('');
+    setIsImporting(true);
+    try {
+      const result = await importTreesFromExcel(selectedFile);
+      setImportResult(result);
+      setImportStep(3);
+      await loadData(); // Reload tree data
+    } catch {
+      setImportError('Nhap du lieu that bai. Vui long thu lai.');
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
   return (
     <DashboardPageFrame
       title="Quản lý Cây Xanh"
@@ -994,15 +1249,25 @@ export default function TreeManagementPage() {
               {HEALTH_OPTIONS.map((h) => (<option key={h} value={h}>{h}</option>))}
             </select>
           </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            Thêm cây mới
-          </button>
+          <div className="flex gap-2">
+            {canImport && (
+              <button
+                onClick={() => setIsImportOpen(true)}
+                className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 transition-colors"
+              >
+                📤 Nhập từ Excel
+              </button>
+            )}
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Thêm cây mới
+            </button>
+          </div>
         </div>
 
         {/* Table */}
@@ -1096,6 +1361,192 @@ export default function TreeManagementPage() {
           onClose={() => setShowCreateModal(false)}
           onCreated={loadData}
         />
+      )}
+
+      {/* Excel Import Modal */}
+      {isImportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-5xl rounded-xl border border-gray-700 bg-gray-900 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-700 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Nhập cây từ Excel</h2>
+                <p className="text-sm text-gray-400">File .xlsx theo mẫu dữ liệu cây xanh Liên Chiểu</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeImportModal}
+                className="rounded-lg px-3 py-1 text-xl text-gray-300 hover:bg-gray-800 hover:text-white"
+                aria-label="Dong modal"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="border-b border-gray-800 px-5 py-3">
+              <div className="flex flex-wrap gap-2 text-sm">
+                {[1, 2, 3].map((step) => (
+                  <span
+                    key={step}
+                    className={`rounded-full px-3 py-1 ${
+                      importStep === step ? 'bg-emerald-600 text-white' : 'bg-gray-800 text-gray-400'
+                    }`}
+                  >
+                    Bước {step}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="max-h-[72vh] overflow-y-auto px-5 py-5">
+              {importStep === 1 && (
+                <div className="space-y-4">
+                  <button
+                    type="button"
+                    onClick={handleTemplateDownload}
+                    className="rounded-lg border border-emerald-700 bg-emerald-900/30 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-800/50"
+                  >
+                    📥 Tải file mẫu
+                  </button>
+
+                  <label
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      void handleFileSelected(event.dataTransfer.files.item(0));
+                    }}
+                    className="flex min-h-52 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-600 bg-gray-950/60 px-6 py-8 text-center hover:border-emerald-500"
+                  >
+                    <input
+                      type="file"
+                      accept=".xlsx"
+                      className="hidden"
+                      onChange={(event) => void handleFileSelected(event.target.files?.item(0) ?? null)}
+                    />
+                    <span className="text-base font-medium text-gray-200">
+                      {selectedFile ? selectedFile.name : 'Keo tha file .xlsx vao day hoac bam de chon'}
+                    </span>
+                    <span className="mt-2 text-sm text-gray-500">
+                      {isPreviewing ? 'Dang doc file...' : 'Cac cot: tree_code, species, area_name, latitude, longitude'}
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {importStep === 2 && importPreview && (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm text-gray-300">
+                        File: <span className="font-medium text-white">{selectedFile?.name}</span>
+                      </p>
+                      <p className="text-sm text-gray-500">Tong so dong doc duoc: {importPreview.total}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setImportStep(1)}
+                        className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 hover:bg-gray-800"
+                      >
+                        Chon file khac
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleConfirmImport}
+                        disabled={isImporting}
+                        className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isImporting ? 'Dang nhap...' : '✅ Xác nhận nhập'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-lg border border-gray-800">
+                    <table className="w-full text-left text-sm text-gray-300">
+                      <thead className="bg-gray-950 text-xs uppercase text-gray-500">
+                        <tr>
+                          <th className="px-3 py-2">tree_code</th>
+                          <th className="px-3 py-2">species</th>
+                          <th className="px-3 py-2">area_name</th>
+                          <th className="px-3 py-2">latitude</th>
+                          <th className="px-3 py-2">longitude</th>
+                          <th className="px-3 py-2">height_m</th>
+                          <th className="px-3 py-2">trunk_diameter_cm</th>
+                          <th className="px-3 py-2">health_status</th>
+                          <th className="px-3 py-2">planting_year</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importPreview.rows.map((row) => (
+                          <tr key={`${row.tree_code}-${row.latitude}-${row.longitude}`} className="border-t border-gray-800">
+                            <td className="px-3 py-2">{row.tree_code}</td>
+                            <td className="px-3 py-2">{row.species}</td>
+                            <td className="px-3 py-2">{row.area_name}</td>
+                            <td className="px-3 py-2">{row.latitude}</td>
+                            <td className="px-3 py-2">{row.longitude}</td>
+                            <td className="px-3 py-2">{row.height_m ?? ''}</td>
+                            <td className="px-3 py-2">{row.trunk_diameter_cm ?? ''}</td>
+                            <td className="px-3 py-2">{row.health_status ?? ''}</td>
+                            <td className="px-3 py-2">{row.planting_year ?? ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {importPreview.errors.length > 0 && (
+                    <div className="rounded-lg border border-amber-700/50 bg-amber-950/20 px-4 py-3 text-sm text-amber-200">
+                      Co {importPreview.errors.length} loi se duoc bao cao khi nhap. Kiem tra file neu can.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {importStep === 3 && importResult && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <div className="rounded-lg border border-emerald-800 bg-emerald-950/30 p-4 text-emerald-200">
+                      ✅ Đã nhập: <span className="font-semibold">{importResult.imported}</span> cây
+                    </div>
+                    <div className="rounded-lg border border-sky-800 bg-sky-950/30 p-4 text-sky-200">
+                      ⏭️ Bỏ qua (trùng): <span className="font-semibold">{importResult.skipped}</span> cây
+                    </div>
+                    <div className="rounded-lg border border-red-800 bg-red-950/30 p-4 text-red-200">
+                      ❌ Lỗi: <span className="font-semibold">{importResult.errors.length}</span> dòng
+                    </div>
+                  </div>
+
+                  {importResult.errors.length > 0 && (
+                    <div className="rounded-lg border border-gray-800">
+                      <button
+                        type="button"
+                        onClick={() => setAreErrorsOpen((value) => !value)}
+                        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-gray-200 hover:bg-gray-800"
+                      >
+                        Chi tiet loi
+                        <span>{areErrorsOpen ? '−' : '+'}</span>
+                      </button>
+                      {areErrorsOpen && (
+                        <div className="max-h-56 overflow-y-auto border-t border-gray-800 px-4 py-3">
+                          {importResult.errors.map((item) => (
+                            <div key={`${item.row}-${item.message}`} className="py-1 text-sm text-red-300">
+                              Dong {item.row}: {item.message}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {importError && (
+                <div className="mt-4 rounded-lg border border-red-800/60 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+                  {importError}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </DashboardPageFrame>
   );
