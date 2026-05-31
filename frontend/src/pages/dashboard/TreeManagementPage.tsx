@@ -8,10 +8,16 @@ import {
   fetchTasksByTreeId,
   fetchPhysicalHistory,
   updatePhysicalMeasurements,
+  downloadTreeImportTemplate,
+  importTreesFromExcel,
+  previewTreeImport,
   type CreateTreePayload,
+  type TreeImportPreview,
+  type TreeImportResult,
 } from '../../api/trees';
 import { createTask, type CreateTaskPayload } from '../../api/maintenance';
-import { fetchUsers } from '../../api/auth';
+import { fetchUsers, fetchStaffUsers } from '../../api/auth';
+import { useAuth } from '../../context/AuthContext';
 import type {
   AdministrativeArea,
   DashboardUser,
@@ -728,6 +734,7 @@ function KpiMini({ label, value, color }: { label: string; value: number; color:
 // ─── Main Page ────────────────────────────────────────────────────────────────────────────
 
 export default function TreeManagementPage() {
+  const { user } = useAuth();
   const [trees, setTrees] = useState<Tree[]>([]);
   const [species, setSpecies] = useState<TreeSpecies[]>([]);
   const [areas, setAreas] = useState<AdministrativeArea[]>([]);
@@ -742,10 +749,23 @@ export default function TreeManagementPage() {
   const [selectedTreeTasks, setSelectedTreeTasks] = useState<MaintenanceTask[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
 
+  // Excel import states
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importStep, setImportStep] = useState<1 | 2 | 3>(1);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<TreeImportPreview | null>(null);
+  const [importResult, setImportResult] = useState<TreeImportResult | null>(null);
+  const [importError, setImportError] = useState('');
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [areErrorsOpen, setAreErrorsOpen] = useState(false);
+
+  const canImport = user?.roles.some((role) => role === 'Admin' || role === 'Manager') ?? false;
+
   function loadData() {
     setLoading(true);
     setError('');
-    Promise.all([fetchTrees(), fetchTreeSpecies(), fetchAreas(), fetchUsers()])
+    Promise.all([fetchTrees(), fetchTreeSpecies(), fetchAreas(), fetchStaffUsers()])
       .then(([treeData, speciesData, areaData, userData]) => {
         setTrees(treeData);
         setSpecies(speciesData);
@@ -803,6 +823,82 @@ export default function TreeManagementPage() {
     dead: trees.filter((t) => t.health_status === 'Chết').length,
   }), [trees]);
 
+  // Excel import functions
+  function resetImportModal() {
+    setImportStep(1);
+    setSelectedFile(null);
+    setImportPreview(null);
+    setImportResult(null);
+    setImportError('');
+    setIsPreviewing(false);
+    setIsImporting(false);
+    setAreErrorsOpen(false);
+  }
+
+  function closeImportModal() {
+    setIsImportOpen(false);
+    resetImportModal();
+  }
+
+  async function handleTemplateDownload() {
+    setImportError('');
+    try {
+      const blob = await downloadTreeImportTemplate();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'tree-import-template.xlsx';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setImportError('Tai file mau that bai. Vui long thu lai.');
+    }
+  }
+
+  async function handleFileSelected(file: File | null) {
+    setImportError('');
+    setImportPreview(null);
+    setImportResult(null);
+    setSelectedFile(file);
+    setAreErrorsOpen(false);
+
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+      setImportError('Chi ho tro file .xlsx.');
+      setSelectedFile(null);
+      return;
+    }
+
+    setIsPreviewing(true);
+    try {
+      const preview = await previewTreeImport(file);
+      setImportPreview(preview);
+      setImportStep(2);
+    } catch {
+      setImportError('Khong the doc file Excel. Vui long kiem tra dinh dang file.');
+    } finally {
+      setIsPreviewing(false);
+    }
+  }
+
+  async function handleConfirmImport() {
+    if (!selectedFile) return;
+    setImportError('');
+    setIsImporting(true);
+    try {
+      const result = await importTreesFromExcel(selectedFile);
+      setImportResult(result);
+      setImportStep(3);
+      await loadData(); // Reload tree data
+    } catch {
+      setImportError('Nhap du lieu that bai. Vui long thu lai.');
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
   return (
     <DashboardPageFrame
       title="Quản lý Cây Xanh"
@@ -838,15 +934,25 @@ export default function TreeManagementPage() {
               {HEALTH_OPTIONS.map((h) => (<option key={h} value={h}>{h}</option>))}
             </select>
           </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            Thêm cây mới
-          </button>
+          <div className="flex gap-2">
+            {canImport && (
+              <button
+                onClick={() => setIsImportOpen(true)}
+                className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 transition-colors"
+              >
+                📤 Nhập từ Excel
+              </button>
+            )}
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Thêm cây mới
+            </button>
+          </div>
         </div>
 
         {/* Table */}
@@ -937,6 +1043,192 @@ export default function TreeManagementPage() {
           onClose={() => setShowCreateModal(false)}
           onCreated={loadData}
         />
+      )}
+
+      {/* Excel Import Modal */}
+      {isImportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-5xl rounded-xl border border-gray-700 bg-gray-900 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-700 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Nhập cây từ Excel</h2>
+                <p className="text-sm text-gray-400">File .xlsx theo mẫu dữ liệu cây xanh Liên Chiểu</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeImportModal}
+                className="rounded-lg px-3 py-1 text-xl text-gray-300 hover:bg-gray-800 hover:text-white"
+                aria-label="Dong modal"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="border-b border-gray-800 px-5 py-3">
+              <div className="flex flex-wrap gap-2 text-sm">
+                {[1, 2, 3].map((step) => (
+                  <span
+                    key={step}
+                    className={`rounded-full px-3 py-1 ${
+                      importStep === step ? 'bg-emerald-600 text-white' : 'bg-gray-800 text-gray-400'
+                    }`}
+                  >
+                    Bước {step}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="max-h-[72vh] overflow-y-auto px-5 py-5">
+              {importStep === 1 && (
+                <div className="space-y-4">
+                  <button
+                    type="button"
+                    onClick={handleTemplateDownload}
+                    className="rounded-lg border border-emerald-700 bg-emerald-900/30 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-800/50"
+                  >
+                    📥 Tải file mẫu
+                  </button>
+
+                  <label
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      void handleFileSelected(event.dataTransfer.files.item(0));
+                    }}
+                    className="flex min-h-52 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-600 bg-gray-950/60 px-6 py-8 text-center hover:border-emerald-500"
+                  >
+                    <input
+                      type="file"
+                      accept=".xlsx"
+                      className="hidden"
+                      onChange={(event) => void handleFileSelected(event.target.files?.item(0) ?? null)}
+                    />
+                    <span className="text-base font-medium text-gray-200">
+                      {selectedFile ? selectedFile.name : 'Keo tha file .xlsx vao day hoac bam de chon'}
+                    </span>
+                    <span className="mt-2 text-sm text-gray-500">
+                      {isPreviewing ? 'Dang doc file...' : 'Cac cot: tree_code, species, area_name, latitude, longitude'}
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {importStep === 2 && importPreview && (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm text-gray-300">
+                        File: <span className="font-medium text-white">{selectedFile?.name}</span>
+                      </p>
+                      <p className="text-sm text-gray-500">Tong so dong doc duoc: {importPreview.total}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setImportStep(1)}
+                        className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 hover:bg-gray-800"
+                      >
+                        Chon file khac
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleConfirmImport}
+                        disabled={isImporting}
+                        className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isImporting ? 'Dang nhap...' : '✅ Xác nhận nhập'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-lg border border-gray-800">
+                    <table className="w-full text-left text-sm text-gray-300">
+                      <thead className="bg-gray-950 text-xs uppercase text-gray-500">
+                        <tr>
+                          <th className="px-3 py-2">tree_code</th>
+                          <th className="px-3 py-2">species</th>
+                          <th className="px-3 py-2">area_name</th>
+                          <th className="px-3 py-2">latitude</th>
+                          <th className="px-3 py-2">longitude</th>
+                          <th className="px-3 py-2">height_m</th>
+                          <th className="px-3 py-2">trunk_diameter_cm</th>
+                          <th className="px-3 py-2">health_status</th>
+                          <th className="px-3 py-2">planting_year</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importPreview.rows.map((row) => (
+                          <tr key={`${row.tree_code}-${row.latitude}-${row.longitude}`} className="border-t border-gray-800">
+                            <td className="px-3 py-2">{row.tree_code}</td>
+                            <td className="px-3 py-2">{row.species}</td>
+                            <td className="px-3 py-2">{row.area_name}</td>
+                            <td className="px-3 py-2">{row.latitude}</td>
+                            <td className="px-3 py-2">{row.longitude}</td>
+                            <td className="px-3 py-2">{row.height_m ?? ''}</td>
+                            <td className="px-3 py-2">{row.trunk_diameter_cm ?? ''}</td>
+                            <td className="px-3 py-2">{row.health_status ?? ''}</td>
+                            <td className="px-3 py-2">{row.planting_year ?? ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {importPreview.errors.length > 0 && (
+                    <div className="rounded-lg border border-amber-700/50 bg-amber-950/20 px-4 py-3 text-sm text-amber-200">
+                      Co {importPreview.errors.length} loi se duoc bao cao khi nhap. Kiem tra file neu can.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {importStep === 3 && importResult && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <div className="rounded-lg border border-emerald-800 bg-emerald-950/30 p-4 text-emerald-200">
+                      ✅ Đã nhập: <span className="font-semibold">{importResult.imported}</span> cây
+                    </div>
+                    <div className="rounded-lg border border-sky-800 bg-sky-950/30 p-4 text-sky-200">
+                      ⏭️ Bỏ qua (trùng): <span className="font-semibold">{importResult.skipped}</span> cây
+                    </div>
+                    <div className="rounded-lg border border-red-800 bg-red-950/30 p-4 text-red-200">
+                      ❌ Lỗi: <span className="font-semibold">{importResult.errors.length}</span> dòng
+                    </div>
+                  </div>
+
+                  {importResult.errors.length > 0 && (
+                    <div className="rounded-lg border border-gray-800">
+                      <button
+                        type="button"
+                        onClick={() => setAreErrorsOpen((value) => !value)}
+                        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-gray-200 hover:bg-gray-800"
+                      >
+                        Chi tiet loi
+                        <span>{areErrorsOpen ? '−' : '+'}</span>
+                      </button>
+                      {areErrorsOpen && (
+                        <div className="max-h-56 overflow-y-auto border-t border-gray-800 px-4 py-3">
+                          {importResult.errors.map((item) => (
+                            <div key={`${item.row}-${item.message}`} className="py-1 text-sm text-red-300">
+                              Dong {item.row}: {item.message}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {importError && (
+                <div className="mt-4 rounded-lg border border-red-800/60 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+                  {importError}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </DashboardPageFrame>
   );

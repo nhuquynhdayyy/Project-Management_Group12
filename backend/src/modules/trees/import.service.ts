@@ -48,12 +48,54 @@ const EXCEL_HEADERS: (keyof ExcelRow)[] = [
   'planting_year',
 ];
 
+const TEMPLATE_HEADERS: Record<keyof ExcelRow, string> = {
+  tree_code: 'Mã cây',
+  species: 'Loài cây',
+  area_name: 'Khu vực',
+  latitude: 'Vĩ độ',
+  longitude: 'Kinh độ',
+  height_m: 'Chiều cao (m)',
+  trunk_diameter_cm: 'Đường kính thân (cm)',
+  health_status: 'Tình trạng',
+  planting_year: 'Năm trồng',
+};
+
+const HEADER_ALIASES: Record<string, keyof ExcelRow> = {
+  tree_code: 'tree_code',
+  'mã cây': 'tree_code',
+  'ma cay': 'tree_code',
+  species: 'species',
+  'loài cây': 'species',
+  'loai cay': 'species',
+  area_name: 'area_name',
+  'khu vực': 'area_name',
+  'khu vuc': 'area_name',
+  latitude: 'latitude',
+  'vĩ độ': 'latitude',
+  'vi do': 'latitude',
+  longitude: 'longitude',
+  'kinh độ': 'longitude',
+  'kinh do': 'longitude',
+  height_m: 'height_m',
+  'chiều cao (m)': 'height_m',
+  'chieu cao (m)': 'height_m',
+  trunk_diameter_cm: 'trunk_diameter_cm',
+  'đường kính thân (cm)': 'trunk_diameter_cm',
+  'duong kinh than (cm)': 'trunk_diameter_cm',
+  health_status: 'health_status',
+  'tình trạng': 'health_status',
+  'tinh trang': 'health_status',
+  planting_year: 'planting_year',
+  'năm trồng': 'planting_year',
+  'nam trong': 'planting_year',
+};
+
 const HEALTH_STATUSES = Object.values(HealthStatus) as string[];
 const TEMPLATE_ROWS: ExcelRow[] = [
   {
-    tree_code: 'LC-HKB-001',
-    species: 'Sao den',
-    area_name: 'Hoa Khanh Bac',
+    tree_code: 'LC-0087',
+    species: 'Sao đen',
+    area_name: 'Quận Liên Chiểu',
     latitude: 16.0732,
     longitude: 108.1498,
     height_m: 5.2,
@@ -62,9 +104,9 @@ const TEMPLATE_ROWS: ExcelRow[] = [
     planting_year: 2021,
   },
   {
-    tree_code: 'LC-HH-002',
-    species: 'Bang lang',
-    area_name: 'Hoa Hiep Nam',
+    tree_code: 'LC-0088',
+    species: 'Bàng Đài Loan',
+    area_name: 'Quận Liên Chiểu',
     latitude: 16.1174,
     longitude: 108.1279,
     height_m: 4.8,
@@ -73,10 +115,10 @@ const TEMPLATE_ROWS: ExcelRow[] = [
     planting_year: 2020,
   },
   {
-    tree_code: 'LC-XT-003',
-    species: 'Phuong vi',
-    area_name: 'Xuan Thieu',
-    latitude: 16.0957,
+    tree_code: 'LC-0089',
+    species: 'Phượng vĩ',
+    area_name: 'Quận Liên Chiểu',
+latitude: 16.0957,
     longitude: 108.1191,
     height_m: 6.1,
     trunk_diameter_cm: 29,
@@ -106,6 +148,19 @@ function isInRange(value: number | undefined, min: number, max: number): boolean
   return value !== undefined && value >= min && value <= max;
 }
 
+function normalizeHeader(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function getHeaderMap(row: ExcelJS.Row): (keyof ExcelRow)[] {
+  const mappedHeaders = EXCEL_HEADERS.map((fallbackHeader, index) => {
+    const headerText = normalizeHeader(toText(row.getCell(index + 1).value));
+    return HEADER_ALIASES[headerText] ?? fallbackHeader;
+  });
+
+  return mappedHeaders;
+}
+
 @Injectable()
 export class ImportService {
   constructor(
@@ -124,10 +179,11 @@ export class ImportService {
     if (!sheet) return [];
 
     const rows: ExcelRow[] = [];
+    const headerMap = getHeaderMap(sheet.getRow(1));
     sheet.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return;
 
-      const parsedRow = EXCEL_HEADERS.reduce((acc, header, index) => {
+      const parsedRow = headerMap.reduce((acc, header, index) => {
         const cellValue = row.getCell(index + 1).value;
         const value = ['latitude', 'longitude', 'height_m', 'trunk_diameter_cm', 'planting_year'].includes(header)
           ? toNumber(cellValue)
@@ -149,7 +205,7 @@ export class ImportService {
     const rowNumber = index;
 
     if (!row.tree_code?.trim()) errors.push({ row: rowNumber, message: 'tree_code is required' });
-    if (!row.species?.trim()) errors.push({ row: rowNumber, message: 'species is required' });
+if (!row.species?.trim()) errors.push({ row: rowNumber, message: 'species is required' });
     if (!row.area_name?.trim()) errors.push({ row: rowNumber, message: 'area_name is required' });
     if (!isInRange(row.latitude, -90, 90)) {
       errors.push({ row: rowNumber, message: 'latitude must be between -90 and 90' });
@@ -229,7 +285,7 @@ export class ImportService {
         area_id: area.id,
         location: {
           type: 'Point' as const,
-          coordinates: [row.longitude, row.latitude],
+coordinates: [row.longitude, row.latitude],
         },
         planting_year: row.planting_year,
         height_m: row.height_m,
@@ -251,9 +307,9 @@ export class ImportService {
 
     const sheet = workbook.addWorksheet('Trees Import');
     sheet.columns = EXCEL_HEADERS.map((header) => ({
-      header,
+      header: TEMPLATE_HEADERS[header],
       key: header,
-      width: Math.max(header.length + 4, 18),
+      width: Math.max(TEMPLATE_HEADERS[header].length + 4, 18),
     }));
     sheet.addRows(TEMPLATE_ROWS);
     sheet.views = [{ state: 'frozen', ySplit: 1 }];

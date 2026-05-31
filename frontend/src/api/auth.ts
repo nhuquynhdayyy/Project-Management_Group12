@@ -14,6 +14,11 @@ export async function fetchUsers(): Promise<DashboardUser[]> {
   return data;
 }
 
+export async function fetchStaffUsers(): Promise<DashboardUser[]> {
+  const { data } = await apiClient.get<DashboardUser[]>('/auth/staff');
+  return data;
+}
+
 export async function registerUser(payload: RegisterUserPayload): Promise<DashboardUser> {
   const { data } = await apiClient.post<DashboardUser>('/auth/register', payload);
   return data;

@@ -67,6 +67,17 @@ export class AuthController {
     return this.authService.getAllUsers();
   }
 
+  @Get('staff')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Admin', 'Manager')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all staff users (Admin and Manager can access)' })
+  @ApiResponse({ status: 200, description: 'List of staff users. Passwords excluded.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin and Manager only.' })
+  async getStaffUsers(): Promise<Omit<User, 'password'>[]> {
+    return this.authService.getAllUsers();
+  }
+
   @Patch('users/:id/role')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('Admin')

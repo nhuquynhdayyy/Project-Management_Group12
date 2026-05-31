@@ -55,15 +55,15 @@ describe('ImportService', () => {
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet('Trees');
       sheet.addRow([
-        'tree_code',
-        'species',
-        'area_name',
-        'latitude',
-        'longitude',
-        'height_m',
-        'trunk_diameter_cm',
-        'health_status',
-        'planting_year',
+        'Mã cây',
+        'Loài cây',
+        'Khu vực',
+        'Vĩ độ',
+        'Kinh độ',
+        'Chiều cao (m)',
+        'Đường kính thân (cm)',
+        'Tình trạng',
+        'Năm trồng',
       ]);
       sheet.addRow(['LC-001', 'Sao den', 'Hoa Khanh Bac', 16.0732, 108.1498, 5.2, 24, HealthStatus.GOOD, 2021]);
 
@@ -106,8 +106,8 @@ describe('ImportService', () => {
 
       expect(errors).toEqual(
         expect.arrayContaining([
-          { row: 2, message: 'tree_code is required' },
-          { row: 2, message: 'species is required' },
+{ row: 2, message: 'tree_code is required' },
+{ row: 2, message: 'species is required' },
           { row: 2, message: 'latitude must be between -90 and 90' },
           { row: 2, message: 'height_m must be greater than or equal to 0' },
           { row: 2, message: 'health_status is invalid' },
@@ -189,27 +189,27 @@ describe('ImportService', () => {
       ]);
       expect(mockTreeRepository.save).not.toHaveBeenCalled();
     });
+
   });
 
   describe('createTemplate', () => {
     it('should generate an Excel template buffer', async () => {
-      const buffer = await service.createTemplate();
-
-      const workbook = new ExcelJS.Workbook();
+const buffer = await service.createTemplate();
+const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(buffer);
       const sheet = workbook.worksheets[0];
 
       expect(sheet.getRow(1).values).toEqual([
         undefined,
-        'tree_code',
-        'species',
-        'area_name',
-        'latitude',
-        'longitude',
-        'height_m',
-        'trunk_diameter_cm',
-        'health_status',
-        'planting_year',
+        'Mã cây',
+        'Loài cây',
+        'Khu vực',
+        'Vĩ độ',
+        'Kinh độ',
+        'Chiều cao (m)',
+        'Đường kính thân (cm)',
+        'Tình trạng',
+        'Năm trồng',
       ]);
       expect(sheet.rowCount).toBe(4);
     });
