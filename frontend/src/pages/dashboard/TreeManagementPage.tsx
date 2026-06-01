@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
-  createTree,
   fetchAreas,
   fetchTreeSpecies,
   fetchTrees,
@@ -14,15 +13,14 @@ import {
   fetchTreeHistory,
   getTreeQRCodeBlobUrl,
   downloadTreeQRCode,
-  checkTreeCodeExists,
-  checkLocationExists,
-  type CreateTreePayload,
   type TreeImportPreview,
   type TreeImportResult,
 } from '../../api/trees';
 import { createTask, type CreateTaskPayload } from '../../api/maintenance';
-import { fetchUsers, fetchStaffUsers } from '../../api/auth';
+import { fetchStaffUsers } from '../../api/auth';
 import { useAuth } from '../../context/AuthContext';
+import CreateTreeForm from '../../components/CreateTreeForm';
+import Modal from '../../components/Modal';
 import type {
   ActivityLog,
   AdministrativeArea,
@@ -767,272 +765,6 @@ function TreeDetailModal({
   );
 }
 
-// ─── CreateTreeModal ────────────────────────────────────────────────────────────────────────────
-
-function CreateTreeModal({
-  species,
-  areas,
-  onClose,
-  onCreated,
-}: {
-  species: TreeSpecies[];
-  areas: AdministrativeArea[];
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const [treeCode, setTreeCode] = useState('');
-  const [speciesId, setSpeciesId] = useState('');
-  const [areaId, setAreaId] = useState('');
-  const [latitude, setLatitude] = useState('');
-  const [longitude, setLongitude] = useState('');
-  const [healthStatus, setHealthStatus] = useState<HealthStatus>('Tốt');
-  const [plantingYear, setPlantingYear] = useState('');
-  const [heightM, setHeightM] = useState('');
-  const [trunkDiameter, setTrunkDiameter] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState('');
-  
-  // Validation states
-  const [treeCodeError, setTreeCodeError] = useState('');
-  const [locationError, setLocationError] = useState('');
-  const [checkingTreeCode, setCheckingTreeCode] = useState(false);
-  const [checkingLocation, setCheckingLocation] = useState(false);
-
-  // Kiểm tra mã cây khi người dùng nhập xong (onBlur)
-  async function handleTreeCodeBlur() {
-    const code = treeCode.trim();
-    if (!code) {
-      setTreeCodeError('');
-      return;
-    }
-
-    setCheckingTreeCode(true);
-    setTreeCodeError('');
-    try {
-      const exists = await checkTreeCodeExists(code);
-      if (exists) {
-        setTreeCodeError('⚠️ Mã cây này đã tồn tại trong hệ thống');
-      }
-    } catch (err) {
-      console.error('Error checking tree code:', err);
-    } finally {
-      setCheckingTreeCode(false);
-    }
-  }
-
-  // Kiểm tra tọa độ
-  async function checkLocation(lat: string, lng: string) {
-    const latNum = parseFloat(lat);
-    const lngNum = parseFloat(lng);
-    
-    if (!lat || !lng || isNaN(latNum) || isNaN(lngNum)) {
-      setLocationError('');
-      return;
-    }
-
-    setCheckingLocation(true);
-    setLocationError('');
-    try {
-      const result = await checkLocationExists(latNum, lngNum);
-      if (result.exists && result.tree) {
-        setLocationError(
-          `⚠️ Vị trí này đã được đăng ký cho cây ${result.tree.tree_code}. Vui lòng kiểm tra lại.`
-        );
-      }
-    } catch (err) {
-      console.error('Error checking location:', err);
-    } finally {
-      setCheckingLocation(false);
-    }
-  }
-
-  // Kiểm tra tọa độ khi người dùng nhập xong
-  function handleLocationBlur() {
-    if (latitude && longitude) {
-      checkLocation(latitude, longitude);
-    }
-  }
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setFormError('');
-    
-    // Kiểm tra lỗi validation trước khi submit
-    if (treeCodeError || locationError) {
-      setFormError('Vui lòng sửa các lỗi trước khi lưu');
-      return;
-    }
-    
-    if (!treeCode.trim() || !speciesId || !areaId || !latitude || !longitude) {
-      setFormError('Vui lòng điền đầy đủ các trường bắt buộc.');
-      return;
-    }
-    const payload: CreateTreePayload = {
-      tree_code: treeCode.trim(),
-      species_id: Number(speciesId),
-      area_id: Number(areaId),
-      latitude: Number(latitude),
-      longitude: Number(longitude),
-      health_status: healthStatus,
-      planting_year: plantingYear ? Number(plantingYear) : undefined,
-      height_m: heightM ? Number(heightM) : undefined,
-      trunk_diameter_cm: trunkDiameter ? Number(trunkDiameter) : undefined,
-    };
-    setSaving(true);
-    try {
-      await createTree(payload);
-      onCreated();
-      onClose();
-    } catch (err: any) {
-      const msg = err?.response?.data?.message ?? 'Tạo cây thất bại. Vui lòng thử lại.';
-      setFormError(Array.isArray(msg) ? msg.join(', ') : msg);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-gray-700 bg-gray-800 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
-          <h3 className="text-sm font-semibold text-white">Thêm cây mới</h3>
-          <button onClick={onClose} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-700 hover:text-white transition-colors">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-3 max-h-[70vh] overflow-y-auto">
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-400">Mã cây <span className="text-red-400">*</span></label>
-            <input 
-              type="text" 
-              value={treeCode} 
-              onChange={(e) => {
-                setTreeCode(e.target.value);
-                setTreeCodeError(''); // Xóa lỗi khi người dùng đang nhập
-              }}
-              onBlur={handleTreeCodeBlur}
-              required 
-              className={`w-full rounded-lg border px-3 py-2 text-sm text-gray-200 outline-none ${
-                treeCodeError
-                  ? 'border-red-600 bg-red-900/20 focus:border-red-500'
-                  : 'border-gray-700 bg-gray-900 focus:border-green-500'
-              }`}
-            />
-            {checkingTreeCode && (
-              <p className="mt-1 text-xs text-blue-400">Đang kiểm tra...</p>
-            )}
-            {treeCodeError && (
-              <p className="mt-1 text-xs text-red-400">{treeCodeError}</p>
-            )}
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-400">Loài cây <span className="text-red-400">*</span></label>
-            <select value={speciesId} onChange={(e) => setSpeciesId(e.target.value)} required className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500">
-              <option value="">-- Chọn loài cây --</option>
-              {species.map((s) => (<option key={s.id} value={s.id}>{s.common_name} ({s.scientific_name})</option>))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-400">Khu vực <span className="text-red-400">*</span></label>
-            <select value={areaId} onChange={(e) => setAreaId(e.target.value)} required className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500">
-              <option value="">-- Chọn khu vực --</option>
-              {areas.map((a) => (<option key={a.id} value={a.id}>{a.area_name}</option>))}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-gray-400">Vĩ độ <span className="text-red-400">*</span></label>
-              <input 
-                type="number" 
-                step="any" 
-                value={latitude} 
-                onChange={(e) => {
-                  setLatitude(e.target.value);
-                  setLocationError(''); // Xóa lỗi khi người dùng đang nhập
-                }}
-                onBlur={handleLocationBlur}
-                required 
-                placeholder="10.7769" 
-                className={`w-full rounded-lg border px-3 py-2 text-sm text-gray-200 outline-none ${
-                  locationError
-                    ? 'border-red-600 bg-red-900/20 focus:border-red-500'
-                    : 'border-gray-700 bg-gray-900 focus:border-green-500'
-                }`}
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-gray-400">Kinh độ <span className="text-red-400">*</span></label>
-              <input 
-                type="number" 
-                step="any" 
-                value={longitude} 
-                onChange={(e) => {
-                  setLongitude(e.target.value);
-                  setLocationError(''); // Xóa lỗi khi người dùng đang nhập
-                }}
-                onBlur={handleLocationBlur}
-                required 
-                placeholder="106.7009" 
-                className={`w-full rounded-lg border px-3 py-2 text-sm text-gray-200 outline-none ${
-                  locationError
-                    ? 'border-red-600 bg-red-900/20 focus:border-red-500'
-                    : 'border-gray-700 bg-gray-900 focus:border-green-500'
-                }`}
-              />
-            </div>
-          </div>
-          {(checkingLocation || locationError) && (
-            <div>
-              {checkingLocation && (
-                <p className="text-xs text-blue-400">Đang kiểm tra vị trí...</p>
-              )}
-              {locationError && (
-                <p className="text-xs text-red-400">{locationError}</p>
-              )}
-            </div>
-          )}
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-400">Sức khỏe</label>
-            <select value={healthStatus} onChange={(e) => setHealthStatus(e.target.value as HealthStatus)} className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500">
-              {HEALTH_OPTIONS.map((h) => (<option key={h} value={h}>{h}</option>))}
-            </select>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-gray-400">Năm trồng</label>
-              <input type="number" min={1900} max={2100} value={plantingYear} onChange={(e) => setPlantingYear(e.target.value)} placeholder="2020" className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-gray-400">Chiều cao (m)</label>
-              <input type="number" step="any" min={0} value={heightM} onChange={(e) => setHeightM(e.target.value)} placeholder="5.0" className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-gray-400">Đường kính (cm)</label>
-              <input type="number" step="any" min={0} value={trunkDiameter} onChange={(e) => setTrunkDiameter(e.target.value)} placeholder="30" className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 outline-none focus:border-green-500" />
-            </div>
-          </div>
-          {formError && (
-            <div className="rounded-lg border border-red-800/40 bg-red-900/20 px-3 py-2 text-sm text-red-400">{formError}</div>
-          )}
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors">Hủy</button>
-            <button 
-              type="submit" 
-              // Thêm điều kiện disable nút nếu đang check hoặc đang có lỗi
-              disabled={saving || checkingTreeCode || checkingLocation || !!treeCodeError || !!locationError} 
-              className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {saving ? 'Đang lưu...' : 'Thêm cây'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 // ─── KpiMini ────────────────────────────────────────────────────────────────────────────
 
 function KpiMini({ label, value, color }: { label: string; value: number; color: string }) {
@@ -1353,12 +1085,16 @@ export default function TreeManagementPage() {
 
       {/* Create Tree Modal */}
       {showCreateModal && (
-        <CreateTreeModal
-          species={species}
-          areas={areas}
-          onClose={() => setShowCreateModal(false)}
-          onCreated={loadData}
-        />
+        <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)}>
+          <CreateTreeForm
+            onSuccess={(tree) => {
+              setShowCreateModal(false);
+              loadData();
+              alert(`Đã tạo cây ${tree.tree_code} thành công!`);
+            }}
+            onCancel={() => setShowCreateModal(false)}
+          />
+        </Modal>
       )}
 
       {/* Excel Import Modal */}
