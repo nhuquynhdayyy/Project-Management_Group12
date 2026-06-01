@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import ExcelJS from 'exceljs';
 import { Response } from 'express';
-import { HealthStatus, Tree } from '../../entities/tree.entity';
+import { Repository } from 'typeorm';
 import { AdministrativeArea } from '../../entities/administrative-area.entity';
+import { HealthStatus, Tree } from '../../entities/tree.entity';
 
 export interface HealthStats {
   healthy: number;
@@ -13,6 +14,14 @@ export interface HealthStats {
 
 @Injectable()
 export class StatsService {
+  private readonly ageGroups = [
+    { label: '0-5 năm', min: 0, max: 5 },
+    { label: '6-10 năm', min: 6, max: 10 },
+    { label: '11-20 năm', min: 11, max: 20 },
+    { label: 'Trên 20 năm', min: 21, max: Number.POSITIVE_INFINITY },
+    { label: 'Chưa rõ năm trồng', min: null, max: null },
+  ];
+
   constructor(
     @InjectRepository(Tree)
     private readonly treeRepository: Repository<Tree>,
@@ -40,17 +49,18 @@ export class StatsService {
   async getAgeStats(areaId?: number) {
     const trees = await this.getTrees(areaId);
     const currentYear = new Date().getFullYear();
-    const groups = [
-      { label: '0-5 năm', min: 0, max: 5, count: 0 },
-      { label: '6-10 năm', min: 6, max: 10, count: 0 },
-      { label: '11-20 năm', min: 11, max: 20, count: 0 },
-      { label: '>20 năm', min: 21, max: Number.POSITIVE_INFINITY, count: 0 },
-    ];
+    const groups = this.ageGroups.map((group) => ({ ...group, count: 0 }));
 
     for (const tree of trees) {
-      if (!tree.planting_year) continue;
+      if (!tree.planting_year) {
+        groups[groups.length - 1].count += 1;
+        continue;
+      }
+
       const age = Math.max(0, currentYear - tree.planting_year);
-      const group = groups.find((item) => age >= item.min && age <= item.max);
+      const group = groups.find(
+        (item) => item.min !== null && item.max !== null && age >= item.min && age <= item.max,
+      );
       if (group) group.count += 1;
     }
 
@@ -61,16 +71,44 @@ export class StatsService {
     return this.areaRepository.find({ order: { area_name: 'ASC' } });
   }
 
-  async exportAgeStatsCsv(res: Response, areaId?: number) {
+  async exportAgeStatsExcel(res: Response, areaId?: number) {
     const rows = await this.getAgeStats(areaId);
-    const csv = [
-      'Nhóm tuổi,Số cây',
-      ...rows.map((row) => `${row.label},${row.count}`),
-    ].join('\n');
+    const area = areaId ? await this.areaRepository.findOne({ where: { id: areaId } }) : null;
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Thong ke do tuoi');
 
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="tree-age-stats.csv"');
-    res.send(`\uFEFF${csv}`);
+    worksheet.mergeCells('A1:B1');
+    worksheet.getCell('A1').value = 'Thống kê cây theo độ tuổi';
+    worksheet.getCell('A1').font = { bold: true, size: 14 };
+    worksheet.getCell('A2').value = 'Khu vực';
+    worksheet.getCell('B2').value = area?.area_name ?? 'Tất cả khu vực';
+    worksheet.getCell('A3').value = 'Ngày xuất';
+    worksheet.getCell('B3').value = new Date().toLocaleString('vi-VN');
+
+    worksheet.getRow(4).values = ['Nhóm tuổi', 'Số cây'];
+    worksheet.getRow(4).font = { bold: true };
+    worksheet.getRow(4).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFD9EAD3' },
+    };
+    worksheet.columns = [
+      { key: 'label', width: 24 },
+      { key: 'count', width: 14 },
+    ];
+
+    rows.forEach((row, index) => {
+      worksheet.getRow(index + 5).values = [row.label, row.count];
+    });
+    worksheet.getColumn(2).numFmt = '0';
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename="thong-ke-cay-theo-do-tuoi.xlsx"');
+    res.send(Buffer.from(buffer));
   }
 
   private async getTrees(areaId?: number) {

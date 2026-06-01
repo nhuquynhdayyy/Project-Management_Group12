@@ -287,7 +287,7 @@ export default function RegisterTreeScreen() {
               style={styles.pickerButton}
               onPress={() => setShowSpeciesPicker(!showSpeciesPicker)}
             >
-              <Text style={[styles.pickerButtonText, speciesId && styles.pickerButtonTextSelected]}>
+              <Text style={[styles.pickerButtonText, speciesId ? styles.pickerButtonTextSelected : null]}>
                 {getSelectedSpeciesName()}
               </Text>
               <Text style={styles.pickerButtonIcon}>{showSpeciesPicker ? '▲' : '▼'}</Text>
@@ -327,7 +327,7 @@ export default function RegisterTreeScreen() {
               style={styles.pickerButton}
               onPress={() => setShowAreaPicker(!showAreaPicker)}
             >
-              <Text style={[styles.pickerButtonText, areaId && styles.pickerButtonTextSelected]}>
+              <Text style={[styles.pickerButtonText, areaId ? styles.pickerButtonTextSelected : null]}>
                 {getSelectedAreaName()}
               </Text>
               <Text style={styles.pickerButtonIcon}>{showAreaPicker ? '▲' : '▼'}</Text>

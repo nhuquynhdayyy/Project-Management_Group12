@@ -26,10 +26,10 @@ export class StatsController {
   }
 
   @Get('age/export')
-  @ApiOperation({ summary: 'Export tree age statistics as CSV for Excel' })
+  @ApiOperation({ summary: 'Export tree age statistics as an Excel workbook' })
   @ApiQuery({ name: 'areaId', required: false, type: Number })
   async exportAge(@Res() res: Response, @Query('areaId') areaId?: string) {
-    return this.statsService.exportAgeStatsCsv(res, areaId ? +areaId : undefined);
+    return this.statsService.exportAgeStatsExcel(res, areaId ? +areaId : undefined);
   }
 
   @Get('areas')

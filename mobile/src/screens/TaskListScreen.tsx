@@ -8,8 +8,6 @@ import {
   RefreshControl,
   Alert,
   ActivityIndicator,
-  Linking,
-  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -19,6 +17,7 @@ import OfflineBanner from '../components/OfflineBanner';
 import { useAuth } from '../context/AuthContext';
 import { saveCachedTaskDetails } from '../services/offlineStorage';
 import { RootStackParamList } from '../types/navigation';
+import { openDirections } from '../utils/directions';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'TaskList'>;
 
@@ -152,18 +151,7 @@ const loadTasks = async () => {
     }
     
     const [longitude, latitude] = task.tree.location.coordinates;
-    const label = encodeURIComponent(`Cây ${task.tree.tree_code}`);
-    
-    const scheme = Platform.select({
-      ios: `maps:0,0?q=${label}@${latitude},${longitude}`,
-      android: `geo:0,0?q=${latitude},${longitude}(${label})`,
-    });
-    
-    if (scheme) {
-      Linking.openURL(scheme).catch(() => {
-        Alert.alert('Lỗi', 'Không thể mở ứng dụng bản đồ');
-      });
-    }
+    openDirections(latitude, longitude, `Cay ${task.tree.tree_code}`);
   };
 
   const handleUpdateTask = (task: TaskWithPriority) => {
@@ -406,6 +394,14 @@ const loadTasks = async () => {
       <View style={styles.quickActionsContainer}>
         <TouchableOpacity
           style={styles.quickActionButton}
+          onPress={() => navigation.navigate('Notifications')}
+        >
+          <Text style={styles.quickActionIcon}>🔔</Text>
+          <Text style={styles.quickActionText}>Thông báo</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.quickActionButton}
           onPress={() => navigation.navigate('QRScanner')}
         >
           <Text style={styles.quickActionIcon}>📷</Text>
@@ -422,10 +418,10 @@ const loadTasks = async () => {
         
         <TouchableOpacity
           style={styles.quickActionButton}
-          onPress={() => navigation.navigate('RegisterTree')}
+          onPress={() => navigation.navigate('IncidentReport')}
         >
-          <Text style={styles.quickActionIcon}>➕</Text>
-          <Text style={styles.quickActionText}>Đăng ký cây</Text>
+          <Text style={styles.quickActionIcon}>!</Text>
+          <Text style={styles.quickActionText}>Sự cố</Text>
         </TouchableOpacity>
       </View>
     </View>

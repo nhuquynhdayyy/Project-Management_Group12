@@ -9,6 +9,8 @@ import TaskDetailScreen from './src/screens/TaskDetailScreen';
 import TreeHistoryScreen from './src/screens/TreeHistoryScreen';
 import QRScannerScreen from './src/screens/QRScannerScreen';
 import NearbyTreesScreen from './src/screens/NearbyTreesScreen';
+import NotificationsScreen from './src/screens/NotificationsScreen';
+import IncidentReportScreen from './src/screens/IncidentReportScreen';
 import { ActivityIndicator, View } from 'react-native';
 import { RootStackParamList } from './src/types/navigation';
 import * as Linking from 'expo-linking';
@@ -29,6 +31,8 @@ const linking = {
       QRScanner: 'scanner',
       NearbyTrees: 'nearby',
       RegisterTree: 'register-tree',
+      Notifications: 'notifications',
+      IncidentReport: 'incident-report',
     },
   },
 };
@@ -57,6 +61,8 @@ function AppNavigator() {
             <Stack.Screen name="QRScanner" component={QRScannerScreen} />
             <Stack.Screen name="NearbyTrees" component={NearbyTreesScreen} />
             <Stack.Screen name="RegisterTree" component={RegisterTreeScreen} />
+            <Stack.Screen name="Notifications" component={NotificationsScreen} />
+            <Stack.Screen name="IncidentReport" component={IncidentReportScreen} />
           </>
         )}
       </Stack.Navigator>

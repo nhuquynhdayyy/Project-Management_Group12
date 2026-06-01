@@ -1,25 +1,33 @@
 import { useMemo, useState } from 'react';
 
-const FAQS = [
+const GUIDES = [
   {
-    title: 'Tạo lịch bảo trì định kỳ',
-    body: 'Vào Lịch bảo trì, chọn cây hoặc khu vực, loại công việc, ngày bắt đầu và tần suất. Hệ thống sẽ tự sinh các công việc trong danh sách maintenance_tasks.',
+    title: 'Quản lý cây',
+    body: 'Vào Quản lý Cây để thêm cây mới, nhập danh sách từ Excel, xem chi tiết cây, cập nhật sức khỏe, cập nhật số đo thực địa và tải mã QR của từng cây.',
   },
   {
-    title: 'Theo dõi thông báo nhắc việc',
-    body: 'Nhấn biểu tượng chuông ở góc trên bên phải để xem thông báo mới. Các lịch bảo trì mới sẽ gửi nhắc việc cho nhân viên được phân công.',
+    title: 'Thống kê cây theo độ tuổi',
+    body: 'Vào Thống kê Cây, chọn khu vực cần xem. Biểu đồ độ tuổi chia cây theo các nhóm 0-5 năm, 6-10 năm, 11-20 năm, trên 20 năm và chưa rõ năm trồng.',
   },
   {
-    title: 'Xem tỷ lệ sức khỏe cây',
-    body: 'Vào Thống kê, lọc theo khu vực nếu cần. Biểu đồ tròn dùng xanh lá cho cây khỏe, vàng cho cây yếu và đỏ cho cây chết hoặc nguy hiểm.',
+    title: 'Xuất Excel thống kê cây',
+    body: 'Trong Thống kê Cây, nhấn Xuất Excel để tải file .xlsx. File xuất sẽ áp dụng khu vực đang chọn và có thể mở trực tiếp bằng Microsoft Excel.',
   },
   {
-    title: 'Xuất dữ liệu tuổi cây',
-    body: 'Trong màn hình Thống kê, nhấn Xuất Excel để tải dữ liệu nhóm tuổi dạng CSV có thể mở bằng Excel.',
+    title: 'Lập lịch bảo trì',
+    body: 'Vào Lịch bảo trì để tạo công việc tưới nước, bón phân, cắt tỉa hoặc kiểm tra. Chọn cây hoặc khu vực, nhân viên phụ trách, ngày bắt đầu và tần suất lặp.',
   },
   {
-    title: 'Hoàn thành công việc bảo trì',
-    body: 'Nhân viên dùng danh sách công việc, đánh dấu hoàn thành tại hiện trường và ghi chú kết quả sau khi thực hiện.',
+    title: 'Theo dõi công việc',
+    body: 'Nhân viên xem công việc được giao trong danh sách task, cập nhật trạng thái, hoàn thành tại hiện trường và đính kèm hình ảnh bằng chứng khi cần.',
+  },
+  {
+    title: 'Thông báo',
+    body: 'Nhấn biểu tượng chuông ở góc phải trên cùng để xem thông báo. Thông báo chưa đọc sẽ có số đếm và được đánh dấu đã đọc sau khi mở.',
+  },
+  {
+    title: 'Đăng xuất',
+    body: 'Nhấn nút Đăng xuất ở góc phải trên cùng hoặc cuối thanh bên để thoát tài khoản hiện tại và quay về màn hình đăng nhập.',
   },
 ];
 
@@ -28,20 +36,20 @@ export default function HelpPage() {
 
   const filtered = useMemo(() => {
     const value = query.trim().toLowerCase();
-    if (!value) return FAQS;
-    return FAQS.filter((item) =>
-      `${item.title} ${item.body}`.toLowerCase().includes(value),
-    );
+    if (!value) return GUIDES;
+    return GUIDES.filter((item) => `${item.title} ${item.body}`.toLowerCase().includes(value));
   }, [query]);
 
   return (
     <div className="h-full overflow-y-auto bg-gray-950 px-6 py-6">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">Trợ giúp</h1>
-        <p className="mt-1 text-sm text-gray-400">Tìm nhanh hướng dẫn sử dụng các chức năng chính.</p>
+        <h1 className="text-xl font-bold text-white">Hướng dẫn sử dụng</h1>
+        <p className="mt-1 text-sm text-gray-400">
+          Tìm nhanh cách dùng các chức năng chính ngay trong hệ thống.
+        </p>
       </div>
 
-      <div className="max-w-3xl">
+      <div className="max-w-4xl">
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -49,19 +57,20 @@ export default function HelpPage() {
           className="mb-4 w-full rounded border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white placeholder:text-gray-500"
         />
 
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {filtered.map((item) => (
             <article key={item.title} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
               <h2 className="text-sm font-semibold text-white">{item.title}</h2>
               <p className="mt-2 text-sm leading-6 text-gray-300">{item.body}</p>
             </article>
           ))}
-          {filtered.length === 0 && (
-            <p className="rounded-lg border border-gray-800 bg-gray-900 p-6 text-center text-sm text-gray-400">
-              Không tìm thấy hướng dẫn phù hợp.
-            </p>
-          )}
         </div>
+
+        {filtered.length === 0 ? (
+          <p className="rounded-lg border border-gray-800 bg-gray-900 p-6 text-center text-sm text-gray-400">
+            Không tìm thấy hướng dẫn phù hợp.
+          </p>
+        ) : null}
       </div>
     </div>
   );
