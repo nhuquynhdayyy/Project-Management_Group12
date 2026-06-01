@@ -394,10 +394,18 @@ const loadTasks = async () => {
       <View style={styles.quickActionsContainer}>
         <TouchableOpacity
           style={styles.quickActionButton}
-          onPress={() => navigation.navigate('Notifications')}
+          onPress={() => navigation.navigate('RegisterTree')}
         >
-          <Text style={styles.quickActionIcon}>🔔</Text>
-          <Text style={styles.quickActionText}>Thông báo</Text>
+          <Text style={styles.quickActionIcon}>🌳</Text>
+          <Text style={styles.quickActionText}>Đăng ký cây</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.quickActionButton}
+          onPress={() => navigation.navigate('NearbyTrees')}
+        >
+          <Text style={styles.quickActionIcon}>📍</Text>
+          <Text style={styles.quickActionText}>Cây gần đây</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -407,20 +415,20 @@ const loadTasks = async () => {
           <Text style={styles.quickActionIcon}>📷</Text>
           <Text style={styles.quickActionText}>Quét QR</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity
           style={styles.quickActionButton}
-          onPress={() => navigation.navigate('NearbyTrees')}
+          onPress={() => navigation.navigate('Notifications')}
         >
-          <Text style={styles.quickActionIcon}>🌳</Text>
-          <Text style={styles.quickActionText}>Cây gần đây</Text>
+          <Text style={styles.quickActionIcon}>🔔</Text>
+          <Text style={styles.quickActionText}>Thông báo</Text>
         </TouchableOpacity>
         
         <TouchableOpacity
           style={styles.quickActionButton}
           onPress={() => navigation.navigate('IncidentReport')}
         >
-          <Text style={styles.quickActionIcon}>!</Text>
+          <Text style={styles.quickActionIcon}>⚠️</Text>
           <Text style={styles.quickActionText}>Sự cố</Text>
         </TouchableOpacity>
       </View>
