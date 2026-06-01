@@ -8,198 +8,227 @@ import {
 } from '../api/notifications';
 import type { NotificationItem } from '../types';
 
-const NAV_ITEMS = [
+const NAV_GROUPS = [
   {
-    to: '/map',
-    label: 'Bản đồ 3D',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-      </svg>
-    ),
-    roles: ['Admin', 'Manager', 'Staff'], // All roles can see map
+    title: 'Khám phá',
+    items: [
+      {
+        to: '/map',
+        label: 'Bản đồ 3D',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+          </svg>
+        ),
+        roles: ['Admin', 'Manager', 'Staff'],
+      },
+      {
+        to: '/nearby',
+        label: 'Tìm cây xung quanh',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        ),
+        roles: ['Admin', 'Manager', 'Staff'],
+      },
+      {
+        to: '/dashboard/trees/heatmap',
+        label: 'Bản đồ nhiệt',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+            <circle cx="12" cy="12" r="2" fill="currentColor" />
+            <circle cx="8" cy="10" r="1.5" fill="currentColor" opacity="0.6" />
+            <circle cx="16" cy="14" r="1.5" fill="currentColor" opacity="0.6" />
+          </svg>
+        ),
+        roles: ['Admin', 'Manager'],
+      },
+    ],
   },
   {
-    to: '/nearby',
-    label: 'Tìm cây xung quanh',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-    ),
-    roles: ['Admin', 'Manager', 'Staff'], // All roles can use nearby search
+    title: 'Quản lý',
+    items: [
+      {
+        to: '/dashboard/trees/manage',
+        label: 'Quản lý Cây',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M12 3C8 3 5 6.5 5 10c0 2.5 1.3 4.7 3.3 6L8 20h8l-.3-4C17.7 14.7 19 12.5 19 10c0-3.5-3-7-7-7z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 20v-4" />
+          </svg>
+        ),
+        roles: ['Admin', 'Manager'],
+      },
+      {
+        to: '/dashboard/areas',
+        label: 'Quản lý Khu vực',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        ),
+        roles: ['Admin', 'Manager'],
+      },
+    ],
   },
   {
-    to: '/dashboard',
-    label: 'Tổng quan',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-      </svg>
-    ),
-    roles: ['Admin', 'Manager'], // Staff CANNOT see dashboard
-    end: true,
+    title: 'Bảo trì',
+    items: [
+      {
+        to: '/maintenance/schedules',
+        label: 'Lịch bảo trì',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M8 7V3m8 4V3M4 11h16M6 5h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2z" />
+          </svg>
+        ),
+        roles: ['Admin', 'Manager'],
+      },
+      {
+        to: '/dashboard/tasks/manage',
+        label: 'Quản lý Task',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+          </svg>
+        ),
+        roles: ['Admin', 'Manager'],
+      },
+    ],
   },
   {
-    to: '/dashboard/trees',
-    label: 'Thống kê Cây',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M12 3C8 3 5 6.5 5 10c0 2.5 1.3 4.7 3.3 6L8 20h8l-.3-4C17.7 14.7 19 12.5 19 10c0-3.5-3-7-7-7z" />
-      </svg>
-    ),
-    roles: ['Admin', 'Manager'],
-    end: true,
-  },
-  { to: '/stats', label: 'Thống kê', roles: ['Admin', 'Manager'], path: 'M11 3v18m-6-8l6-6 4 4 4-4' },
-  {
-    to: '/dashboard/trees/manage',
-    label: 'Quản lý Cây',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M12 3C8 3 5 6.5 5 10c0 2.5 1.3 4.7 3.3 6L8 20h8l-.3-4C17.7 14.7 19 12.5 19 10c0-3.5-3-7-7-7z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 20v-4" />
-      </svg>
-    ),
-    roles: ['Admin', 'Manager'],
-  },
-  {
-    to: '/dashboard/trees/heatmap',
-    label: 'Bản đồ nhiệt',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-        <circle cx="12" cy="12" r="2" fill="currentColor" />
-        <circle cx="8" cy="10" r="1.5" fill="currentColor" opacity="0.6" />
-        <circle cx="16" cy="14" r="1.5" fill="currentColor" opacity="0.6" />
-      </svg>
-    ),
-    roles: ['Admin', 'Manager'],
-  },
-  {
-    to: '/maintenance/schedules',
-    label: 'Lịch bảo trì',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M8 7V3m8 4V3M4 11h16M6 5h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2z" />
-      </svg>
-    ),
-    roles: ['Admin', 'Manager'],
-  },
-  {
-    to: '/dashboard/tasks',
-    label: 'Thống kê Bảo trì',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.607 2.296.07 2.572-1.065z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-    ),
-    roles: ['Admin', 'Manager'],
-    end: true,
+    title: 'Thống kê',
+    items: [
+      {
+        to: '/dashboard',
+        label: 'Tổng quan',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+        ),
+        roles: ['Admin', 'Manager'],
+        end: true,
+      },
+      {
+        to: '/dashboard/trees',
+        label: 'Thống kê Cây',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M12 3C8 3 5 6.5 5 10c0 2.5 1.3 4.7 3.3 6L8 20h8l-.3-4C17.7 14.7 19 12.5 19 10c0-3.5-3-7-7-7z" />
+          </svg>
+        ),
+        roles: ['Admin', 'Manager'],
+        end: true,
+      },
+      {
+        to: '/dashboard/tasks',
+        label: 'Thống kê Bảo trì',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.607 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        ),
+        roles: ['Admin', 'Manager'],
+        end: true,
+      },
+      {
+        to: '/dashboard/staff',
+        label: 'Hiệu suất Nhân viên',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m10-4.13a4 4 0 11-8 0 4 4 0 018 0zm-8 0a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+        ),
+        roles: ['Admin', 'Manager'],
+      },
+    ],
   },
   {
-    to: '/dashboard/tasks/manage',
-    label: 'Quản lý Task',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-      </svg>
-    ),
-    roles: ['Admin', 'Manager'],
+    title: 'Hệ thống',
+    items: [
+      {
+        to: '/dashboard/users',
+        label: 'Quản lý Users',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M12 14c-3.314 0-6 1.567-6 3.5V20h12v-2.5c0-1.933-2.686-3.5-6-3.5z" />
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M12 11a4 4 0 100-8 4 4 0 000 8zm6.5 1.5a3 3 0 100-6 3 3 0 000 6z" />
+          </svg>
+        ),
+        roles: ['Admin'],
+      },
+      {
+        to: '/dashboard/settings',
+        label: 'Cấu hình hệ thống',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.607 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        ),
+        roles: ['Admin'],
+      },
+      {
+        to: '/activity-logs',
+        label: 'Nhật ký hoạt động',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5l5 5v11a2 2 0 01-2 2z" />
+          </svg>
+        ),
+        roles: ['Admin'],
+      },
+      {
+        to: '/notifications/new',
+        label: 'Tạo thông báo',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 00-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5m6 0a3 3 0 01-6 0m3-9v4m-2-2h4" />
+          </svg>
+        ),
+        roles: ['Admin', 'Manager'],
+      },
+    ],
   },
   {
-    to: '/dashboard/staff',
-    label: 'Hiệu suất Nhân viên',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m10-4.13a4 4 0 11-8 0 4 4 0 018 0zm-8 0a4 4 0 11-8 0 4 4 0 018 0z" />
-      </svg>
-    ),
-    roles: ['Admin', 'Manager'],
-  },
-  {
-    to: '/dashboard/areas',
-    label: 'Quản lý Khu vực',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-    ),
-    roles: ['Admin', 'Manager'],
-  },
-  {
-    to: '/dashboard/users',
-    label: 'Quản lý Users',
-icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M12 14c-3.314 0-6 1.567-6 3.5V20h12v-2.5c0-1.933-2.686-3.5-6-3.5z" />
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M12 11a4 4 0 100-8 4 4 0 000 8zm6.5 1.5a3 3 0 100-6 3 3 0 000 6z" />
-      </svg>
-    ),
-    roles: ['Admin'],
-  },
-  {
-    to: '/dashboard/settings',
-    label: 'Cấu hình hệ thống',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.607 2.296.07 2.572-1.065z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-    ),
-    roles: ['Admin'],
-  },
-  {
-    to: '/activity-logs',
-    label: 'Nhật ký hoạt động',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5l5 5v11a2 2 0 01-2 2z" />
-      </svg>
-    ),
-    roles: ['Admin'],
-  },
-  {
-    to: '/notifications/new',
-    label: 'Tạo thông báo',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 00-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5m6 0a3 3 0 01-6 0m3-9v4m-2-2h4" />
-      </svg>
-    ),
-    roles: ['Admin', 'Manager'],
-  },
-  {
-    to: '/help',
-    label: 'Trợ giúp',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M8.25 9a3.75 3.75 0 117.1 1.7c-.9.5-1.6 1.2-1.6 2.3m-1.5 4h.01M12 22a10 10 0 100-20 10 10 0 000 20z" />
-      </svg>
-    ),
-    roles: ['Admin', 'Manager', 'Staff'],
+    title: 'Hỗ trợ',
+    items: [
+      {
+        to: '/help',
+        label: 'Trợ giúp',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M8.25 9a3.75 3.75 0 117.1 1.7c-.9.5-1.6 1.2-1.6 2.3m-1.5 4h.01M12 22a10 10 0 100-20 10 10 0 000 20z" />
+          </svg>
+        ),
+        roles: ['Admin', 'Manager', 'Staff'],
+      },
+    ],
   },
 ];
 
@@ -304,25 +333,38 @@ export default function AppShell() {
         </div>
 
         {/* Nav links */}
-        <div className="flex-1 px-2 py-4 space-y-1">
-          {NAV_ITEMS.filter((item) => hasAnyRole(user?.roles, item.roles)).map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                  isActive 
-                    ? 'bg-green-600/20 text-green-400' 
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-                }`
-              }
-            >
-              {/* Hiển thị icon (vì icon bây giờ là một đoạn mã SVG nên render trực tiếp) */}
-              {item.icon}
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
+        <div className="flex-1 px-2 py-4 overflow-y-auto">
+          {NAV_GROUPS.map((group, groupIndex) => {
+            const visibleItems = group.items.filter((item) => hasAnyRole(user?.roles, item.roles));
+            if (visibleItems.length === 0) return null;
+
+            return (
+              <div key={group.title} className={groupIndex > 0 ? 'mt-4' : ''}>
+                <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+                  {group.title}
+                </p>
+                <div className="space-y-1">
+                  {visibleItems.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.end}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                          isActive 
+                            ? 'bg-green-600/20 text-green-400' 
+                            : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                        }`
+                      }
+                    >
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* User section */}
